@@ -30,6 +30,14 @@ class TestWatchdogPolicy(unittest.TestCase):
                         "target_severity": "CRITICAL",
                     }
                 ],
+                "cross_task_aggregation": {
+                    "enabled": True,
+                    "window_sec": "180",
+                    "min_distinct_tasks": "2",
+                    "emit_throttle_sec": "30",
+                    "severity": "critical",
+                    "group_by_fields": ["watchdog_name", "reason_code"],
+                },
             }
         )
         self.assertEqual(policy["version"], "v2")
@@ -43,6 +51,12 @@ class TestWatchdogPolicy(unittest.TestCase):
         self.assertEqual(policy["escalation_rules"][0]["threshold"], 2)
         self.assertEqual(policy["escalation_rules"][0]["window_sec"], 120.0)
         self.assertEqual(policy["escalation_rules"][0]["target_severity"], "CRITICAL")
+        self.assertTrue(policy["cross_task_aggregation"]["enabled"])
+        self.assertEqual(policy["cross_task_aggregation"]["window_sec"], 180.0)
+        self.assertEqual(policy["cross_task_aggregation"]["min_distinct_tasks"], 2)
+        self.assertEqual(policy["cross_task_aggregation"]["emit_throttle_sec"], 30.0)
+        self.assertEqual(policy["cross_task_aggregation"]["severity"], "CRITICAL")
+        self.assertEqual(policy["cross_task_aggregation"]["group_by_fields"], ["watchdog_name", "reason_code"])
 
     def test_loader_from_file(self):
         with tempfile.TemporaryDirectory() as td:
@@ -58,6 +72,9 @@ class TestWatchdogPolicy(unittest.TestCase):
                         "throttle_window_sec": 30,
                         "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
                         "escalation_rules": [],
+                        "cross_task_aggregation": {
+                            "enabled": False,
+                        },
                     },
                     f,
                 )
@@ -67,6 +84,7 @@ class TestWatchdogPolicy(unittest.TestCase):
             self.assertEqual(policy["enabled_watchdogs"], ["security_watchdog"])
             self.assertEqual(policy["max_alerts_per_key"], 1)
             self.assertEqual(policy["escalation_rules"], [])
+            self.assertFalse(policy["cross_task_aggregation"]["enabled"])
             self.assertEqual(loader.source(), path)
 
 

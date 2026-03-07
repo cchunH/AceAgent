@@ -267,6 +267,61 @@ class TestWatchdogs(unittest.TestCase):
         self.assertEqual(alerts[0]["watchdog_severity"], "MEDIUM")
         self.assertFalse(alerts[0].get("watchdog_escalated", False))
 
+    def test_cross_task_aggregation_emits_aggregate_alert(self):
+        manager = WatchdogManager(
+            plugins=[SecurityWatchdog()],
+            policy_loader=_PolicyLoader(
+                {
+                    "version": "v1",
+                    "enabled_watchdogs": ["security_watchdog"],
+                    "min_severity": "LOW",
+                    "dedup_window_sec": 0.0,
+                    "max_alerts_per_key": 10,
+                    "throttle_window_sec": 60.0,
+                    "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
+                    "escalation_rules": [],
+                    "cross_task_aggregation": {
+                        "enabled": True,
+                        "window_sec": 120.0,
+                        "min_distinct_tasks": 2,
+                        "emit_throttle_sec": 0.0,
+                        "severity": "CRITICAL",
+                        "group_by_fields": ["watchdog_name", "reason_code", "alert_category"],
+                    },
+                }
+            ),
+        )
+        event1 = {
+            "run_id": "r10",
+            "task_id": "t10",
+            "step_id": 1,
+            "chain_mode": "guiagent_v2",
+            "event_type": "guard_decision",
+            "status": "HANDOVER",
+            "intent_key": "global:TAP:SUBMIT",
+            "policy_decision": "deny",
+            "policy_reason": "ACTION_DENIED_BY_POLICY",
+        }
+        event2 = {
+            "run_id": "r11",
+            "task_id": "t11",
+            "step_id": 1,
+            "chain_mode": "guiagent_v2",
+            "event_type": "guard_decision",
+            "status": "HANDOVER",
+            "intent_key": "global:TAP:SUBMIT",
+            "policy_decision": "deny",
+            "policy_reason": "ACTION_DENIED_BY_POLICY",
+        }
+        first = manager.process(event1)
+        second = manager.process(event2)
+        self.assertTrue(any(item.get("watchdog_name") == "security_watchdog" for item in first))
+        aggregate = [item for item in second if item.get("watchdog_name") == "aggregate_watchdog"]
+        self.assertEqual(len(aggregate), 1)
+        self.assertEqual(aggregate[0].get("watchdog_severity"), "CRITICAL")
+        self.assertEqual(aggregate[0].get("aggregated_distinct_tasks"), 2)
+        self.assertEqual(aggregate[0].get("reason_code"), "CROSS_TASK_ALERT_SPIKE")
+
 
 if __name__ == "__main__":
     unittest.main()

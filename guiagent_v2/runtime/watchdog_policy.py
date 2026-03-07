@@ -16,6 +16,14 @@ DEFAULT_WATCHDOG_POLICY: dict[str, Any] = {
     "throttle_window_sec": 60.0,
     "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
     "escalation_rules": [],
+    "cross_task_aggregation": {
+        "enabled": False,
+        "window_sec": 300.0,
+        "min_distinct_tasks": 3,
+        "emit_throttle_sec": 120.0,
+        "severity": "HIGH",
+        "group_by_fields": ["watchdog_name", "reason_code", "alert_category"],
+    },
 }
 
 
@@ -83,6 +91,28 @@ def _normalize_escalation_rules(value: Any) -> list[dict[str, Any]]:
     return rules
 
 
+def _normalize_cross_task_aggregation(value: Any, default: dict[str, Any]) -> dict[str, Any]:
+    cfg = dict(default)
+    if not isinstance(value, dict):
+        return cfg
+    cfg["enabled"] = bool(value.get("enabled", cfg["enabled"]))
+    cfg["window_sec"] = _as_non_negative_float(value.get("window_sec"), cfg["window_sec"])
+    cfg["min_distinct_tasks"] = _as_positive_int(
+        value.get("min_distinct_tasks"),
+        cfg["min_distinct_tasks"],
+    )
+    cfg["emit_throttle_sec"] = _as_non_negative_float(
+        value.get("emit_throttle_sec"),
+        cfg["emit_throttle_sec"],
+    )
+    severity = str(value.get("severity", cfg["severity"]) or cfg["severity"]).upper()
+    cfg["severity"] = severity if severity in _SEVERITY else cfg["severity"]
+    fields = _normalize_str_list(value.get("group_by_fields"))
+    if fields:
+        cfg["group_by_fields"] = fields
+    return cfg
+
+
 def normalize_watchdog_policy(raw: dict[str, Any] | None) -> dict[str, Any]:
     policy = deepcopy(DEFAULT_WATCHDOG_POLICY)
     if not isinstance(raw, dict):
@@ -110,6 +140,10 @@ def normalize_watchdog_policy(raw: dict[str, Any] | None) -> dict[str, Any]:
         policy["dedup_key_fields"] = dedup_fields
 
     policy["escalation_rules"] = _normalize_escalation_rules(raw.get("escalation_rules"))
+    policy["cross_task_aggregation"] = _normalize_cross_task_aggregation(
+        raw.get("cross_task_aggregation"),
+        policy["cross_task_aggregation"],
+    )
     return policy
 
 

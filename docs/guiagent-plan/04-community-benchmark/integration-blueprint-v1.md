@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.14`
+- 版本：`v1.15`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -38,9 +38,10 @@
 24. `SessionRuntimeServer` 新增 `/runtime/audit` 查询接口，支持按 `session_id/actor/source/control_action` 过滤审计事件。
 25. `/runtime/audit` 已支持 `cursor + since_ts/until_ts`，用于长周期审计分页与时间窗口查询。
 26. `WatchdogPolicy` 已支持 `escalation_rules`，可按窗口与阈值将重复异常升级为更高严重级（如 `CRITICAL`）。
+27. `WatchdogManager` 已支持 `cross_task_aggregation`，可按配置对跨任务重复异常输出聚合告警。
 
 尚未落地：
-1. `watchdog` 深化生产化（跨任务聚合、下载/安全扩展插件）。
+1. `watchdog` 深化生产化（下载/安全扩展插件、聚合统计导出）。
 2. `SessionRuntime` 生产级进程化（当前已具备本地 HTTP IPC + 索引恢复 + token 鉴权 + 多实例治理 + 控制面审计，仍缺服务发现与跨节点协调）。
 3. 真正的生产级 web 子任务执行闭环（当前为启发式多步 v1 + fallback，尚缺复杂网页任务策略）。
 

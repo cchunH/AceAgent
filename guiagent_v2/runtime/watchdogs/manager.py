@@ -33,6 +33,8 @@ class WatchdogManager:
         self._last_emit_at: dict[str, float] = {}
         self._window_emit_at: dict[str, list[float]] = defaultdict(list)
         self._escalation_observed_at: dict[str, list[float]] = defaultdict(list)
+        self._cross_task_samples: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        self._cross_task_last_emit_at: dict[str, float] = {}
 
     def process(self, event: dict[str, Any]) -> list[dict[str, Any]]:
         if str(event.get("event_type", "")) == "watchdog_alert":
@@ -76,6 +78,14 @@ class WatchdogManager:
                 if not self._allow_alert(hydrated, policy):
                     continue
                 alerts.append(hydrated)
+                aggregated = self._build_cross_task_alert(hydrated, policy)
+                if aggregated is None:
+                    continue
+                agg_severity = str(aggregated.get("watchdog_severity", "LOW")).upper()
+                agg_severity_rank = _SEVERITY_RANK.get(agg_severity, _SEVERITY_RANK["LOW"])
+                if agg_severity_rank < min_severity_rank:
+                    continue
+                alerts.append(aggregated)
         return alerts
 
     def _hydrate_alert(
@@ -170,6 +180,76 @@ class WatchdogManager:
         escalated["watchdog_escalation_count"] = matched_count
         escalated["watchdog_escalation_window_sec"] = matched_window
         return escalated
+
+    def _build_cross_task_alert(
+        self,
+        alert: dict[str, Any],
+        policy: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        cfg = policy.get("cross_task_aggregation")
+        if not isinstance(cfg, dict):
+            return None
+        if not bool(cfg.get("enabled", False)):
+            return None
+
+        window_sec = max(0.0, float(cfg.get("window_sec", 300.0) or 0.0))
+        min_distinct_tasks = max(1, int(cfg.get("min_distinct_tasks", 3) or 3))
+        emit_throttle_sec = max(0.0, float(cfg.get("emit_throttle_sec", 120.0) or 0.0))
+        severity = str(cfg.get("severity", "HIGH") or "HIGH").upper()
+        if severity not in _SEVERITY_RANK:
+            severity = "HIGH"
+        group_fields = cfg.get("group_by_fields", ["watchdog_name", "reason_code", "alert_category"])
+        if not isinstance(group_fields, list) or not group_fields:
+            group_fields = ["watchdog_name", "reason_code", "alert_category"]
+
+        parts: list[str] = []
+        for raw_field in group_fields:
+            field = str(raw_field).strip()
+            if not field:
+                continue
+            parts.append(f"{field}={alert.get(field)}")
+        if not parts:
+            parts = [f"watchdog_name={alert.get('watchdog_name')}"]
+        group_key = "|".join(parts)
+        now = time.monotonic()
+
+        with self._lock:
+            samples = self._cross_task_samples[group_key]
+            if window_sec > 0:
+                samples = [item for item in samples if (now - float(item.get("at", 0.0))) <= window_sec]
+            samples.append(
+                {
+                    "at": now,
+                    "task_id": str(alert.get("task_id", "")).strip(),
+                    "run_id": str(alert.get("run_id", "")).strip(),
+                }
+            )
+            self._cross_task_samples[group_key] = samples
+            distinct_tasks = {item.get("task_id") for item in samples if item.get("task_id")}
+            if len(distinct_tasks) < min_distinct_tasks:
+                return None
+
+            last_emit = self._cross_task_last_emit_at.get(group_key)
+            if emit_throttle_sec > 0 and last_emit is not None and (now - last_emit) < emit_throttle_sec:
+                return None
+            self._cross_task_last_emit_at[group_key] = now
+
+        payload = dict(alert)
+        payload["watchdog_name"] = "aggregate_watchdog"
+        payload["watchdog_severity"] = severity
+        payload["source_event_type"] = "watchdog_alert"
+        payload["reason_code"] = "CROSS_TASK_ALERT_SPIKE"
+        payload["alert_category"] = "cross_task_aggregation"
+        payload["aggregated_watchdog_name"] = str(alert.get("watchdog_name", "")).strip()
+        payload["aggregated_reason_code"] = str(alert.get("reason_code", "")).strip()
+        payload["aggregated_group_key"] = group_key
+        payload["aggregated_distinct_tasks"] = len(distinct_tasks)
+        payload["aggregated_event_count"] = len(samples)
+        payload["aggregated_window_sec"] = window_sec
+        payload["aggregated_source_task_id"] = str(alert.get("task_id", "")).strip()
+        payload["aggregated_source_run_id"] = str(alert.get("run_id", "")).strip()
+        payload["watchdog_policy_mode"] = "cross_task_aggregation"
+        return payload
 
     def _build_dedup_key(self, alert: dict[str, Any], policy: dict[str, Any]) -> str:
         fields = policy.get("dedup_key_fields", []) or ["watchdog_name", "task_id", "reason_code"]

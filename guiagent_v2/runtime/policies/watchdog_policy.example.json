@@ -15,5 +15,13 @@
       "window_sec": 120.0,
       "target_severity": "CRITICAL"
     }
-  ]
+  ],
+  "cross_task_aggregation": {
+    "enabled": true,
+    "window_sec": 300.0,
+    "min_distinct_tasks": 3,
+    "emit_throttle_sec": 120.0,
+    "severity": "HIGH",
+    "group_by_fields": ["watchdog_name", "reason_code", "alert_category"]
+  }
 }
