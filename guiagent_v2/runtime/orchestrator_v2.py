@@ -7,12 +7,14 @@ from guiagent_v2.action_engine.affine_runtime import project_action
 from guiagent_v2.blueprint_hub import Blueprint, BlueprintRepository
 from guiagent_v2.intent_contract import map_legacy_action_to_request
 from .blueprint_sync import upsert_blueprint_from_observation
+from .agent_browser_skill import AgentBrowserSkill
 from .default_hooks import post_state_check_hook, semantic_pre_assertion_hook
 from .event_bus import JSONLEventBus
+from .guard_policy import GuardPolicy
 from .hooks import HookManager
-from .pipeline import StepPipeline
 from .reporting import write_runtime_summary
 from .status_api import get_global_status_store
+from .v2_executor import run_probe_step
 from .web_skill_router import WebSkillRouter
 
 
@@ -393,6 +395,7 @@ def run_single_task_with_runtime(
     temperature=0.0,
     screenrecord=False,
     runtime_mode="legacy",
+    v2_skip_legacy=False,
 ):
     future_tasks = future_tasks or []
     runtime_config = _load_runtime_config()
@@ -410,6 +413,8 @@ def run_single_task_with_runtime(
     )
     blueprint_repo = BlueprintRepository(os.path.join(log_dir, "blueprints.json"))
     router = WebSkillRouter()
+    guard_policy = GuardPolicy()
+    web_skill = AgentBrowserSkill()
 
     _emit_and_track(
         bus,
@@ -423,105 +428,62 @@ def run_single_task_with_runtime(
         },
     )
 
+    probe_result = None
     if runtime_mode in {"guiagent_v2_shadow", "guiagent_v2"}:
         hooks = _build_hook_manager()
-        pipeline = StepPipeline(hooks=hooks)
-        request, result = pipeline.run_shadow_step(
-            {"name": "Wait", "arguments": {}},
-            context={
-                "perception_infos_pre": [],
-                "perception_infos_post": [],
-                "screen_width": 1080,
-                "screen_height": 2340,
-            },
-        )
-        _emit_and_track(
-            bus,
-            {
-                "run_id": run_id,
-                "task_id": task_id,
-                "step_id": 1,
-                "event_type": "step_start",
-                "status": "RUNNING",
-                "intent_key": request["intent_key"],
-                "request_id": request["request_id"],
-            },
-        )
-        _emit_and_track(
-            bus,
-            {
-                "run_id": run_id,
-                "task_id": task_id,
-                "step_id": 1,
-                "event_type": "assertion",
-                "status": "SUCCESS" if result.assertion_result.get("passed", False) else "FAILED",
-                "intent_key": request["intent_key"],
-                "assertion_result": result.assertion_result,
-                "recovery_level": result.recovery_level,
-                "s2_takeover": not result.assertion_result.get("passed", False),
-            },
-        )
-        _emit_and_track(
-            bus,
-            {
-                "run_id": run_id,
-                "task_id": task_id,
-                "step_id": 1,
-                "event_type": "post_check",
-                "status": "SUCCESS" if result.post_check.get("passed", False) else "FAILED",
-                "intent_key": request["intent_key"],
-                "post_check": result.post_check,
-            },
-        )
-        _emit_and_track(
-            bus,
-            {
-                "run_id": run_id,
-                "task_id": task_id,
-                "step_id": 1,
-                "event_type": "step_end",
-                "status": result.status,
-                "intent_key": request["intent_key"],
-                "latency_ms": result.latency_ms,
-                "assertion_result": result.assertion_result,
-                "post_check": result.post_check,
-            },
+        probe_result = run_probe_step(
+            instruction=instruction,
+            run_id=run_id,
+            task_id=task_id,
+            step_id=1,
+            chain_mode=chain_mode,
+            emit_event=lambda event: _emit_and_track(bus, event),
+            hooks=hooks,
+            router=router,
+            guard_policy=guard_policy,
+            web_skill=web_skill,
+            screen_width=1080,
+            screen_height=2340,
         )
 
-    # Delegate to legacy runner while v2 runtime is incubated.
-    from orchestrator import run_single_task as legacy_run_single_task
+    should_delegate_legacy = not (runtime_mode == "guiagent_v2" and bool(v2_skip_legacy))
+    if should_delegate_legacy:
+        # Delegate to legacy runner while v2 runtime is incubated.
+        from orchestrator import run_single_task as legacy_run_single_task
 
-    legacy_run_single_task(
-        instruction=instruction,
-        future_tasks=future_tasks,
-        run_name=run_name,
-        log_root=log_root,
-        task_id=task_id,
-        heuristics_path=heuristics_path,
-        skills_path=skills_path,
-        persistent_heuristics_path=persistent_heuristics_path,
-        persistent_skills_path=persistent_skills_path,
-        perceptor=perceptor,
-        perception_args=perception_args or runtime_config.models.perceptor.to_dict(),
-        max_itr=max_itr,
-        max_consecutive_failures=max_consecutive_failures,
-        max_repetitive_actions=max_repetitive_actions,
-        overwrite_log_dir=overwrite_log_dir,
-        err_to_planner_thresh=err_to_planner_thresh,
-        enable_experience_retriever=enable_experience_retriever,
-        temperature=temperature,
-        screenrecord=screenrecord,
-    )
+        legacy_run_single_task(
+            instruction=instruction,
+            future_tasks=future_tasks,
+            run_name=run_name,
+            log_root=log_root,
+            task_id=task_id,
+            heuristics_path=heuristics_path,
+            skills_path=skills_path,
+            persistent_heuristics_path=persistent_heuristics_path,
+            persistent_skills_path=persistent_skills_path,
+            perceptor=perceptor,
+            perception_args=perception_args or runtime_config.models.perceptor.to_dict(),
+            max_itr=max_itr,
+            max_consecutive_failures=max_consecutive_failures,
+            max_repetitive_actions=max_repetitive_actions,
+            overwrite_log_dir=overwrite_log_dir,
+            err_to_planner_thresh=err_to_planner_thresh,
+            enable_experience_retriever=enable_experience_retriever,
+            temperature=temperature,
+            screenrecord=screenrecord,
+        )
 
-    final_status = _emit_events_from_legacy_steps(
-        bus=bus,
-        run_id=run_id,
-        task_id=task_id,
-        chain_mode=chain_mode,
-        log_dir=log_dir,
-        blueprint_repo=blueprint_repo,
-        router=router,
-    )
+        final_status = _emit_events_from_legacy_steps(
+            bus=bus,
+            run_id=run_id,
+            task_id=task_id,
+            chain_mode=chain_mode,
+            log_dir=log_dir,
+            blueprint_repo=blueprint_repo,
+            router=router,
+        )
+    else:
+        final_status = probe_result.status if probe_result is not None else "SUCCESS"
 
     _emit_and_track(
         bus,

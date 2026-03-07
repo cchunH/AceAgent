@@ -23,6 +23,9 @@ from .agent_browser_skill import (
     AgentBrowserCLIAdapter,
     AgentBrowserSkill,
 )
+from .action_registry import ActionRegistry
+from .guard_policy import GuardPolicy
+from .v2_executor import V2ProbeResult, infer_probe_action, run_probe_step
 
 __all__ = [
     "JSONLEventBus",
@@ -45,4 +48,9 @@ __all__ = [
     "WebAutomationAdapter",
     "AgentBrowserCLIAdapter",
     "AgentBrowserSkill",
+    "ActionRegistry",
+    "GuardPolicy",
+    "V2ProbeResult",
+    "infer_probe_action",
+    "run_probe_step",
 ]

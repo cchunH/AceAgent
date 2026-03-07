@@ -15,11 +15,15 @@
 2. 新增路由审计事件：`skill_route`；web 通道失败时新增 `skill_fallback`。
 3. `action_exec/assertion/post_check/handover/step_end` 事件已透传 `channel/route_reason/skill_name`。
 4. `AgentBrowserCLIAdapter + AgentBrowserSkill` 已落地为外部进程适配层（`agent-browser --json` 调用模式）。
+5. `ActionRegistry` 与 `GuardPolicy` 已实现，并接入 `guiagent_v2(_shadow)` 的 probe 执行路径。
+6. 新增 `v2_executor`：可按指令推断 web/mobile probe，执行 `guard_decision -> dispatch -> fallback`。
+7. 新增事件：`guard_decision`、`adapter_call`（在 web 分支触发），用于后续控制面与治理指标。
+8. 新增启动参数：`--v2_skip_legacy`（仅 `runtime_mode=guiagent_v2` 生效）可跳过 legacy 代理链做纯 v2 探针执行。
 
 尚未落地：
-1. `ActionRegistry`、`GuardPolicy`、`watchdog` 与 compaction 主链接入。
+1. `watchdog` 与 compaction 主链接入。
 2. `SessionRuntime` 进程化（当前仍是进程内 `RuntimeTaskService`）。
-3. 真正的 web 子任务执行闭环（当前以路由与适配器能力预埋为主）。
+3. 真正的生产级 web 子任务执行闭环（当前是 probe + fallback 的可控最小实现）。
 
 ## 0. 决策基线（先定方向）
 

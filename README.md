@@ -205,6 +205,9 @@ while True:
 - `event_bus.py` + `status_api.py`: `events.jsonl` 结构化事件与任务状态查询。
 - `web_skill_router.py`: `mobile_native/web_skill` 路由决策（移动端系统动作优先走原生链路）。
 - `agent_browser_skill.py`: `agent-browser` 外部进程适配器与 `AgentBrowserSkill` 封装。
+- `action_registry.py`: 动作注册、参数校验、分发统一入口。
+- `guard_policy.py`: 执行前 allow/deny/confirm 门禁决策。
+- `v2_executor.py`: `guiagent_v2(_shadow)` probe 执行链（含 web fallback 到 mobile_native）。
 
 当前路由可观测字段：
 - `channel`
@@ -214,6 +217,8 @@ while True:
 当前新增事件：
 - `skill_route`
 - `skill_fallback`
+- `guard_decision`
+- `adapter_call`
 
 ## 工作流程详解
 

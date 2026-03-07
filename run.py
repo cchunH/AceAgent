@@ -17,6 +17,7 @@ import shutil
 
 def _run_with_mode(runtime_mode: str, **kwargs):
     if runtime_mode == "legacy":
+        kwargs.pop("v2_skip_legacy", None)
         return run_single_task(**kwargs)
     kwargs["runtime_mode"] = runtime_mode
     return run_single_task_with_runtime(**kwargs)
@@ -46,6 +47,12 @@ def main():
         type=str,
         default="legacy",
         choices=["legacy", "guiagent_v2_shadow", "guiagent_v2"],
+    )
+    parser.add_argument(
+        "--v2_skip_legacy",
+        action="store_true",
+        default=False,
+        help="Only for runtime_mode=guiagent_v2: skip delegating to legacy orchestrator.",
     )
 
     args = parser.parse_args()
@@ -98,6 +105,7 @@ def main():
                 enable_experience_retriever=args.enable_experience_retriever,
                 temperature=args.temperature,
                 screenrecord=args.screenrecord,
+                v2_skip_legacy=args.v2_skip_legacy,
             )
         except Exception as e:
             print(f"Failed when doing task: {args.instruction}")
@@ -167,6 +175,7 @@ def main():
                 enable_experience_retriever=args.enable_experience_retriever,
                 temperature=args.temperature,
                 screenrecord=args.screenrecord,
+                v2_skip_legacy=args.v2_skip_legacy,
             )
             print("\n\nDONE:", task["instruction"])
             print("IMPORTANT: Please reset the device as needed before running the next task!")
