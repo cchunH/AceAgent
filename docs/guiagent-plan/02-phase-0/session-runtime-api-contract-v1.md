@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.3`
+- 版本：`v1.4`
 - 更新时间：`2026-03-08`
 - 适用范围：`guiagent_v2/runtime/session_runtime_server.py`
 
@@ -114,9 +114,15 @@
 - 说明：查询事件时间线。
 - 说明补充：对 `POST /tasks`、`POST /tasks/{request_id}/wait` 等任务相关写操作，会产生 `control_plane_audit` 事件并按对应 `run_id/task_id` 进入同一时间线。
 
-4. `GET /runtime/audit?run_id=&task_id=&session_id=&actor=&source=&control_action=&status=&event_type=&limit=`
+4. `GET /runtime/audit?run_id=&task_id=&session_id=&actor=&source=&control_action=&status=&event_type=&limit=&cursor=&since_ts=&until_ts=`
 - 说明：查询运行时审计事件，默认 `event_type=control_plane_audit`。
 - 说明补充：用于控制面运维查询，不需要直接读取审计 JSONL 文件。
+- 响应字段：
+  - `events`: 当前页事件列表（按 `ts` 倒序）。
+  - `cursor`: 当前页起始偏移。
+  - `next_cursor`: 下一页偏移（无更多数据时为 `null`）。
+  - `has_more`: 是否存在下一页。
+  - `total`: 过滤后总事件数。
 
 ## 4. 错误码
 
@@ -141,7 +147,7 @@
 - 增加分页参数（tasks/status）。
 - 增加批量查询接口。
 - 增加请求追踪字段（`trace_id`）。
-- 增加审计查询分页游标与时间范围过滤。
+- 增加审计查询跨文件归档与时间窗口聚合。
 
 ## 6. 运行治理参数（Server 启动）
 

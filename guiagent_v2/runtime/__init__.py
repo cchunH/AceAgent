@@ -6,6 +6,7 @@ from .status_api import (
     get_task_status,
     get_task_timeline,
     list_events,
+    query_events,
     list_tasks,
     list_run_ids,
 )
@@ -64,6 +65,7 @@ __all__ = [
     "get_task_status",
     "get_task_timeline",
     "list_events",
+    "query_events",
     "list_tasks",
     "list_run_ids",
     "compute_metrics_from_jsonl",

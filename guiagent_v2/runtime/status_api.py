@@ -1,5 +1,37 @@
+from datetime import datetime, timezone
 from threading import Lock
 from typing import Any
+
+
+def _parse_ts(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        except Exception:
+            return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _normalize_limit(limit: int | None, default: int | None = None) -> int | None:
+    if limit is None:
+        return default
+    value = int(limit)
+    if value <= 0:
+        return 0
+    return min(value, 500)
 
 
 class TaskStatusStore:
@@ -116,6 +148,34 @@ class TaskStatusStore:
         status: str | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
+        page = self.query_events(
+            run_id=run_id,
+            task_id=task_id,
+            session_id=session_id,
+            event_type=event_type,
+            actor=actor,
+            source=source,
+            control_action=control_action,
+            status=status,
+            limit=limit,
+        )
+        return page["events"]
+
+    def query_events(
+        self,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        session_id: str | None = None,
+        event_type: str | None = None,
+        actor: str | None = None,
+        source: str | None = None,
+        control_action: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        cursor: int | None = None,
+        since_ts: str | None = None,
+        until_ts: str | None = None,
+    ) -> dict[str, Any]:
         run_id = str(run_id).strip() if run_id is not None else None
         task_id = str(task_id).strip() if task_id is not None else None
         session_id = str(session_id).strip() if session_id is not None else None
@@ -124,9 +184,18 @@ class TaskStatusStore:
         source = str(source).strip() if source is not None else None
         control_action = str(control_action).strip() if control_action is not None else None
         status = str(status).upper().strip() if status is not None else None
-        cap = int(limit) if limit is not None else None
-        if cap is not None and cap <= 0:
-            return []
+        cap = _normalize_limit(limit, default=None)
+        if cap == 0:
+            return {
+                "events": [],
+                "next_cursor": None,
+                "has_more": False,
+                "cursor": 0,
+                "total": 0,
+            }
+        offset = max(0, int(cursor or 0))
+        since_dt = _parse_ts(since_ts)
+        until_dt = _parse_ts(until_ts)
 
         with self._lock:
             events: list[dict[str, Any]] = []
@@ -152,12 +221,44 @@ class TaskStatusStore:
                         continue
                     if status is not None and str(event.get("status", "")).upper().strip() != status:
                         continue
+                    event_dt = _parse_ts(event.get("ts"))
+                    if since_dt is not None:
+                        if event_dt is None or event_dt < since_dt:
+                            continue
+                    if until_dt is not None:
+                        if event_dt is None or event_dt > until_dt:
+                            continue
                     events.append(dict(event))
 
-            events.sort(key=lambda x: str(x.get("ts", "")), reverse=True)
-            if cap is not None:
-                events = events[:cap]
-            return events
+            events.sort(
+                key=lambda x: (
+                    _parse_ts(x.get("ts")) or datetime.min.replace(tzinfo=timezone.utc),
+                    str(x.get("ts", "")),
+                ),
+                reverse=True,
+            )
+            total = len(events)
+            if cap is None:
+                page_events = events[offset:]
+                return {
+                    "events": page_events,
+                    "next_cursor": None,
+                    "has_more": False,
+                    "cursor": offset,
+                    "total": total,
+                }
+
+            start = min(offset, total)
+            end = min(start + cap, total)
+            page_events = events[start:end]
+            has_more = end < total
+            return {
+                "events": page_events,
+                "next_cursor": end if has_more else None,
+                "has_more": has_more,
+                "cursor": start,
+                "total": total,
+            }
 
 
 _GLOBAL_STATUS_STORE = TaskStatusStore()
@@ -212,4 +313,34 @@ def list_events(
         control_action=control_action,
         status=status,
         limit=limit,
+    )
+
+
+def query_events(
+    run_id: str | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
+    event_type: str | None = None,
+    actor: str | None = None,
+    source: str | None = None,
+    control_action: str | None = None,
+    status: str | None = None,
+    limit: int | None = None,
+    cursor: int | None = None,
+    since_ts: str | None = None,
+    until_ts: str | None = None,
+) -> dict[str, Any]:
+    return _GLOBAL_STATUS_STORE.query_events(
+        run_id=run_id,
+        task_id=task_id,
+        session_id=session_id,
+        event_type=event_type,
+        actor=actor,
+        source=source,
+        control_action=control_action,
+        status=status,
+        limit=limit,
+        cursor=cursor,
+        since_ts=since_ts,
+        until_ts=until_ts,
     )

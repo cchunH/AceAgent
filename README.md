@@ -212,7 +212,7 @@ while True:
 - `v2_executor.py`: `guiagent_v2(_shadow)` 执行链，支持 Web 多步执行 v1（`web_plan/web_step_*`）与失败回退到 `mobile_native`。
 - `loop_detector.py` + `context_compaction.py`: 循环检测与上下文压缩治理能力。
 - `task_service.py` + `session_runtime.py`: 任务提交、状态查询、会话级隔离调度（进程内 v0）。
-- `session_runtime_server.py`: SessionRuntime 本地 HTTP IPC 控制面（session/task/status/timeline/audit），支持 lockfile 多实例治理、写操作审计日志，以及任务级审计事件并入 `status_api` 时间线。
+- `session_runtime_server.py`: SessionRuntime 本地 HTTP IPC 控制面（session/task/status/timeline/audit），支持 lockfile 多实例治理、写操作审计日志，以及任务级审计事件并入 `status_api` 时间线（含 cursor + 时间窗口查询）。
 - `session_runtime.py`: 支持会话/任务索引持久化恢复（重启后恢复 session/task 查询能力）。
 - `watchdogs/*`: `crash_watchdog/security_watchdog` 插件骨架与 `watchdog_alert` 派生事件。
 - `watchdog_policy.py`: Watchdog 策略加载与热更新（启停、最小严重级、去重节流参数）。

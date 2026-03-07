@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.10`
+- 版本：`v2.11`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 
@@ -111,7 +111,7 @@
 
 19. 审计查询接口
 - 证据模块：`guiagent_v2/runtime/session_runtime_server.py`, `guiagent_v2/runtime/status_api.py`
-- 现状：新增 `/runtime/audit`，支持按 `run_id/task_id/session_id/actor/source/control_action/status` 过滤并限流返回。
+- 现状：新增 `/runtime/audit`，支持按 `run_id/task_id/session_id/actor/source/control_action/status` 过滤，并支持 `cursor + since_ts/until_ts` 分页与时间窗口查询。
 - 距离评估：`完成（v1）`
 
 ### 2.2 部分落地（需增强）
@@ -126,7 +126,7 @@
 - 证据模块：`guiagent_v2/runtime/event_bus.py`, `status_api.py`
 - 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合，事件 schema 校验已接入，并新增控制面审计事件与任务级聚合。
 - 距离评估：`部分完成`
-- 关键差距：schema 严格模式尚未开启（未做 fail-fast）；watchdog 仍缺跨任务聚合与告警升级策略。
+- 关键差距：schema 严格模式尚未开启（未做 fail-fast）；watchdog 仍缺跨任务聚合与告警升级策略；审计归档与跨文件聚合未完成。
 
 3. Web 子任务闭环
 - 证据模块：`v2_executor.py`, `agent_browser_skill.py`

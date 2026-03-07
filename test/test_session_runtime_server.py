@@ -237,6 +237,73 @@ class TestSessionRuntimeServer(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0].get("control_action"), "wait_task")
 
+    def test_runtime_audit_endpoint_supports_cursor_and_time_range(self):
+        store = get_global_status_store()
+        run_id = "run-audit-page"
+        task_id = "task-audit-page"
+        session_id = "sess-audit-page"
+        events = [
+            ("2026-03-08T10:00:00Z", "ensure_session"),
+            ("2026-03-08T10:00:01Z", "submit_task"),
+            ("2026-03-08T10:00:02Z", "wait_task"),
+        ]
+        for ts, action in events:
+            store.update(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "session_id": session_id,
+                    "step_id": 0,
+                    "chain_mode": "guiagent_v2",
+                    "event_type": "control_plane_audit",
+                    "status": "SUCCESS",
+                    "intent_key": "control:session-runtime:write",
+                    "control_action": action,
+                    "http_method": "POST",
+                    "http_path": "/tasks",
+                    "actor": "audit-user",
+                    "source": "audit-test",
+                    "ts": ts,
+                }
+            )
+
+        code, body = _http_json(
+            self.base_url,
+            "GET",
+            f"/runtime/audit?run_id={run_id}&task_id={task_id}&limit=2",
+        )
+        self.assertEqual(code, 200)
+        page1 = body["data"]
+        self.assertEqual(len(page1["events"]), 2)
+        self.assertTrue(page1["has_more"])
+        self.assertEqual(page1["next_cursor"], 2)
+        self.assertEqual(page1["events"][0]["control_action"], "wait_task")
+
+        code, body = _http_json(
+            self.base_url,
+            "GET",
+            f"/runtime/audit?run_id={run_id}&task_id={task_id}&limit=2&cursor={page1['next_cursor']}",
+        )
+        self.assertEqual(code, 200)
+        page2 = body["data"]
+        self.assertEqual(len(page2["events"]), 1)
+        self.assertFalse(page2["has_more"])
+        self.assertIsNone(page2["next_cursor"])
+        self.assertEqual(page2["events"][0]["control_action"], "ensure_session")
+
+        code, body = _http_json(
+            self.base_url,
+            "GET",
+            (
+                f"/runtime/audit?run_id={run_id}&task_id={task_id}"
+                "&since_ts=2026-03-08T10:00:01Z&until_ts=2026-03-08T10:00:01Z"
+            ),
+        )
+        self.assertEqual(code, 200)
+        ranged = body["data"]["events"]
+        self.assertEqual(len(ranged), 1)
+        self.assertEqual(ranged[0]["control_action"], "submit_task")
+
     def test_submit_invalid_instruction(self):
         code, body = _http_json(
             self.base_url,
