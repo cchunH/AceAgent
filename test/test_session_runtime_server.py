@@ -2,6 +2,8 @@ import json
 import unittest
 import urllib.error
 import urllib.request
+import tempfile
+import os
 
 from guiagent_v2.runtime.session_runtime import SessionRuntime
 from guiagent_v2.runtime.session_runtime_server import SessionRuntimeAPIServer
@@ -145,6 +147,53 @@ class TestSessionRuntimeServer(unittest.TestCase):
         self.assertEqual(code, 400)
         self.assertFalse(body["ok"])
         self.assertEqual(body["error"]["code"], "INVALID_INSTRUCTION")
+
+    def test_server_restart_recovers_persisted_task_index(self):
+        def fake_runner(**kwargs):
+            return {
+                "status": "SUCCESS",
+                "run_id": f'{kwargs["run_name"]}:{kwargs["task_id"]}',
+                "task_id": kwargs["task_id"],
+            }
+
+        with tempfile.TemporaryDirectory() as td:
+            state_path = os.path.join(td, "runtime-state.json")
+            runtime_a = SessionRuntime(runner=fake_runner, persistence_path=state_path)
+            server_a = SessionRuntimeAPIServer(runtime=runtime_a, host="127.0.0.1", port=0)
+            server_a.start()
+            base_a = server_a.base_url
+
+            code, body = _http_json(
+                base_a,
+                "POST",
+                "/tasks",
+                {
+                    "instruction": "recover-me",
+                    "session_id": "sess-recover",
+                    "runtime_mode": "guiagent_v2",
+                    "run_name": "api-ut",
+                },
+            )
+            self.assertEqual(code, 201)
+            request_id = body["data"]["request_id"]
+            code, _ = _http_json(base_a, "POST", f"/tasks/{request_id}/wait", {"timeout": 1.0})
+            self.assertEqual(code, 200)
+
+            server_a.stop()
+            runtime_a.shutdown(wait=True)
+
+            runtime_b = SessionRuntime(runner=fake_runner, persistence_path=state_path)
+            server_b = SessionRuntimeAPIServer(runtime=runtime_b, host="127.0.0.1", port=0)
+            server_b.start()
+            base_b = server_b.base_url
+            try:
+                code, body = _http_json(base_b, "GET", f"/tasks/{request_id}")
+                self.assertEqual(code, 200)
+                self.assertEqual(body["data"]["status"], "SUCCESS")
+                self.assertEqual(body["data"]["session_id"], "sess-recover")
+            finally:
+                server_b.stop()
+                runtime_b.shutdown(wait=True)
 
 
 if __name__ == "__main__":

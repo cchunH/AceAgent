@@ -1,5 +1,7 @@
 import time
 import unittest
+import tempfile
+import os
 
 from guiagent_v2.runtime.session_runtime import SessionRuntime
 from guiagent_v2.runtime.status_api import get_global_status_store
@@ -121,6 +123,52 @@ class TestSessionRuntime(unittest.TestCase):
             self.assertEqual(captured.get("session_id"), "sess-capture")
         finally:
             runtime.shutdown(wait=True)
+
+    def test_persistence_recover_sessions_and_tasks(self):
+        def fake_runner(**kwargs):
+            return {
+                "status": "SUCCESS",
+                "run_id": f'{kwargs["run_name"]}:{kwargs["task_id"]}',
+                "task_id": kwargs["task_id"],
+            }
+
+        with tempfile.TemporaryDirectory() as td:
+            state_path = os.path.join(td, "session_state.json")
+
+            runtime_a = SessionRuntime(
+                runner=fake_runner,
+                per_session_max_workers=1,
+                persistence_path=state_path,
+            )
+            try:
+                task = runtime_a.submit_task(
+                    instruction="persist-me",
+                    session_id="sess-persist",
+                    runtime_mode="guiagent_v2",
+                    run_name="ut",
+                )
+                done = runtime_a.wait(task["request_id"], timeout=1.0)
+                self.assertIsNotNone(done)
+                self.assertEqual(done["status"], "SUCCESS")
+                runtime_a.flush_state()
+            finally:
+                runtime_a.shutdown(wait=True)
+
+            runtime_b = SessionRuntime(
+                runner=fake_runner,
+                per_session_max_workers=1,
+                persistence_path=state_path,
+            )
+            try:
+                sessions = runtime_b.list_sessions()
+                self.assertTrue(any(item["session_id"] == "sess-persist" for item in sessions))
+
+                recovered = runtime_b.get_task(task["request_id"])
+                self.assertIsNotNone(recovered)
+                self.assertEqual(recovered["session_id"], "sess-persist")
+                self.assertEqual(recovered["status"], "SUCCESS")
+            finally:
+                runtime_b.shutdown(wait=True)
 
 
 if __name__ == "__main__":

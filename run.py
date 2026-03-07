@@ -112,6 +112,12 @@ def main():
         default=8787,
         help="SessionRuntime HTTP API server bind port.",
     )
+    parser.add_argument(
+        "--session_runtime_state_path",
+        type=str,
+        default=None,
+        help="Optional state file path for SessionRuntime server persistence.",
+    )
 
     args = parser.parse_args()
     torch.manual_seed(args.seed)
@@ -120,11 +126,20 @@ def main():
         args.log_root = f"logs/{DEFAULT_MODEL}/unimind_agent"
 
     if args.start_session_runtime_server:
+        session_state_path = args.session_runtime_state_path
+        if session_state_path is None:
+            session_state_path = os.path.join(
+                args.log_root,
+                "__runtime",
+                "session_runtime_state.json",
+            )
         host, port = start_global_session_runtime_server(
             host=args.session_runtime_server_host,
             port=args.session_runtime_server_port,
+            persistence_path=session_state_path,
         )
         print(f"SessionRuntime API server started at http://{host}:{port}")
+        print(f"SessionRuntime state path: {session_state_path}")
         try:
             while True:
                 time.sleep(3600)

@@ -290,18 +290,26 @@ _GLOBAL_API_SERVER: SessionRuntimeAPIServer | None = None
 _GLOBAL_API_SERVER_LOCK = threading.Lock()
 
 
-def get_global_session_runtime_server() -> SessionRuntimeAPIServer:
+def get_global_session_runtime_server(
+    persistence_path: str | None = None,
+) -> SessionRuntimeAPIServer:
     global _GLOBAL_API_SERVER
     if _GLOBAL_API_SERVER is not None:
         return _GLOBAL_API_SERVER
     with _GLOBAL_API_SERVER_LOCK:
         if _GLOBAL_API_SERVER is None:
-            _GLOBAL_API_SERVER = SessionRuntimeAPIServer()
+            _GLOBAL_API_SERVER = SessionRuntimeAPIServer(
+                runtime=get_global_session_runtime(persistence_path=persistence_path),
+            )
     return _GLOBAL_API_SERVER
 
 
-def start_global_session_runtime_server(host: str = "127.0.0.1", port: int = 8787) -> tuple[str, int]:
-    server = get_global_session_runtime_server()
+def start_global_session_runtime_server(
+    host: str = "127.0.0.1",
+    port: int = 8787,
+    persistence_path: str | None = None,
+) -> tuple[str, int]:
+    server = get_global_session_runtime_server(persistence_path=persistence_path)
     server.host = host
     server.port = int(port)
     return server.start()
@@ -320,9 +328,14 @@ def _main() -> None:
     parser = argparse.ArgumentParser(description="SessionRuntime HTTP API server")
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8787)
+    parser.add_argument("--persistence_path", type=str, default=None)
     args = parser.parse_args()
 
-    server = SessionRuntimeAPIServer(host=args.host, port=args.port)
+    server = SessionRuntimeAPIServer(
+        runtime=SessionRuntime(persistence_path=args.persistence_path),
+        host=args.host,
+        port=args.port,
+    )
     host, port = server.start()
     print(f"SessionRuntime API server started at http://{host}:{port}")
     try:

@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.0`
+- 版本：`v1.1`
 - 更新时间：`2026-03-08`
 - 范围：基于当前 `main` 代码，对 `R3(会话进程化) + R4(治理生产化)` 进行实装后差距审查
 
@@ -12,7 +12,7 @@
 1. 会话运行时与本地 IPC
 - 模块：`guiagent_v2/runtime/session_runtime.py`
 - 模块：`guiagent_v2/runtime/session_runtime_server.py`
-- 结论：已形成 `session/task/status/timeline` 的本地 HTTP 控制面闭环（v1）。
+- 结论：已形成 `session/task/status/timeline` 的本地 HTTP 控制面闭环（v1），并支持 session/task 索引恢复。
 
 2. 事件治理与守护
 - 模块：`guiagent_v2/runtime/event_schema.py`
@@ -29,23 +29,23 @@
 
 ## P0（建议立即推进）
 
-1. 会话恢复能力缺口
-- 问题：IPC 服务重启后，任务索引与会话信息不可恢复。
-- 证据模块：`session_runtime.py`, `session_runtime_server.py`
-- 影响：控制面可见性中断，长任务/多会话场景恢复成本高。
-- 建议：引入轻量持久化（`session_registry.jsonl` + `task_index.jsonl`）与启动恢复流程。
-
-2. IPC 安全边界缺口
+1. IPC 安全边界缺口
 - 问题：本地 HTTP API 目前无鉴权。
 - 证据模块：`session_runtime_server.py`
 - 影响：同机进程可直接提交/查询任务，存在控制面滥用风险。
 - 建议：增加 `api_token` 机制与可选 `origin/process` 白名单。
 
-3. Web 子任务仍是 probe 级
+2. Web 子任务仍是 probe 级
 - 问题：`v2_executor` 的 web 分支仍偏单步探针+回退。
 - 证据模块：`v2_executor.py`
 - 影响：网页多步任务成功率和可解释性仍受限。
 - 建议：补“多步 web action 计划执行器”最小版本（3-5 步上限 + step watchdog）。
+
+3. API 契约缺口
+- 问题：接口已可用，但缺少独立 API contract 文档与错误码规范。
+- 证据模块：`session_runtime_server.py`
+- 影响：前端/调度接入成本偏高，联调效率低。
+- 建议：新增 `session-runtime-api-contract-v1.md` 并冻结 v1 字段。
 
 ## P1（建议下一阶段并行）
 
@@ -61,11 +61,11 @@
 - 影响：下游消费需要二次兜底。
 - 建议：新增严格模式开关（测试/CI 环境强校验失败即报错）。
 
-3. 控制面 API 缺少契约文档
-- 问题：接口已可用，但缺少独立 API contract 文档和示例。
+3. 多实例冲突防护不足
+- 问题：缺少服务实例锁与端口冲突恢复策略。
 - 证据模块：`session_runtime_server.py`
-- 影响：后续前端和外部调度接入效率受限。
-- 建议：新增 `session-runtime-api-contract-v1.md`（路径、请求、响应、错误码）。
+- 影响：并发启动场景存在资源冲突风险。
+- 建议：引入 lockfile/port probe 策略与实例 ID。
 
 ## P2（中长期）
 
@@ -83,19 +83,19 @@
 
 ## 3. 下一阶段实施规划（建议 3 个迭代）
 
-## Iteration A（3-5 天）：控制面安全与恢复
+## Iteration A（3-5 天）：控制面安全与契约冻结
 
 1. IPC 鉴权
 - 目标模块：`session_runtime_server.py`
 - 验收：未携带 token 的写操作返回 `401`。
 
-2. 会话/任务索引持久化
-- 目标模块：`session_runtime.py`
-- 验收：服务重启后可恢复 `session -> request_id` 映射。
-
-3. API 契约文档
+2. API 契约文档
 - 目标文档：`docs/guiagent-plan/02-phase-0/session-runtime-api-contract-v1.md`
 - 验收：前端可据此直接联调。
+
+3. 多实例冲突防护
+- 目标模块：`session_runtime_server.py`
+- 验收：重复启动给出明确错误或自动协商端口。
 
 ## Iteration B（4-6 天）：执行链增强
 
@@ -130,4 +130,4 @@
 
 ## 5. 结论
 
-当前路线已从“骨架期”进入“可运行治理期”：具备会话 IPC、事件 schema、策略化 watchdog。下一阶段应集中补齐 `安全 + 恢复 + 多步执行` 三个核心缺口，避免过早扩展模块面，保持主链稳定与迭代速度平衡。
+当前路线已从“骨架期”进入“可运行治理期”：具备会话 IPC、索引恢复、事件 schema、策略化 watchdog。下一阶段应集中补齐 `安全 + 契约 + 多步执行` 三个核心缺口，避免过早扩展模块面，保持主链稳定与迭代速度平衡。
