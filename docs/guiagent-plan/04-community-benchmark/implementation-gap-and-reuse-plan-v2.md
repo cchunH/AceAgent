@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.0`
+- 版本：`v2.1`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 
@@ -64,19 +64,24 @@
 - 现状：支持 JSON 策略加载、缓存与手动 reload，运行入口支持策略路径与检查间隔参数。
 - 距离评估：`完成（v0）`
 
+10. `SessionRuntime`（进程内 v0）
+- 证据模块：`guiagent_v2/runtime/session_runtime.py`, `guiagent_v2/runtime/task_service.py`
+- 现状：已支持会话创建、会话级提交/查询/等待、跨会话任务隔离调度，并兼容旧任务服务。
+- 距离评估：`完成（v0，非进程化）`
+
 ### 2.2 部分落地（需增强）
 
 1. `SessionRuntime`
-- 证据模块：`guiagent_v2/runtime/task_service.py`
-- 现状：进程内线程队列，可提交/查询；尚未 server/session registry 化。
+- 证据模块：`guiagent_v2/runtime/session_runtime.py`, `guiagent_v2/runtime/task_service.py`
+- 现状：进程内会话隔离已落地，支持 `session_id` 注入执行链与状态查询过滤。
 - 距离评估：`部分完成`
 - 关键差距：无跨进程会话、无重启恢复、无 IPC 控制面协议。
 
 2. 事件治理
 - 证据模块：`guiagent_v2/runtime/event_bus.py`, `status_api.py`
-- 现状：核心事件完整，状态查询可用。
+- 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合。
 - 距离评估：`部分完成`
-- 关键差距：尚未类型化 schema 版本管理；缺少 loop/compaction/watchdog 事件。
+- 关键差距：尚未类型化 schema 版本管理；缺少 watchdog 事件与统一校验层。
 
 3. Web 子任务闭环
 - 证据模块：`v2_executor.py`, `agent_browser_skill.py`
@@ -159,8 +164,10 @@
 
 ### 阶段 R3：会话进程化（4-7 天）
 
-1. 在现有 `RuntimeTaskService` 上增量抽象 `SessionRuntime`。
-2. 保留旧 API 兼容，新增 session 级提交与查询接口。
+1. 已完成：在现有 `RuntimeTaskService` 上增量抽象 `SessionRuntime`（进程内 v0）。
+2. 已完成：保留旧 API 兼容，新增 session 级提交与查询接口。
+3. 待继续：抽离独立进程/IPC 通道，并补齐重启恢复策略。
+4. 待继续：把 `session_id` 作为控制面一等键接入后续状态 API/前端适配层。
 
 退出条件：
 - 会话隔离可验证。
@@ -185,7 +192,8 @@
 4. 动作分发：`guiagent_v2/runtime/action_registry.py`
 5. Web 旁路：`guiagent_v2/runtime/agent_browser_skill.py`
 6. 任务状态面：`guiagent_v2/runtime/task_service.py`, `status_api.py`
+7. 会话编排层：`guiagent_v2/runtime/session_runtime.py`
 
 ## 7. 结论
 
-当前项目已经完成蓝图中的关键“骨架层”复用：路由、Skill 旁路、门禁、注册中心、可观测链路。下一步不建议继续扩展新模块面，而应优先补齐治理闭环（Loop/Compaction/Policy 外置）与会话进程化，确保架构健康度和生产可控性同步提升。
+当前项目已经完成蓝图中的关键“骨架层”复用：路由、Skill 旁路、门禁、注册中心、可观测链路，以及会话隔离运行时 v0。下一步不建议继续扩展新模块面，而应优先补齐治理闭环（Policy 分层/Schema/Watchdog）与会话进程化，确保架构健康度和生产可控性同步提升。

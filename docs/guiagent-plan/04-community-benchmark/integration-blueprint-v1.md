@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.2`
+- 版本：`v1.3`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -23,10 +23,11 @@
 9. 新增 `LoopDetector` 与 `ContextCompactor` 基础实现，并在 `v2_executor` 与 legacy 翻译链路产出 `loop_warning/context_compaction` 事件。
 10. `GuardPolicy` 已支持文件化策略加载与手动重载（`policy_loader`），入口新增 `--guard_policy_path/--guard_policy_reload_interval`。
 11. 提供策略样例文件：`guiagent_v2/runtime/policies/guard_policy.example.json`。
+12. `SessionRuntime` 已落地进程内会话隔离调度（`submit/list/wait/status/timeline`），并把 `session_id` 贯穿到 `v2_executor + orchestrator_v2 + status_api`。
 
 尚未落地：
 1. `watchdog` 主链接入与插件化。
-2. `SessionRuntime` 进程化（当前仍是进程内 `RuntimeTaskService`）。
+2. `SessionRuntime` 真正进程化/IPC 化（当前为进程内 v0，会话隔离已可用）。
 3. 真正的生产级 web 子任务执行闭环（当前是 probe + fallback 的可控最小实现）。
 
 ## 0. 决策基线（先定方向）
@@ -71,7 +72,7 @@
 
 ## 1.4 候选接口草案（冻结建议）
 
-以下为文档冻结草案，不在本轮实现：
+以下接口已完成 `v0` 骨架落地（`WebAutomationAdapter/ActionRegistry/GuardPolicy/SessionRuntime/WebSkillRouter/AgentBrowserSkill`），仍需按阶段继续增强：
 
 ```python
 class WebAutomationAdapter:

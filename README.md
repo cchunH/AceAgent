@@ -202,7 +202,7 @@ while True:
 
 当前已落地能力：
 - `orchestrator_v2.py`: `runtime_mode=legacy|guiagent_v2_shadow|guiagent_v2` 统一入口与事件翻译。
-- `event_bus.py` + `status_api.py`: `events.jsonl` 结构化事件与任务状态查询。
+- `event_bus.py` + `status_api.py`: `events.jsonl` 结构化事件与任务状态查询（支持 `session_id` 聚合与过滤）。
 - `web_skill_router.py`: `mobile_native/web_skill` 路由决策（移动端系统动作优先走原生链路）。
 - `agent_browser_skill.py`: `agent-browser` 外部进程适配器与 `AgentBrowserSkill` 封装。
 - `action_registry.py`: 动作注册、参数校验、分发统一入口。
@@ -210,11 +210,13 @@ while True:
 - `policy_loader.py`: GuardPolicy 文件化配置加载与缓存重载。
 - `v2_executor.py`: `guiagent_v2(_shadow)` probe 执行链（含 web fallback 到 mobile_native）。
 - `loop_detector.py` + `context_compaction.py`: 循环检测与上下文压缩治理能力。
+- `task_service.py` + `session_runtime.py`: 任务提交、状态查询、会话级隔离调度（进程内 v0）。
 
 当前路由可观测字段：
 - `channel`
 - `route_reason`
 - `skill_name`
+- `session_id`
 
 当前新增事件：
 - `skill_route`
@@ -228,6 +230,7 @@ while True:
 - `--v2_skip_legacy`
 - `--guard_policy_path`
 - `--guard_policy_reload_interval`
+- `--session_id`
 
 ## 工作流程详解
 

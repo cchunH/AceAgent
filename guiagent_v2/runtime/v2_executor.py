@@ -163,6 +163,7 @@ def run_probe_step(
     instruction: str,
     run_id: str,
     task_id: str,
+    session_id: str | None,
     step_id: int,
     chain_mode: str,
     emit_event: EventEmitter,
@@ -178,30 +179,36 @@ def run_probe_step(
     loop_detector = loop_detector or LoopDetector()
     context_compactor = context_compactor or ContextCompactor()
     runtime_context_events: list[dict[str, Any]] = []
+    runtime_session_id = str(session_id or "").strip() or None
 
     def _emit(event: dict[str, Any]) -> None:
-        emit_event(event)
-        runtime_context_events.append(dict(event))
-        if str(event.get("event_type")) == "context_compaction":
+        payload = dict(event)
+        if runtime_session_id and not str(payload.get("session_id", "")).strip():
+            payload["session_id"] = runtime_session_id
+
+        emit_event(payload)
+        runtime_context_events.append(dict(payload))
+        if str(payload.get("event_type")) == "context_compaction":
             return
         compacted = context_compactor.compact(runtime_context_events)
         if compacted.get("applied", False):
             runtime_context_events[:] = list(compacted.get("events", []))
-            emit_event(
-                {
-                    "run_id": run_id,
-                    "task_id": task_id,
-                    "step_id": int(event.get("step_id", step_id)),
-                    "chain_mode": chain_mode,
-                    "event_type": "context_compaction",
-                    "status": "SUCCESS",
-                    "intent_key": str(event.get("intent_key", "global:UNKNOWN:UNSPECIFIED_TARGET")),
-                    "before_count": compacted.get("before_count"),
-                    "after_count": compacted.get("after_count"),
-                    "truncated_count": compacted.get("truncated_count", 0),
-                    "compaction_summary": compacted.get("summary"),
-                }
-            )
+            compaction_event = {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": int(payload.get("step_id", step_id)),
+                "chain_mode": chain_mode,
+                "event_type": "context_compaction",
+                "status": "SUCCESS",
+                "intent_key": str(payload.get("intent_key", "global:UNKNOWN:UNSPECIFIED_TARGET")),
+                "before_count": compacted.get("before_count"),
+                "after_count": compacted.get("after_count"),
+                "truncated_count": compacted.get("truncated_count", 0),
+                "compaction_summary": compacted.get("summary"),
+            }
+            if runtime_session_id:
+                compaction_event["session_id"] = runtime_session_id
+            emit_event(compaction_event)
 
     action_obj, route_context = infer_probe_action(instruction)
     step_context = {
@@ -340,7 +347,7 @@ def run_probe_step(
     if dispatch_name == "web_skill_agent_browser":
         payload = {
             "web_task": route_context.get("web_task") or {"action": "snapshot", "interactive": True},
-            "session_id": task_id,
+            "session_id": runtime_session_id or task_id,
         }
     else:
         payload = {
@@ -377,7 +384,7 @@ def run_probe_step(
                 "status": "SUCCESS" if adapter_success else "FAILED",
                 "intent_key": request.intent_key,
                 "adapter_backend": "agent-browser",
-                "session_id": str(exec_result.get("session_id", task_id)),
+                "adapter_session_id": str(exec_result.get("session_id", runtime_session_id or task_id)),
                 "error": adapter_call.get("error"),
                 **route_info,
             }

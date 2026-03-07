@@ -359,6 +359,7 @@ def _emit_events_from_legacy_steps(
     task_id: str,
     chain_mode: str,
     log_dir: str,
+    session_id: str | None = None,
     blueprint_repo: BlueprintRepository | None = None,
     router: WebSkillRouter | None = None,
     loop_detector: LoopDetector | None = None,
@@ -393,6 +394,8 @@ def _emit_events_from_legacy_steps(
             event["run_id"] = run_id
             event["task_id"] = task_id
             event["chain_mode"] = chain_mode
+            if session_id:
+                event["session_id"] = session_id
             emitted = _emit_and_track(bus, event)
             runtime_context_events.append(emitted)
 
@@ -415,6 +418,7 @@ def _emit_events_from_legacy_steps(
                         "after_count": compacted.get("after_count"),
                         "truncated_count": compacted.get("truncated_count", 0),
                         "compaction_summary": compacted.get("summary"),
+                        **({"session_id": session_id} if session_id else {}),
                     },
                 )
         if str(step.get("operation")) == "finish":
@@ -447,6 +451,7 @@ def run_single_task_with_runtime(
     v2_skip_legacy=False,
     guard_policy_path=None,
     guard_policy_reload_interval=1.0,
+    session_id=None,
 ):
     future_tasks = future_tasks or []
     runtime_config = _load_runtime_config()
@@ -456,6 +461,7 @@ def run_single_task_with_runtime(
         log_root = f"logs/{runtime_config.models.DEFAULT}/unimind_agent"
     chain_mode = _normalize_chain_mode(runtime_mode)
     run_id = f"{run_name}:{task_id}"
+    runtime_session_id = str(session_id or "").strip() or None
     log_dir = _build_log_dir(log_root, run_name, task_id)
     os.makedirs(log_dir, exist_ok=True)
     bus = JSONLEventBus(
@@ -484,6 +490,7 @@ def run_single_task_with_runtime(
             "event_type": "task_start",
             "status": "RUNNING",
             "intent_key": "global:TASK:START",
+            **({"session_id": runtime_session_id} if runtime_session_id else {}),
         },
     )
 
@@ -494,6 +501,7 @@ def run_single_task_with_runtime(
             instruction=instruction,
             run_id=run_id,
             task_id=task_id,
+            session_id=runtime_session_id,
             step_id=1,
             chain_mode=chain_mode,
             emit_event=lambda event: _emit_and_track(bus, event),
@@ -540,6 +548,7 @@ def run_single_task_with_runtime(
             task_id=task_id,
             chain_mode=chain_mode,
             log_dir=log_dir,
+            session_id=runtime_session_id,
             blueprint_repo=blueprint_repo,
             router=router,
             loop_detector=loop_detector,
@@ -557,6 +566,7 @@ def run_single_task_with_runtime(
             "event_type": "task_end",
             "status": final_status,
             "intent_key": "global:TASK:END",
+            **({"session_id": runtime_session_id} if runtime_session_id else {}),
         },
     )
 
@@ -570,6 +580,7 @@ def run_single_task_with_runtime(
         "status": final_status,
         "run_id": run_id,
         "task_id": task_id,
+        "session_id": runtime_session_id,
         "log_dir": log_dir,
         "event_log": os.path.join(log_dir, "events.jsonl"),
         "summary_log": summary_info["summary_path"],

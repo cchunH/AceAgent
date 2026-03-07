@@ -24,7 +24,7 @@
    - `skill` 引入 vs 模块拆解并入的定稿决策（移动端场景）。
 
 7. [implementation-gap-and-reuse-plan-v2.md](./implementation-gap-and-reuse-plan-v2.md)
-   - 蓝图与代码实现差距评估 + 下一阶段复用推进计划（可直接开工）。
+   - 蓝图与代码实现差距评估 + 下一阶段复用推进计划（含 SessionRuntime v0 落地状态）。
 
 ## 推荐阅读顺序
 

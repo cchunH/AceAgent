@@ -54,6 +54,7 @@ class TestV2Executor(unittest.TestCase):
             instruction="在手机里等待一下",
             run_id="r1",
             task_id="t1",
+            session_id="sess-mobile",
             step_id=1,
             chain_mode="guiagent_v2_shadow",
             emit_event=events.append,
@@ -78,6 +79,7 @@ class TestV2Executor(unittest.TestCase):
             instruction="open https://example.com",
             run_id="r2",
             task_id="t2",
+            session_id="sess-web",
             step_id=1,
             chain_mode="guiagent_v2",
             emit_event=events.append,
@@ -101,6 +103,7 @@ class TestV2Executor(unittest.TestCase):
             instruction="open https://example.com",
             run_id="r3",
             task_id="t3",
+            session_id="sess-web-fallback",
             step_id=1,
             chain_mode="guiagent_v2",
             emit_event=events.append,
@@ -128,6 +131,7 @@ class TestV2Executor(unittest.TestCase):
             instruction="在手机里等待一下",
             run_id="r4",
             task_id="t4",
+            session_id="sess-loop",
             step_id=1,
             chain_mode="guiagent_v2_shadow",
             emit_event=events.append,
@@ -148,6 +152,7 @@ class TestV2Executor(unittest.TestCase):
             instruction="open https://example.com",
             run_id="r5",
             task_id="t5",
+            session_id="sess-compact",
             step_id=1,
             chain_mode="guiagent_v2",
             emit_event=events.append,
@@ -159,6 +164,28 @@ class TestV2Executor(unittest.TestCase):
         )
         event_types = [e["event_type"] for e in events]
         self.assertIn("context_compaction", event_types)
+
+    def test_run_probe_propagates_runtime_session_id(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+
+        run_probe_step(
+            instruction="open https://example.com",
+            run_id="r6",
+            task_id="t6",
+            session_id="sess-route-1",
+            step_id=1,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+        )
+
+        self.assertTrue(events)
+        self.assertTrue(all(e.get("session_id") == "sess-route-1" for e in events))
+        self.assertEqual(web_skill.calls[0]["session"]["session_id"], "sess-route-1")
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ def _run_with_mode(runtime_mode: str, **kwargs):
         kwargs.pop("v2_skip_legacy", None)
         kwargs.pop("guard_policy_path", None)
         kwargs.pop("guard_policy_reload_interval", None)
+        kwargs.pop("session_id", None)
         return run_single_task(**kwargs)
     kwargs["runtime_mode"] = runtime_mode
     return run_single_task_with_runtime(**kwargs)
@@ -67,6 +68,12 @@ def main():
         type=float,
         default=1.0,
         help="Reload interval (seconds) for guard policy file checks.",
+    )
+    parser.add_argument(
+        "--session_id",
+        type=str,
+        default=None,
+        help="Optional logical session id for guiagent_v2 task tracking.",
     )
 
     args = parser.parse_args()
@@ -122,6 +129,7 @@ def main():
                 v2_skip_legacy=args.v2_skip_legacy,
                 guard_policy_path=args.guard_policy_path,
                 guard_policy_reload_interval=args.guard_policy_reload_interval,
+                session_id=args.session_id,
             )
         except Exception as e:
             print(f"Failed when doing task: {args.instruction}")
@@ -194,6 +202,7 @@ def main():
                 v2_skip_legacy=args.v2_skip_legacy,
                 guard_policy_path=args.guard_policy_path,
                 guard_policy_reload_interval=args.guard_policy_reload_interval,
+                session_id=args.session_id,
             )
             print("\n\nDONE:", task["instruction"])
             print("IMPORTANT: Please reset the device as needed before running the next task!")

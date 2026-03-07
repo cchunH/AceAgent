@@ -10,6 +10,7 @@ class TestRuntimeStatusApi(unittest.TestCase):
             {
                 "run_id": "run-a",
                 "task_id": "t1",
+                "session_id": "sess-a",
                 "event_type": "task_start",
                 "status": "RUNNING",
                 "ts": "2026-03-07T10:00:00Z",
@@ -19,6 +20,7 @@ class TestRuntimeStatusApi(unittest.TestCase):
             {
                 "run_id": "run-a",
                 "task_id": "t1",
+                "session_id": "sess-a",
                 "event_type": "task_end",
                 "status": "SUCCESS",
                 "ts": "2026-03-07T10:01:00Z",
@@ -28,6 +30,7 @@ class TestRuntimeStatusApi(unittest.TestCase):
             {
                 "run_id": "run-b",
                 "task_id": "t2",
+                "session_id": "sess-b",
                 "event_type": "task_end",
                 "status": "FAILED",
                 "ts": "2026-03-07T10:02:00Z",
@@ -45,6 +48,10 @@ class TestRuntimeStatusApi(unittest.TestCase):
         failed_items = store.list_tasks(status="FAILED")
         self.assertEqual(len(failed_items), 1)
         self.assertEqual(failed_items[0]["run_id"], "run-b")
+
+        sess_a_items = store.list_tasks(session_id="sess-a")
+        self.assertEqual(len(sess_a_items), 1)
+        self.assertEqual(sess_a_items[0]["task_id"], "t1")
 
     def test_list_run_ids(self):
         store = TaskStatusStore()

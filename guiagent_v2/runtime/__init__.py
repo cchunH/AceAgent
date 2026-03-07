@@ -17,6 +17,14 @@ from .task_service import (
     get_submitted_task,
     list_submitted_tasks,
 )
+from .session_runtime import (
+    SessionRuntime,
+    get_global_session_runtime,
+    submit_session_task,
+    get_session_task,
+    list_session_tasks,
+    list_sessions,
+)
 from .web_skill_router import WebSkillRouter, RouteDecision
 from .agent_browser_skill import (
     WebAutomationAdapter,
@@ -46,6 +54,12 @@ __all__ = [
     "submit_task",
     "get_submitted_task",
     "list_submitted_tasks",
+    "SessionRuntime",
+    "get_global_session_runtime",
+    "submit_session_task",
+    "get_session_task",
+    "list_session_tasks",
+    "list_sessions",
     "WebSkillRouter",
     "RouteDecision",
     "WebAutomationAdapter",
