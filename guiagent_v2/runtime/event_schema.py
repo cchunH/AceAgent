@@ -19,7 +19,10 @@ EVENT_REQUIRED_EXTRA_FIELDS: dict[str, tuple[str, ...]] = {
     "guard_decision": ("policy_decision",),
     "skill_route": ("channel", "route_reason"),
     "skill_fallback": ("fallback_to", "reason_code"),
+    "fallback_action_selected": ("fallback_to", "fallback_action", "reason_code"),
     "adapter_call": ("adapter_backend",),
+    "web_replan": ("web_plan_id", "web_replan_attempt", "failed_reason"),
+    "web_replan_skipped": ("web_plan_id", "web_replan_attempt", "failed_reason", "web_replan_strategy"),
     "watchdog_alert": ("watchdog_name", "watchdog_severity", "source_event_type"),
     "control_plane_audit": ("control_action", "http_method", "http_path", "actor", "source"),
 }

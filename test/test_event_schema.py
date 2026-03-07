@@ -108,6 +108,45 @@ class TestEventSchema(unittest.TestCase):
         self.assertTrue(valid)
         self.assertEqual(detail["code"], "OK")
 
+    def test_web_replan_requires_plan_and_failure_fields(self):
+        event = normalize_event(
+            {
+                "run_id": "wr-1",
+                "task_id": "wr-task",
+                "step_id": 2,
+                "chain_mode": "guiagent_v2",
+                "event_type": "web_replan",
+                "status": "RUNNING",
+                "intent_key": "web:OPEN:URL",
+                "web_plan_id": "wp-123",
+            },
+            default_chain_mode="guiagent_v2",
+        )
+        valid, detail = validate_event(event)
+        self.assertFalse(valid)
+        self.assertTrue(any("web_replan_attempt" in item for item in detail["errors"]))
+        self.assertTrue(any("failed_reason" in item for item in detail["errors"]))
+
+    def test_fallback_action_selected_validate_ok(self):
+        event = normalize_event(
+            {
+                "run_id": "fb-1",
+                "task_id": "fb-task",
+                "step_id": 3,
+                "chain_mode": "guiagent_v2",
+                "event_type": "fallback_action_selected",
+                "status": "SUCCESS",
+                "intent_key": "web:OPEN:URL",
+                "fallback_to": "mobile_native",
+                "reason_code": "WEB_SKILL_EXEC_FAILED",
+                "fallback_action": {"name": "Back", "arguments": {}},
+            },
+            default_chain_mode="guiagent_v2",
+        )
+        valid, detail = validate_event(event)
+        self.assertTrue(valid)
+        self.assertEqual(detail["code"], "OK")
+
     def test_event_bus_strict_schema_raises_and_skips_write(self):
         with tempfile.TemporaryDirectory() as td:
             p = os.path.join(td, "events.jsonl")
