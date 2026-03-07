@@ -22,6 +22,15 @@ from .status_api import get_global_status_store
 def _as_float(value: Any, default: float | None = None) -> float | None:
     if value is None:
         return default
+
+
+def _as_int(value: Any, default: int | None = None) -> int | None:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except Exception:
+        return default
     try:
         return float(value)
     except Exception:
@@ -544,6 +553,27 @@ class SessionRuntimeAPIServer:
                                 run_id=_first_query(params, "run_id"),
                                 status=_first_query(params, "status"),
                                 session_id=_first_query(params, "session_id"),
+                            )
+                        }
+                    )
+                    return
+
+                if path == "/runtime/audit":
+                    event_type = _first_query(params, "event_type")
+                    if event_type is None:
+                        event_type = "control_plane_audit"
+                    self._ok(
+                        {
+                            "events": runtime.list_runtime_events(
+                                run_id=_first_query(params, "run_id"),
+                                task_id=_first_query(params, "task_id"),
+                                session_id=_first_query(params, "session_id"),
+                                event_type=event_type,
+                                actor=_first_query(params, "actor"),
+                                source=_first_query(params, "source"),
+                                control_action=_first_query(params, "control_action"),
+                                status=_first_query(params, "status"),
+                                limit=_as_int(_first_query(params, "limit"), default=None),
                             )
                         }
                     )

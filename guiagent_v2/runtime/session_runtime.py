@@ -9,7 +9,12 @@ from copy import deepcopy
 from threading import Lock
 from typing import Any
 
-from .status_api import get_task_status, get_task_timeline, list_tasks as list_runtime_tasks
+from .status_api import (
+    get_task_status,
+    get_task_timeline,
+    list_events as list_runtime_events,
+    list_tasks as list_runtime_tasks,
+)
 from .task_service import RuntimeTaskService, RunnerCallable
 
 
@@ -408,6 +413,30 @@ class SessionRuntime:
             run_id=run_id,
             status=status,
             session_id=session_id,
+        )
+
+    def list_runtime_events(
+        self,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        session_id: str | None = None,
+        event_type: str | None = None,
+        actor: str | None = None,
+        source: str | None = None,
+        control_action: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        return list_runtime_events(
+            run_id=run_id,
+            task_id=task_id,
+            session_id=session_id,
+            event_type=event_type,
+            actor=actor,
+            source=source,
+            control_action=control_action,
+            status=status,
+            limit=limit,
         )
 
     def shutdown_session(self, session_id: str, wait: bool = True) -> bool:

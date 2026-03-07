@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.9`
+- 版本：`v2.10`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 
@@ -107,6 +107,11 @@
 18. 控制面写操作审计
 - 证据模块：`guiagent_v2/runtime/session_runtime_server.py`, `guiagent_v2/runtime/event_bus.py`, `run.py`
 - 现状：写接口产出 `control_plane_audit` 事件并支持审计 JSONL（含 `actor/source/trace_id/control_action`），任务相关事件并入 `status_api` 时间线。
+- 距离评估：`完成（v1）`
+
+19. 审计查询接口
+- 证据模块：`guiagent_v2/runtime/session_runtime_server.py`, `guiagent_v2/runtime/status_api.py`
+- 现状：新增 `/runtime/audit`，支持按 `run_id/task_id/session_id/actor/source/control_action/status` 过滤并限流返回。
 - 距离评估：`完成（v1）`
 
 ### 2.2 部分落地（需增强）

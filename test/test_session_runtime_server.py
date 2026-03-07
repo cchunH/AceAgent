@@ -184,6 +184,59 @@ class TestSessionRuntimeServer(unittest.TestCase):
             )
         )
 
+    def test_runtime_audit_endpoint_with_filters(self):
+        code, submit_body = _http_json(
+            self.base_url,
+            "POST",
+            "/tasks",
+            {
+                "instruction": "audit-filter-task",
+                "session_id": "sess-audit-filter",
+                "runtime_mode": "guiagent_v2",
+                "run_name": "api-audit-filter",
+            },
+            headers={
+                "X-Actor": "ops-user",
+                "X-Source": "control-panel",
+                "X-Trace-Id": "trace-filter-1",
+            },
+        )
+        self.assertEqual(code, 201)
+        request_id = submit_body["data"]["request_id"]
+
+        code, _ = _http_json(
+            self.base_url,
+            "POST",
+            f"/tasks/{request_id}/wait",
+            {"timeout": 1.0},
+            headers={
+                "X-Actor": "ops-user",
+                "X-Source": "control-panel",
+                "X-Trace-Id": "trace-filter-2",
+            },
+        )
+        self.assertEqual(code, 200)
+
+        code, body = _http_json(
+            self.base_url,
+            "GET",
+            "/runtime/audit?session_id=sess-audit-filter&actor=ops-user&source=control-panel",
+        )
+        self.assertEqual(code, 200)
+        events = body["data"]["events"]
+        self.assertTrue(events)
+        self.assertTrue(all(item.get("event_type") == "control_plane_audit" for item in events))
+
+        code, body = _http_json(
+            self.base_url,
+            "GET",
+            "/runtime/audit?session_id=sess-audit-filter&control_action=wait_task&limit=1",
+        )
+        self.assertEqual(code, 200)
+        events = body["data"]["events"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].get("control_action"), "wait_task")
+
     def test_submit_invalid_instruction(self):
         code, body = _http_json(
             self.base_url,

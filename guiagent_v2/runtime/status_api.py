@@ -104,6 +104,61 @@ class TaskStatusStore:
             run_ids = {item["run_id"] for item in self._items.values()}
         return sorted(run_ids)
 
+    def list_events(
+        self,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        session_id: str | None = None,
+        event_type: str | None = None,
+        actor: str | None = None,
+        source: str | None = None,
+        control_action: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        run_id = str(run_id).strip() if run_id is not None else None
+        task_id = str(task_id).strip() if task_id is not None else None
+        session_id = str(session_id).strip() if session_id is not None else None
+        event_type = str(event_type).strip() if event_type is not None else None
+        actor = str(actor).strip() if actor is not None else None
+        source = str(source).strip() if source is not None else None
+        control_action = str(control_action).strip() if control_action is not None else None
+        status = str(status).upper().strip() if status is not None else None
+        cap = int(limit) if limit is not None else None
+        if cap is not None and cap <= 0:
+            return []
+
+        with self._lock:
+            events: list[dict[str, Any]] = []
+            for item in self._items.values():
+                if run_id is not None and item["run_id"] != run_id:
+                    continue
+                if task_id is not None and item["task_id"] != task_id:
+                    continue
+                item_session_id = str(item.get("session_id", "")).strip()
+                if session_id is not None and item_session_id != session_id:
+                    continue
+
+                for event in item.get("timeline", []):
+                    if not isinstance(event, dict):
+                        continue
+                    if event_type is not None and str(event.get("event_type", "")).strip() != event_type:
+                        continue
+                    if actor is not None and str(event.get("actor", "")).strip() != actor:
+                        continue
+                    if source is not None and str(event.get("source", "")).strip() != source:
+                        continue
+                    if control_action is not None and str(event.get("control_action", "")).strip() != control_action:
+                        continue
+                    if status is not None and str(event.get("status", "")).upper().strip() != status:
+                        continue
+                    events.append(dict(event))
+
+            events.sort(key=lambda x: str(x.get("ts", "")), reverse=True)
+            if cap is not None:
+                events = events[:cap]
+            return events
+
 
 _GLOBAL_STATUS_STORE = TaskStatusStore()
 
@@ -134,3 +189,27 @@ def list_tasks(
 
 def list_run_ids() -> list[str]:
     return _GLOBAL_STATUS_STORE.list_run_ids()
+
+
+def list_events(
+    run_id: str | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
+    event_type: str | None = None,
+    actor: str | None = None,
+    source: str | None = None,
+    control_action: str | None = None,
+    status: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    return _GLOBAL_STATUS_STORE.list_events(
+        run_id=run_id,
+        task_id=task_id,
+        session_id=session_id,
+        event_type=event_type,
+        actor=actor,
+        source=source,
+        control_action=control_action,
+        status=status,
+        limit=limit,
+    )
