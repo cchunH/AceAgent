@@ -1,35 +1,33 @@
 # orchestrator.py
-import base64
 import os
-from pathlib import Path
 import time
 import copy
-import torch
 import shutil
-from PIL import Image
-from time import sleep
+import json
 import threading
-from UniMind.utils.api_client import inference_chat
+import random
+import concurrent.futures
+from dataclasses import asdict
+from time import sleep
+
+from PIL import Image
+
+import config
 from UniMind.perception.perceptor import Perceptor
-from UniMind.device.controller import get_screenshot, start_recording, end_recording, ensure_adb_keyboard_active, get_available_input_methods, find_adb_keyboard_ime
+from UniMind.device.controller import (
+    start_recording,
+    end_recording,
+    ensure_adb_keyboard_active,
+    get_available_input_methods,
+    find_adb_keyboard_ime,
+)
 from UniMind.agents import (
     InfoPool, Planner, Executor, Notetaker, VerifyCore, ExperienceRetrieverSkill, ExperienceRetrieverHeuristics,
     INIT_SKILLS, SkillLearningCore, HeuristicsLearningCore
 )
-# --- 新增导入 ---
-from UniMind.agents.fast_track_agents import PlannerExecutor, QuickVerifier, VerificationResult
-# --- 导入结束 ---
 from UniMind.agents import add_response, add_response_two_image
 from UniMind.agents import ATOMIC_ACTION_SIGNITURES
-import json
-from dataclasses import asdict
-import os
 from UniMind.utils.api_client import get_model_api_response
-from UniMind.utils.image_utils import encode_image_to_base64_data_uri
-import  config
-import copy
-import random
-import concurrent.futures
 
 
 
@@ -50,10 +48,6 @@ PLANNER_MODEL = config.models.PLANNER
 EXECUTOR_MODEL = config.models.EXECUTOR
 VERIFIER_MODEL = config.models.VERIFIER
 JSON_REPAIR_MODEL = config.models.JSON_REPAIR
-# --- 新增配置 ---
-FAST_TRACK_MODEL = getattr(config.models, 'FAST_TRACK_EXECUTOR', config.models.EXECUTOR)  # 如果没有定义则使用EXECUTOR作为默认值
-USE_DUAL_TRACK = False  # 核心开关：True启用双轨，False退化为纯专家模式
-# --- 配置结束 ---
 
 def finish(
         info_pool: InfoPool,
@@ -81,7 +75,7 @@ def finish(
 
 def run_single_task(
     instruction,
-    future_tasks=[],
+    future_tasks=None,
     run_name="test",
     log_root=f"logs/{DEFAULT_MODEL}/unimind_agent",
     task_id=None,
@@ -100,6 +94,8 @@ def run_single_task(
     temperature=0.0,
     screenrecord=False,
 ):
+    if future_tasks is None:
+        future_tasks = []
     
     # Create a thread lock for protecting InfoPool access
     info_pool_lock = threading.Lock()
@@ -126,6 +122,12 @@ def run_single_task(
 
         except Exception as e:
             print(f"\n### [Async] NoteKeeper encountered an error: {e} ###\n")
+        finally:
+            if os.path.exists(screenshot_file) and "async_note_" in os.path.basename(screenshot_file):
+                try:
+                    os.remove(screenshot_file)
+                except OSError:
+                    pass
 
     ### set up log dir ###
     if task_id is None:
@@ -293,12 +295,6 @@ def run_single_task(
     action_reflector = VerifyCore()
     exp_reflector_skills = SkillLearningCore()
     exp_reflector_heuristics = HeuristicsLearningCore()
-    # --- 新增实例化 ---
-    # 只有在启用双轨制时才需要实例化高速通道的Agent
-    if USE_DUAL_TRACK:
-        planner_executor = PlannerExecutor(adb_path=ADB_PATH)
-        quick_verifier = QuickVerifier(perceptor=perceptor)
-    # --- 实例化结束 ---
 
     # save initial heuristics and skills
     with open(local_heuristics_save_path, "w") as f:
@@ -334,7 +330,7 @@ def run_single_task(
         iter += 1
 
         # --- 1. 共享的终止条件检查 (保持不变) ---
-        if max_itr is not None and iter >= max_itr:
+        if max_itr is not None and iter > max_itr:
             print("Max iteration reached. Stopping...")
             task_end_time = time.time()
             steps.append({
@@ -449,149 +445,7 @@ def run_single_task(
         with open(log_json_path, "w") as f:
             json.dump(steps, f, indent=4)
 
-        # --- 3. 核心轨道切换逻辑 ---
-        if USE_DUAL_TRACK:
-            # --- 3a. 进入双轨制模式 ---
-            fast_track_success = False
-            try:
-                # --- 高速通道 ---
-                print("\n--- [Fast Track] Starting... ---")
-                
-                # a. 一体化决策
-                fast_track_response = planner_executor.decide(info_pool, screenshot_file)
-                # 用高速通道的计划更新InfoPool，便于后续感知与记录
-                if isinstance(fast_track_response, dict):
-                    info_pool.plan = fast_track_response.get('updated_plan', info_pool.plan)
-                action_sequence = fast_track_response.get('action_sequence', [])
-                
-                # 空序列直接视为失败，避免误报成功
-                if not action_sequence:
-                    print("[FastTrack][DEBUG] action_sequence is empty. Falling back to Expert Track.")
-                    raise Exception("Empty action_sequence from PlannerExecutor")
-                
-                # b. 连续执行与步步验证
-                sequence_fully_successful = True
-                for i, action in enumerate(action_sequence):
-                    print(f"\n--- [Fast Track] Executing action {i+1}/{len(action_sequence)}: {action.get('name', 'Unknown')} ---")
-                    
-                    # 备份当前截图
-                    pre_screenshot_path = f"{log_dir}/screenshots/fast_track_pre_{iter}_{i}.jpg"
-                    Image.open(screenshot_file).save(pre_screenshot_path)
-                    print(f"[FastTrack][DEBUG] pre_screenshot: {pre_screenshot_path}")
-                    
-                    # 执行动作 (复用专家执行器)
-                    action_object, num_atomic_actions_executed, skill_error_message = executor.execute(
-                        json.dumps(action), info_pool, 
-                        screenshot_file=screenshot_file, 
-                        ocr_detection=perceptor.ocr_detection,
-                        ocr_recognition=perceptor.ocr_recognition,
-                        thought=action.get('description', 'Fast track action'),
-                        screenshot_log_dir=os.path.join(log_dir, "screenshots"),
-                        iter=f"{iter}_fast_{i}",
-                        get_model_api_response=get_model_api_response,
-                        repair_model=JSON_REPAIR_MODEL
-                    )
-                    
-                    if action_object is None:
-                        print(f"--- [Fast Track] Action {i+1} execution failed ---")
-                        sequence_fully_successful = False
-                        break
-                    
-                    # 获取新截图（强制拉取新图，避免与pre相同）
-                    try:
-                        get_screenshot(ADB_PATH)
-                    except Exception as _:
-                        pass
-                    post_screenshot_path = f"{log_dir}/screenshots/fast_track_post_{iter}_{i}.jpg"
-                    Image.open(screenshot_file).save(post_screenshot_path)
-                    print(f"[FastTrack][DEBUG] post_screenshot: {post_screenshot_path}")
-                    
-                    # c. 快速验证
-                    print(f"[FastTrack][DEBUG] Verifying with checkpoint: {action.get('success_checkpoint')}")
-                    result = quick_verifier.verify(pre_screenshot_path, post_screenshot_path, action.get('success_checkpoint'))
-                    print(f"[FastTrack][DEBUG] Verify result: {result}")
-                    
-                    if result != VerificationResult.SUCCESS:
-                        print(f"--- [Fast Track] Action {i+1} verification failed ---")
-                        sequence_fully_successful = False
-                        # 记录失败信息
-                        info_pool.action_history.append(action)
-                        info_pool.summary_history.append(action.get('description'))
-                        info_pool.action_outcomes.append("B")
-                        info_pool.error_descriptions.append(f"Fast track verification failed: {result}")
-                        break
-                    else:
-                        print(f"--- [Fast Track] Action {i+1} succeeded ---")
-                        # 成功记录正向历史
-                        info_pool.action_history.append(action)
-                        info_pool.summary_history.append(action.get('description'))
-                        info_pool.action_outcomes.append("A")
-                        info_pool.error_descriptions.append("")
-                        # d. 异步处理 (如果依赖度低)
-                        if action.get('next_step_dependency', 'High') == 'Low':
-                            print("--- [Fast Track] Starting async notetaking... ---")
-                            info_pool_snapshot = copy.deepcopy(info_pool)
-                            threading.Thread(
-                                target=_async_notetaking_worker,
-                                args=(info_pool_snapshot, screenshot_file, notetaker)
-                            ).start()
-                            # 记录异步分派
-                            steps.append({
-                                "step": iter,
-                                "operation": "notetaking",
-                                "execution_mode": "asynchronous",
-                                "dependency_level": "Low",
-                                "note": "FastTrack NoteKeeper dispatched"
-                            })
-                            with open(log_json_path, "w") as f:
-                                json.dump(steps, f, indent=4)
-
-                if sequence_fully_successful:
-                    fast_track_success = True
-                    print("--- [Fast Track] All actions succeeded! ---")
-
-            except Exception as e:
-                print(f"Fast Track failed with an exception: {e}")
-                fast_track_success = False
-            
-            # --- 调度决策 ---
-            if fast_track_success:
-                print("--- [Fast Track] Succeeded. Continuing... ---")
-                # 基于最新OCR和history判断是否达到完成条件
-                # 简易完成判定：若action_sequence最后一次checkpoint类型为text且已成功，则认为阶段完成
-                last_cp = None
-                if 'action_sequence' in fast_track_response and fast_track_response['action_sequence']:
-                    last_cp = fast_track_response['action_sequence'][-1].get('success_checkpoint')
-                if last_cp and last_cp.get('type') in ['text'] and info_pool.action_outcomes and info_pool.action_outcomes[-1] == 'A':
-                    print("--- [Fast Track] Detected terminal success by checkpoint ---")
-                    info_pool.finish_thought = fast_track_response.get('thought', 'Task completed via fast track')
-                    task_end_time = time.time()
-                    steps.append({
-                        "step": iter,
-                        "operation": "finish",
-                        "finish_flag": "fast_track_success",
-                        "final_info_pool": asdict(info_pool),
-                        "task_duration": task_end_time - task_start_time,
-                    })
-                    with open(log_json_path, "w") as f:
-                        json.dump(steps, f, indent=4)
-                    finish(
-                        info_pool,
-                        persistent_heuristics_path=persistent_heuristics_path,
-                        persistent_skills_path=persistent_skills_path
-                    )
-                    if screenrecord:
-                        end_recording(ADB_PATH, output_recording_path=cur_output_recording_path)
-                    return
-                # 否则继续循环
-                continue  # 直接进入下一次高速循环
-            else:
-                print("--- [Fast Track] Failed. Switching to Expert Track... ---")
-                # 如果高速通道失败，则在本轮迭代中，执行一次专家会诊
-                # FALLTHROUGH to the expert track logic below
-
-        # --- 3b. 执行专家会诊 (双轨失败时 或 单轨模式下) ---
-        # 如果 USE_DUAL_TRACK 为 False，代码会直接从这里开始执行
+        # --- 3. 执行专家轨主链 ---
         print("\n--- [Expert Track] Starting... ---")
         
         # a. 深度规划 (Planner)
@@ -805,7 +659,10 @@ def run_single_task(
         
         info_pool.perception_infos_post = perception_infos
         info_pool.keyboard_post = keyboard
-        assert width == info_pool.width and height == info_pool.height # assert the screen size not changed
+        if width != info_pool.width or height != info_pool.height:
+            raise RuntimeError(
+                f"Unexpected screen size change: ({info_pool.width}, {info_pool.height}) -> ({width}, {height})"
+            )
 
         ## log ##
         Image.open(screenshot_file).save(f"{log_dir}/screenshots/{iter+1}.jpg")
@@ -935,11 +792,16 @@ def run_single_task(
                 print("\n### [Async] NoteKeeper dispatched to background... (Low dependency) ###\n")
                 # Create a snapshot of the current state for the background thread
                 info_pool_snapshot = copy.deepcopy(info_pool)
+                async_screenshot_file = os.path.join(
+                    log_dir, "screenshots", f"async_note_{iter}_{int(time.time() * 1000)}.jpg"
+                )
+                shutil.copy(screenshot_file, async_screenshot_file)
                 
                 # Start the background thread
                 threading.Thread(
                     target=_async_notetaking_worker,
-                    args=(info_pool_snapshot, screenshot_file, notetaker)
+                    args=(info_pool_snapshot, async_screenshot_file, notetaker),
+                    daemon=True,
                 ).start()
                 # The main loop DOES NOT wait and proceeds immediately.
                 
