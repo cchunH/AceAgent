@@ -46,6 +46,7 @@
 32. `v2_executor` 的 web 步骤新增 `web_plan_id/web_trace_id/web_plan_revision/web_step_checkpoint` 证据字段，便于步骤级追溯。
 33. `web_skill` 失败后的移动端回退从固定 `Wait` 升级为“上下文感知 fallback action”并产出 `fallback_action_selected` 事件。
 34. `run.py` 新增 `--web_max_steps/--web_replan_max_attempts`；`v2_executor` 已支持按错误码分流重规划策略与多次重规划（可配置）。
+35. `runtime metrics` 已补齐 web 执行链指标：`web_plan_count/web_replan_count/web_replan_recovery_rate/web_fallback_rate/web_step_success_rate`。
 
 尚未落地：
 1. `watchdog` 深化生产化（下载/安全扩展插件、聚合统计导出）。

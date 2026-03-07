@@ -129,6 +129,12 @@
 - 距离评估：`部分完成`
 - 关键差距：schema 严格模式已具备但默认未启用；watchdog 聚合统计导出缺失；审计归档与跨文件聚合未完成。
 
+2.1 运行指标
+- 证据模块：`guiagent_v2/runtime/metrics.py`
+- 现状：已新增 web 执行链指标（`web_plan_count/web_replan_count/web_replan_recovery_rate/web_fallback_rate/web_step_success_rate`），可用于比较重规划与回退收益。
+- 距离评估：`部分完成`
+- 关键差距：尚缺跨 run/session 的时序聚合视图与控制面展示接口。
+
 3. Web 子任务闭环
 - 证据模块：`v2_executor.py`, `agent_browser_skill.py`
 - 现状：可走 `initial web plan + 错误码分流的局部 replan + 上下文感知 fallback`，支持 `web_replan_max_attempts` 配置，并输出步骤级追踪字段（`web_plan_id/web_trace_id`）。
