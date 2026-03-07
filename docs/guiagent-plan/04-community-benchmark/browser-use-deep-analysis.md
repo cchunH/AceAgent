@@ -250,6 +250,9 @@
 3. `skill_cli` 的 server/session 架构模式。
 4. `lazy import` 的启动优化策略。
 
+移动端补充：
+- 这些能力应先注入 `mobile_native` 主链，再扩展到 `web_skill` 旁路，避免把 Web 方案反向侵入移动端系统动作链。
+
 ## 5.2 次优先复用（建议 P1）
 
 1. `Registry` 驱动的动作注册中心。

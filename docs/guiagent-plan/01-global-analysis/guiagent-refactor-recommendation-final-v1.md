@@ -59,6 +59,14 @@
 2. 运行时已接入观测回灌：动作后会更新蓝图锚点和后置期望
 3. 每次任务结束自动输出 `runtime_summary.json`（指标与蓝图计数）
 
+## 3.5 社区复用补充（移动端场景）
+
+1. 已补充社区对标专题：`docs/guiagent-plan/04-community-benchmark/*`
+2. 推荐采用“移动端主链 + Web Skill 旁路”双通道：
+- `mobile_native`：ADB 原生动作链（默认）
+- `web_skill`：通过 `AgentBrowserSkill` 外接 `agent-browser` 处理网页子任务
+3. 关键约束：`agent-browser` 不替代移动端系统动作，仅作为 Web 执行增强能力
+
 ## 4. 前端控制面接入点（预留）
 
 1. 任务状态：`get_task_status(run_id, task_id)`
@@ -74,3 +82,4 @@
 1. 把规则型 hook 升级为“拓扑+语义”联合断言与后验检查
 2. 在 `guiagent_v2` 中引入页面状态识别与拓扑匹配
 3. 补齐基于 `events.jsonl` 的指标统计脚本与回归看板
+4. 引入 `WebSkillRouter` 和 `AgentBrowserSkill` 文档草案，实现 Web 子任务旁路接入（移动端主链不变）

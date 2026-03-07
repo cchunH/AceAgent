@@ -18,6 +18,7 @@
 | 插件化 | 中（动作丰富但中心化） | 强（Registry + Tools） | browser-use 更适合扩展动作生态 |
 | 可观测性 | 中高（命令结果、流式） | 高（事件、telemetry、state） | browser-use 模式更适合控制面 |
 | 迁移成本到 Uni-Mind | 中高（跨语言） | 中（同 Python） | 应优先 Python 侧吸收，再外接 agent-browser |
+| 移动端适配性 | 低（偏 Web 执行） | 中（可编排多通道） | 必须由 Uni-Mind 主链承担移动端系统动作 |
 
 ## 2. 关键权衡
 
@@ -57,6 +58,14 @@
 - 生产模式默认启用 stricter policy。
 - 研发模式允许放宽并记录审计日志。
 
+## 2.5 移动端场景修正（关键）
+
+- 本项目是移动端主场景，`agent-browser` 只能增强 Web 子任务，不能替代 ADB 原生动作链。
+- 移动端任务常见关键路径（权限弹窗、系统输入法、应用切换、返回栈）不适合走浏览器执行器。
+- 推荐双通道执行模型：
+  - `mobile_native`：当前 Uni-Mind 原生链路（默认）
+  - `web_skill`：通过 skill 调用 agent-browser，处理 H5/网页子任务
+
 ## 3. 复用模式矩阵（什么时候选谁）
 
 | 场景 | 优先选择 | 原因 | 备选 |
@@ -66,6 +75,8 @@
 | 需要长任务稳定运行 | browser-use 模式 | message compaction + loop detector + watchdog | 现有 Uni-Mind + 补丁增强 |
 | 需要高性能命令式自动化 | agent-browser 模式 | native CLI + daemon IPC 成熟 | browser-use skill_cli |
 | 需要可控引入外部能力 | 混合模式 | Python 主编排 + agent-browser 外部适配器 | 单一方案 |
+| 移动端系统动作（App/ADB） | Uni-Mind 原生链 | 设备控制能力与系统状态依赖重 | 不建议用 agent-browser 替代 |
+| 移动端内 H5/网页子流程 | `web_skill` 混合模式 | 在不破坏主链下增强 Web 执行能力 | 人工接管 |
 
 ## 4. 推荐的混合架构（服务 guiagent_v2）
 
@@ -76,8 +87,10 @@
 - 动作注册中心（Registry 思路）
 3. 通过 `WebAutomationAdapter` 外接 agent-browser：
 - 接入 `snapshot/diff/policy/domain/stream` 等执行能力。
+ - 以 `AgentBrowserSkill` 形式挂到 skill 层，由路由器判定是否调用。
 4. 统一事件总线：
 - 映射 `task_start/step_start/action_exec/assertion/post_check/handover/step_end/task_end`。
+ - 额外记录 `channel=mobile_native|web_skill`。
 
 ## 5. 风险与防护
 
@@ -89,6 +102,9 @@
 
 3. 风险：过度引入 browser-use 复杂度。
 - 防护：P0 仅引入 loop/compaction/session 模式，不引入全量事件生态。
+
+4. 风险：Web 能力侵入主链，导致移动端动作回归。
+- 防护：固定路由白名单，只有 `web:*` intent 或显式 `web_skill` 任务才可进入旁路。
 
 ## 6. 结论
 

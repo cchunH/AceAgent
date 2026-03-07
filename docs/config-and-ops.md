@@ -103,6 +103,11 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 - `step_end`
 - `task_end`
 
+社区对标后的规划补充（未落地代码）：
+- 未来会增加执行通道字段：`channel=mobile_native|web_skill`
+- Web Skill 旁路事件：`skill_route`、`skill_fallback`
+- 该补充用于移动端主链 + Web 子任务旁路的统一观测
+
 进程内状态 API：
 - `guiagent_v2.runtime.get_task_status(run_id, task_id)`
 - `guiagent_v2.runtime.get_task_timeline(run_id, task_id)`

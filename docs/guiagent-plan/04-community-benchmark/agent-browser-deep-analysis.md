@@ -287,6 +287,13 @@
 3. 先接入 policy + diff + domain 三个“低耦合高收益”能力。
 4. 流式接管能力放在后续阶段，与前端控制面共同上线。
 
+## 4.3 移动端场景约束（必须遵守）
+
+1. `agent-browser` 只处理 Web 子任务，不处理移动端系统动作。
+2. 推荐以 `AgentBrowserSkill` 方式接入：由路由层判断是否进入 Web 旁路。
+3. 任何 `Open_App/Back/Home/Switch_App/Type` 等动作都保留在 ADB 主链。
+4. `web_skill` 必须具备失败回退：回退后由 `guiagent_v2` 主链继续执行或接管。
+
 ## 5. 结论
 
 `agent-browser` 不是“智能体大脑”，但它是非常成熟的“浏览器执行中枢”。对 Uni-Mind 的最大价值不在任务规划，而在执行治理：协议校验、策略门禁、安全边界、可观测与回归能力。对当前 `guiagent_v2`，它更适合作为 `WebAutomationAdapter` 的后端候选实现。

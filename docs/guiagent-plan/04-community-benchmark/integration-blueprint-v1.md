@@ -25,7 +25,15 @@
 - 继续使用 `events.jsonl` + `status_api` + `runtime_summary`。
 - 增加 loop/compaction/guard 决策事件。
 
-## 1.2 候选接口草案（冻结建议）
+## 1.2 移动端优先约束（关键补充）
+
+1. `agent-browser` 不替代移动端主链：主执行仍是 `ADB + Perceptor + ActionExecutor`。
+2. Web 能力以 Skill 方式旁路接入：仅在任务确认为 `web 子任务` 时调用。
+3. 移动端系统级动作（App 切换、返回、权限弹窗、输入法、系统设置）一律留在原生主链。
+4. Web Skill 失败必须可回退：失败后回到 `guiagent_v2` 主链并触发 `handover` 或重规划。
+5. 运行时必须记录执行通道：`channel=mobile_native|web_skill`，避免观测混淆。
+
+## 1.3 候选接口草案（冻结建议）
 
 以下为文档冻结草案，不在本轮实现：
 
@@ -51,6 +59,14 @@ class SessionRuntime:
     def status(self, run_id: str, task_id: str) -> dict: ...
     def timeline(self, run_id: str, task_id: str) -> list[dict]: ...
     def list_tasks(self, filters: dict | None = None) -> list[dict]: ...
+
+class WebSkillRouter:
+    def route(self, intent_key: str, context: dict) -> str: ...
+    # return: "mobile_native" | "web_skill"
+
+class AgentBrowserSkill:
+    def invoke(self, task: str, session: dict, constraints: dict) -> dict: ...
+    # return: {success: bool, result: dict, trace: list[dict], error: str | None}
 ```
 
 ## 2. 分阶段实施序列（建议）
@@ -88,10 +104,12 @@ class SessionRuntime:
 实施要点：
 1. 先做 adapter mock，统一请求/响应结构。
 2. 再接真实 agent-browser 进程调用（snapshot/diff/policy/domain）。
-3. 失败时 fallback 到现有执行链。
+3. 以 Skill 方式接入：`AgentBrowserSkill` 由 `WebSkillRouter` 按 intent 决定是否调用。
+4. 失败时 fallback 到现有执行链。
 
 退出条件：
 - 可在单任务路径稳定调用 snapshot + diff。
+- `web_skill` 仅在 web 子任务触发，不影响移动端原生动作链。
 - adapter 失败不会导致 orchestrator 崩溃。
 
 ## Phase 4：ActionRegistry + Watchdog
@@ -114,6 +132,8 @@ class SessionRuntime:
 - `context_compaction`
 - `adapter_call`
 - `watchdog_alert`
+- `skill_route`
+- `skill_fallback`
 
 建议新增关键字段：
 - `session_id`
@@ -122,6 +142,9 @@ class SessionRuntime:
 - `policy_decision`
 - `loop_score`
 - `stagnation_steps`
+- `channel`
+- `skill_name`
+- `route_reason`
 
 ## 4. 风险清单与应对
 
@@ -134,6 +157,9 @@ class SessionRuntime:
 3. 风险：事件字段膨胀影响维护。
 - 应对：核心字段冻结，扩展字段版本化管理。
 
+4. 风险：把 Web 执行误用到移动端系统动作，导致能力错配。
+- 应对：在 `WebSkillRouter` 固定移动端白名单/黑名单路由规则，系统动作禁止走 `web_skill`。
+
 ## 5. 结论
 
-该蓝图遵循“先可观测与治理，再扩执行能力”的顺序，能在不推倒现有 `guiagent_v2` 的前提下吸收社区项目成熟能力。短期建议聚焦 Phase 1~2，中期推进 Phase 3，后期再进入 Phase 4。
+该蓝图遵循“移动端主链稳定优先，Web Skill 能力旁路增强”的顺序，能在不推倒现有 `guiagent_v2` 的前提下吸收社区项目成熟能力。短期建议聚焦 Phase 1~2，中期推进 Phase 3（skill 接入），后期再进入 Phase 4。

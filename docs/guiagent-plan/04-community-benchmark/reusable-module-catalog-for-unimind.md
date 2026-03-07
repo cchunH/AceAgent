@@ -13,6 +13,13 @@
 - `P1`：中等价值或中等改造成本，需 adapter 或模块重构。
 - `P2`：高价值但高成本，建议后置。
 
+## 移动端约束总则（新增）
+
+1. `agent-browser` 只作为 Web 子任务增强能力，不替代移动端 ADB 主链。
+2. 任何系统级移动端动作（`Open_App/Back/Home/Switch_App/Type` 等）必须走 `mobile_native`。
+3. Skill 接入时必须显式标注通道与回退策略：`channel=web_skill`, `fallback=mobile_native`。
+4. 所有 `web_skill` 执行必须落事件字段：`channel`, `skill_name`, `route_reason`。
+
 ## P0 清单
 
 ## P0-1 行为循环探测器
@@ -70,6 +77,18 @@
   - 输出 `changed/mismatch_percentage` 指标
   - 可作为 post_check 失败证据
 
+## P0-6 AgentBrowserSkill（Web 旁路 Skill）
+
+- 来源模块：`demo/agent-browser/src/daemon.ts`, `demo/agent-browser/src/protocol.ts`, `demo/agent-browser/cli/src/main.rs`
+- 复用方式：外部进程集成（Skill wrapper）+ Python 适配
+- 目标落位（guiagent_v2）：`guiagent_v2` 的 skill 旁路层（建议由 runtime 路由器调用）
+- 依赖：本地 agent-browser binary、IPC 命令通道、session 管理
+- 风险：跨语言调试成本、Web/移动上下文切换失败
+- 验收标准：
+  - 可通过 skill 调用完成 Web 子任务（打开页面、查找、点击、提取）
+  - skill 失败后能自动 fallback 到 `mobile_native`
+  - 不影响原有移动端原子动作成功率
+
 ## P1 清单
 
 ## P1-1 动作注册中心（ActionRegistry）
@@ -115,6 +134,18 @@
 - 验收标准：
   - 非白名单域名请求可被稳定阻断
   - 阻断事件可记录到 `events.jsonl`
+
+## P1-5 WebSkillRouter（移动/网页路由）
+
+- 来源模块：`demo/browser-use/browser_use/skill_cli/server.py`（会话路由思路）+ `demo/agent-browser/src/action-policy.ts`（策略门禁）
+- 复用方式：Python 重写路由层
+- 目标落位（guiagent_v2）：`runtime` 调度层（action 前路由）
+- 依赖：intent_key 分类、技能注册信息、运行时上下文
+- 风险：路由规则过松导致误入 web_skill
+- 验收标准：
+  - `web:*` 类 intent 才允许进入 `web_skill`
+  - 系统动作 intent 永不进入 `web_skill`
+  - 路由决策事件可审计
 
 ## P2 清单
 
@@ -162,3 +193,5 @@
 - `ActionRegistry`：承接 P1-1
 - `GuardPolicy`：承接 P0-4
 - `SessionRuntime`：承接 P0-3、P1-2、P1-3
+- `AgentBrowserSkill`：承接 P0-6
+- `WebSkillRouter`：承接 P1-5

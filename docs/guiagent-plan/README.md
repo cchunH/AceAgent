@@ -73,7 +73,7 @@ docs/guiagent-plan/
 ## 4) 社区对标与复用（04-community-benchmark）
 
 1. [agent-browser-deep-analysis.md](./04-community-benchmark/agent-browser-deep-analysis.md)  
-   `agent-browser` 深度分析：IPC、协议校验、安全边界、快照与 diff 能力。
+   `agent-browser` 深度分析：IPC、协议校验、安全边界、快照与 diff 能力（用于 Web 旁路增强）。
 
 2. [browser-use-deep-analysis.md](./04-community-benchmark/browser-use-deep-analysis.md)  
    `browser-use` 深度分析：Agent 循环、消息压缩、循环检测、工具注册、watchdog、会话服务。
@@ -85,7 +85,7 @@ docs/guiagent-plan/
    面向 Uni-Mind 的 P0/P1/P2 可复用模块目录。
 
 5. [integration-blueprint-v1.md](./04-community-benchmark/integration-blueprint-v1.md)  
-   社区能力集成蓝图（接口草案 + 分阶段实施 + 退出条件）。
+   社区能力集成蓝图（接口草案 + 分阶段实施 + 退出条件，强调移动端主链优先）。
 
 ## 推荐阅读顺序
 
