@@ -76,6 +76,8 @@ python run.py \
 logs/<model>/unimind_agent/<run_name>/<task_id>/
   steps.json
   events.jsonl
+  blueprints.json
+  runtime_summary.json
   heuristics.txt
   skills.json
   screenshots/
@@ -104,9 +106,13 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 进程内状态 API：
 - `guiagent_v2.runtime.get_task_status(run_id, task_id)`
 - `guiagent_v2.runtime.get_task_timeline(run_id, task_id)`
+- `guiagent_v2.runtime.submit_task(instruction, runtime_mode, run_name, task_id, run_options)`
+- `guiagent_v2.runtime.get_submitted_task(request_id)`
+- `guiagent_v2.runtime.list_submitted_tasks(status=None)`
 
 指标计算工具：
 - `guiagent_v2.runtime.compute_metrics_from_jsonl(jsonl_path)`
+- `guiagent_v2.runtime.write_runtime_summary(log_dir, event_log_path, blueprint_repo)`
 
 ## 5. 关键参数建议
 

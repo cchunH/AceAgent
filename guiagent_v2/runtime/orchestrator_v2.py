@@ -6,10 +6,12 @@ from typing import Any
 from guiagent_v2.action_engine.affine_runtime import project_action
 from guiagent_v2.blueprint_hub import Blueprint, BlueprintRepository
 from guiagent_v2.intent_contract import map_legacy_action_to_request
+from .blueprint_sync import upsert_blueprint_from_observation
 from .default_hooks import post_state_check_hook, semantic_pre_assertion_hook
 from .event_bus import JSONLEventBus
 from .hooks import HookManager
 from .pipeline import StepPipeline
+from .reporting import write_runtime_summary
 from .status_api import get_global_status_store
 
 
@@ -202,6 +204,18 @@ def _translate_legacy_step_to_events(
                     "passed": False,
                     "reason_code": "POST_CHECK_FAILED",
                 }
+
+        if blueprint_repo is not None:
+            upsert_blueprint_from_observation(
+                repo=blueprint_repo,
+                intent_key=request.intent_key,
+                screen_width=int(screen_size.get("width", 1080)),
+                screen_height=int(screen_size.get("height", 2340)),
+                perception_infos_pre=step_context["perception_infos_pre"],
+                perception_infos_post=step_context["perception_infos_post"],
+                action_outcome="A" if success else ("B" if "B" in outcome else "C"),
+                post_check_result=post_check_result,
+            )
 
         events = [
             {
@@ -458,9 +472,16 @@ def run_single_task_with_runtime(
         },
     )
 
+    summary_info = write_runtime_summary(
+        log_dir=log_dir,
+        event_log_path=os.path.join(log_dir, "events.jsonl"),
+        blueprint_repo=blueprint_repo,
+    )
+
     return {
         "run_id": run_id,
         "task_id": task_id,
         "log_dir": log_dir,
         "event_log": os.path.join(log_dir, "events.jsonl"),
+        "summary_log": summary_info["summary_path"],
     }

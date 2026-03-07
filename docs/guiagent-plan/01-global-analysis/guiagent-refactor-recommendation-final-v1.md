@@ -46,18 +46,25 @@
 
 1. `state_engine` 已实现 `anchor_extractor + topology_matcher`（Top/Bottom 优先锚点策略）
 2. `action_engine` 已实现 `run_pre_assertion + run_post_check`，并接入 runtime 事件翻译链
-3. `affine_runtime` 已预留统一投射接口，当前保持向后兼容
+3. `affine_runtime` 已实现屏幕缩放投射（Tap/Long_press/Swipe）
 
 ## 3.3 复用桥接进展
 
 1. 已新增 `brain_adapter/planner_bridge.py` 与 `executor_bridge.py`
 2. 通过桥接层复用原项目 `Planner/Executor` 能力，避免重复建设
 
+## 3.4 蓝图与报告进展
+
+1. 已新增 `blueprint_hub` 本地仓（`blueprints.json`），支持增量 patch
+2. 运行时已接入观测回灌：动作后会更新蓝图锚点和后置期望
+3. 每次任务结束自动输出 `runtime_summary.json`（指标与蓝图计数）
+
 ## 4. 前端控制面接入点（预留）
 
 1. 任务状态：`get_task_status(run_id, task_id)`
 2. 任务时间线：`get_task_timeline(run_id, task_id)`
-3. 事件数据源：`events.jsonl`
+3. 任务提交与队列：`submit_task/get_submitted_task/list_submitted_tasks`
+4. 事件数据源：`events.jsonl`
 
 说明：当前仅提供进程内 API，不包含 Web 推送通道（SSE/WebSocket）。
 
