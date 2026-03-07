@@ -1,0 +1,179 @@
+# 实现差距评估与复用推进计划 v2
+
+## 文档元信息
+
+- 状态：`active`
+- 版本：`v2.0`
+- 更新时间：`2026-03-08`
+- 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
+
+## 1. 评估范围
+
+本评估对齐三类内容：
+
+1. 架构蓝图：`integration-blueprint-v1.md`
+2. 复用目录：`reusable-module-catalog-for-unimind.md`
+3. 代码现状：`guiagent_v2/runtime/*`, `run.py`, `test/*`
+
+## 2. 当前实现距离（按模块）
+
+### 2.1 已落地（可用）
+
+1. `WebSkillRouter`
+- 证据模块：`guiagent_v2/runtime/web_skill_router.py`
+- 现状：已支持 `mobile_native|web_skill` 路由与系统动作保护。
+- 距离评估：`完成（v0）`
+
+2. `AgentBrowserSkill + WebAutomationAdapter`
+- 证据模块：`guiagent_v2/runtime/agent_browser_skill.py`
+- 现状：已支持外部进程调用 `agent-browser --json --session`，含基础命令映射与错误归一化。
+- 距离评估：`完成（v0）`
+
+3. `ActionRegistry`
+- 证据模块：`guiagent_v2/runtime/action_registry.py`
+- 现状：已支持 register/validate/dispatch，含基础 schema 校验。
+- 距离评估：`完成（v0）`
+
+4. `GuardPolicy`
+- 证据模块：`guiagent_v2/runtime/guard_policy.py`
+- 现状：已支持 `allow/deny/confirm`，并阻断 `web_skill` 执行移动端系统动作。
+- 距离评估：`完成（v0）`
+
+5. `v2_executor` 探针链路
+- 证据模块：`guiagent_v2/runtime/v2_executor.py`
+- 现状：已形成 `skill_route -> guard_decision -> dispatch -> adapter_call -> skill_fallback` 闭环。
+- 距离评估：`部分完成（probe 级）`
+
+6. 运行入口参数
+- 证据模块：`run.py`, `guiagent_v2/runtime/orchestrator_v2.py`
+- 现状：`runtime_mode=guiagent_v2` 支持 `--v2_skip_legacy` 仅运行 v2 探针路径。
+- 距离评估：`完成（v0）`
+
+### 2.2 部分落地（需增强）
+
+1. `SessionRuntime`
+- 证据模块：`guiagent_v2/runtime/task_service.py`
+- 现状：进程内线程队列，可提交/查询；尚未 server/session registry 化。
+- 距离评估：`部分完成`
+- 关键差距：无跨进程会话、无重启恢复、无 IPC 控制面协议。
+
+2. 事件治理
+- 证据模块：`guiagent_v2/runtime/event_bus.py`, `status_api.py`
+- 现状：核心事件完整，状态查询可用。
+- 距离评估：`部分完成`
+- 关键差距：尚未类型化 schema 版本管理；缺少 loop/compaction/watchdog 事件。
+
+3. Web 子任务闭环
+- 证据模块：`v2_executor.py`, `agent_browser_skill.py`
+- 现状：可走 web probe 与 fallback。
+- 距离评估：`部分完成`
+- 关键差距：未接入真实多步任务编排与生产级会话生命周期管理。
+
+### 2.3 未落地（待实施）
+
+1. `LoopDetector`
+- 目标来源：`browser-use`（ActionLoopDetector 思路）
+- 差距：无 `loop_warning`、无停滞评分。
+
+2. `ContextCompaction`
+- 目标来源：`browser-use`（MessageManager 压缩机制）
+- 差距：无长链上下文收缩，无 token 预算治理。
+
+3. `Watchdog` 体系
+- 目标来源：`browser-use`（watchdog 基座）
+- 差距：无 crash/security/download 守护插件。
+
+4. Domain Filter / Action Policy 热配置
+- 目标来源：`agent-browser`
+- 差距：GuardPolicy 仍是代码常量，未形成文件化策略与热加载。
+
+## 3. 复用优先级重排（基于已实现状态）
+
+## P0（下一迭代必须完成）
+
+1. `LoopDetector`（来自 browser-use）
+- 落位：`guiagent_v2/runtime/loop_detector.py`
+- 事件：`loop_warning`
+- 验收：重复动作与页面停滞可触发告警并建议接管。
+
+2. `ContextCompaction`（来自 browser-use）
+- 落位：`guiagent_v2/runtime/context_compaction.py`
+- 事件：`context_compaction`
+- 验收：长任务上下文长度被控制且成功率不显著下降。
+
+3. `GuardPolicy` 文件化 + 热加载（来自 agent-browser policy 思路）
+- 落位：`guiagent_v2/runtime/policy_loader.py`
+- 验收：支持 `allow/deny/confirm` 规则配置，不改代码即可更新策略。
+
+## P1（P0 稳定后进入）
+
+1. `SessionRuntime` 进程化
+- 落位：`guiagent_v2/runtime/session_runtime.py`
+- 能力：会话注册、跨会话并行、基础恢复策略。
+
+2. Typed Event Schema
+- 落位：`guiagent_v2/runtime/event_schema.py`
+- 能力：关键事件字段版本冻结与校验。
+
+3. Watchdog 插件化
+- 落位：`guiagent_v2/runtime/watchdogs/*`
+- 初始插件：`crash_watchdog.py`, `security_watchdog.py`。
+
+## P2（后置）
+
+1. SnapshotRef 深化与 diff 证据链
+2. stream-server 控制通道对接
+3. 更深层 browser-use agent 机制拆取
+
+## 4. 建议实施序列（代码可直接开工）
+
+### 阶段 R1：治理补齐（3-5 天）
+
+1. 引入 `LoopDetector` 与 `ContextCompaction`。
+2. 在 `run_probe_step` 与 legacy 翻译链路统一产出 `loop_warning/context_compaction`。
+3. 新增回归测试：重复动作场景、长任务场景。
+
+退出条件：
+- 新事件稳定输出。
+- 测试通过且移动端主链成功率无明显回退。
+
+### 阶段 R2：策略外置（2-3 天）
+
+1. `GuardPolicy` 改为“默认策略 + 文件策略”组合。
+2. 支持策略 reload（先手动触发，再考虑自动 reload）。
+
+退出条件：
+- 至少 3 类策略可配置（高风险确认、web 路由阻断、黑名单动作）。
+
+### 阶段 R3：会话进程化（4-7 天）
+
+1. 在现有 `RuntimeTaskService` 上增量抽象 `SessionRuntime`。
+2. 保留旧 API 兼容，新增 session 级提交与查询接口。
+
+退出条件：
+- 会话隔离可验证。
+- server 重启后新任务可正常提交。
+
+## 5. 风险与控制
+
+1. 风险：复用过快导致主链不稳定。
+- 控制：保持 `runtime_mode=legacy` 默认；新能力仅在 `guiagent_v2` 下启用。
+
+2. 风险：web_skill 误扩散到移动系统动作。
+- 控制：`GuardPolicy + WebSkillRouter` 双层阻断保持强约束。
+
+3. 风险：事件字段快速膨胀不可维护。
+- 控制：R2 同步落地 Typed Event Schema，冻结核心字段。
+
+## 6. 本文档对应改造入口
+
+1. 主编排入口：`guiagent_v2/runtime/orchestrator_v2.py`
+2. v2 执行链入口：`guiagent_v2/runtime/v2_executor.py`
+3. 门禁策略：`guiagent_v2/runtime/guard_policy.py`
+4. 动作分发：`guiagent_v2/runtime/action_registry.py`
+5. Web 旁路：`guiagent_v2/runtime/agent_browser_skill.py`
+6. 任务状态面：`guiagent_v2/runtime/task_service.py`, `status_api.py`
+
+## 7. 结论
+
+当前项目已经完成蓝图中的关键“骨架层”复用：路由、Skill 旁路、门禁、注册中心、可观测链路。下一步不建议继续扩展新模块面，而应优先补齐治理闭环（Loop/Compaction/Policy 外置）与会话进程化，确保架构健康度和生产可控性同步提升。

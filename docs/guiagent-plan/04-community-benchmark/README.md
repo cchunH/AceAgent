@@ -23,9 +23,13 @@
 6. [skill-vs-modular-integration-decision.md](./skill-vs-modular-integration-decision.md)
    - `skill` 引入 vs 模块拆解并入的定稿决策（移动端场景）。
 
+7. [implementation-gap-and-reuse-plan-v2.md](./implementation-gap-and-reuse-plan-v2.md)
+   - 蓝图与代码实现差距评估 + 下一阶段复用推进计划（可直接开工）。
+
 ## 推荐阅读顺序
 
 1. 先读 `agent-browser-deep-analysis` + `browser-use-deep-analysis`，建立事实层认知。
 2. 再读 `cross-project-tradeoff-and-patterns`，确定取舍原则。
 3. 读 `skill-vs-modular-integration-decision`，锁定执行模式。
 4. 最后读 `reusable-module-catalog-for-unimind` + `integration-blueprint-v1`，进入改造实施。
+5. 每轮改造前先读 `implementation-gap-and-reuse-plan-v2`，确认优先级与退出条件。
