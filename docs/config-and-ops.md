@@ -93,6 +93,21 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 - `experience_reflection`（结束时）
 - `finish`
 
+`events.jsonl` 关键事件（用于 Phase 0 对照）：
+- `step_start`
+- `action_exec`
+- `assertion`
+- `handover`
+- `step_end`
+- `task_end`
+
+进程内状态 API：
+- `guiagent_v2.runtime.get_task_status(run_id, task_id)`
+- `guiagent_v2.runtime.get_task_timeline(run_id, task_id)`
+
+指标计算工具：
+- `guiagent_v2.runtime.compute_metrics_from_jsonl(jsonl_path)`
+
 ## 5. 关键参数建议
 
 - `max_itr`：默认 40，探索型任务可适当提高

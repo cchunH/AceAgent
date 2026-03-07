@@ -5,6 +5,7 @@ from .status_api import (
     get_task_status,
     get_task_timeline,
 )
+from .metrics import compute_metrics_from_jsonl
 
 __all__ = [
     "JSONLEventBus",
@@ -12,4 +13,5 @@ __all__ = [
     "get_global_status_store",
     "get_task_status",
     "get_task_timeline",
+    "compute_metrics_from_jsonl",
 ]
