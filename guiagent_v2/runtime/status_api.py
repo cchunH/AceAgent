@@ -58,6 +58,39 @@ class TaskStatusStore:
                 return []
             return list(item["timeline"])
 
+    def list_tasks(
+        self,
+        run_id: str | None = None,
+        status: str | None = None,
+    ) -> list[dict[str, Any]]:
+        run_id = str(run_id) if run_id is not None else None
+        status = str(status).upper() if status is not None else None
+        with self._lock:
+            items = []
+            for item in self._items.values():
+                if run_id is not None and item["run_id"] != run_id:
+                    continue
+                item_status = str(item.get("status", "")).upper()
+                if status is not None and item_status != status:
+                    continue
+                items.append(
+                    {
+                        "run_id": item["run_id"],
+                        "task_id": item["task_id"],
+                        "status": item["status"],
+                        "last_event_type": item["last_event_type"],
+                        "updated_at": item["updated_at"],
+                        "event_count": item["event_count"],
+                    }
+                )
+        items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+        return items
+
+    def list_run_ids(self) -> list[str]:
+        with self._lock:
+            run_ids = {item["run_id"] for item in self._items.values()}
+        return sorted(run_ids)
+
 
 _GLOBAL_STATUS_STORE = TaskStatusStore()
 
@@ -73,3 +106,10 @@ def get_task_status(run_id: str, task_id: str) -> dict[str, Any] | None:
 def get_task_timeline(run_id: str, task_id: str) -> list[dict[str, Any]]:
     return _GLOBAL_STATUS_STORE.get_task_timeline(run_id, task_id)
 
+
+def list_tasks(run_id: str | None = None, status: str | None = None) -> list[dict[str, Any]]:
+    return _GLOBAL_STATUS_STORE.list_tasks(run_id=run_id, status=status)
+
+
+def list_run_ids() -> list[str]:
+    return _GLOBAL_STATUS_STORE.list_run_ids()

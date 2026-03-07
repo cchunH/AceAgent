@@ -106,6 +106,8 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 进程内状态 API：
 - `guiagent_v2.runtime.get_task_status(run_id, task_id)`
 - `guiagent_v2.runtime.get_task_timeline(run_id, task_id)`
+- `guiagent_v2.runtime.list_tasks(run_id=None, status=None)`
+- `guiagent_v2.runtime.list_run_ids()`
 - `guiagent_v2.runtime.submit_task(instruction, runtime_mode, run_name, task_id, run_options)`
 - `guiagent_v2.runtime.get_submitted_task(request_id)`
 - `guiagent_v2.runtime.list_submitted_tasks(status=None)`

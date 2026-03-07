@@ -479,6 +479,7 @@ def run_single_task_with_runtime(
     )
 
     return {
+        "status": final_status,
         "run_id": run_id,
         "task_id": task_id,
         "log_dir": log_dir,

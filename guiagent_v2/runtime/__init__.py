@@ -4,6 +4,8 @@ from .status_api import (
     get_global_status_store,
     get_task_status,
     get_task_timeline,
+    list_tasks,
+    list_run_ids,
 )
 from .metrics import compute_metrics_from_jsonl
 from .reporting import write_runtime_summary
@@ -22,6 +24,8 @@ __all__ = [
     "get_global_status_store",
     "get_task_status",
     "get_task_timeline",
+    "list_tasks",
+    "list_run_ids",
     "compute_metrics_from_jsonl",
     "write_runtime_summary",
     "upsert_blueprint_from_observation",

@@ -63,8 +63,9 @@
 
 1. 任务状态：`get_task_status(run_id, task_id)`
 2. 任务时间线：`get_task_timeline(run_id, task_id)`
-3. 任务提交与队列：`submit_task/get_submitted_task/list_submitted_tasks`
-4. 事件数据源：`events.jsonl`
+3. 运行中任务列表：`list_tasks(run_id=None, status=None)` + `list_run_ids()`
+4. 任务提交与队列：`submit_task/get_submitted_task/list_submitted_tasks`
+5. 事件数据源：`events.jsonl`
 
 说明：当前仅提供进程内 API，不包含 Web 推送通道（SSE/WebSocket）。
 
