@@ -130,6 +130,24 @@ def main():
         default=False,
         help="Require API token on read endpoints for SessionRuntime server.",
     )
+    parser.add_argument(
+        "--session_runtime_lockfile_path",
+        type=str,
+        default=None,
+        help="Optional lockfile path for SessionRuntime multi-instance governance.",
+    )
+    parser.add_argument(
+        "--session_runtime_allow_port_fallback",
+        action="store_true",
+        default=False,
+        help="Allow SessionRuntime server to fall back to an ephemeral port on conflict.",
+    )
+    parser.add_argument(
+        "--session_runtime_audit_log_path",
+        type=str,
+        default=None,
+        help="Optional JSONL audit file path for SessionRuntime control-plane writes.",
+    )
 
     args = parser.parse_args()
     torch.manual_seed(args.seed)
@@ -145,15 +163,26 @@ def main():
                 "__runtime",
                 "session_runtime_state.json",
             )
+        session_audit_log_path = args.session_runtime_audit_log_path
+        if session_audit_log_path is None:
+            session_audit_log_path = os.path.join(
+                args.log_root,
+                "__runtime",
+                "session_runtime_audit.jsonl",
+            )
         host, port = start_global_session_runtime_server(
             host=args.session_runtime_server_host,
             port=args.session_runtime_server_port,
             persistence_path=session_state_path,
             api_token=args.session_runtime_api_token,
             require_auth_on_read=args.session_runtime_auth_read,
+            lockfile_path=args.session_runtime_lockfile_path,
+            allow_port_fallback=args.session_runtime_allow_port_fallback,
+            audit_log_path=session_audit_log_path,
         )
         print(f"SessionRuntime API server started at http://{host}:{port}")
         print(f"SessionRuntime state path: {session_state_path}")
+        print(f"SessionRuntime audit path: {session_audit_log_path}")
         if args.session_runtime_api_token:
             print("SessionRuntime API auth: enabled")
         try:

@@ -21,6 +21,7 @@ EVENT_REQUIRED_EXTRA_FIELDS: dict[str, tuple[str, ...]] = {
     "skill_fallback": ("fallback_to", "reason_code"),
     "adapter_call": ("adapter_backend",),
     "watchdog_alert": ("watchdog_name", "watchdog_severity", "source_event_type"),
+    "control_plane_audit": ("control_action", "http_method", "http_path", "actor", "source"),
 }
 
 

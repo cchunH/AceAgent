@@ -68,6 +68,46 @@ class TestEventSchema(unittest.TestCase):
             self.assertEqual(row["event_schema_version"], "v1")
             self.assertFalse(row["schema_valid"])
 
+    def test_control_plane_audit_requires_actor_source_and_action_fields(self):
+        event = normalize_event(
+            {
+                "run_id": "cp-1",
+                "task_id": "cp-task",
+                "step_id": 0,
+                "chain_mode": "guiagent_v2",
+                "event_type": "control_plane_audit",
+                "status": "SUCCESS",
+                "intent_key": "control:session-runtime:write",
+            },
+            default_chain_mode="guiagent_v2",
+        )
+        valid, detail = validate_event(event)
+        self.assertFalse(valid)
+        self.assertTrue(any("control_action" in item for item in detail["errors"]))
+        self.assertTrue(any("actor" in item for item in detail["errors"]))
+
+    def test_control_plane_audit_validate_ok(self):
+        event = normalize_event(
+            {
+                "run_id": "cp-2",
+                "task_id": "cp-task",
+                "step_id": 0,
+                "chain_mode": "guiagent_v2",
+                "event_type": "control_plane_audit",
+                "status": "SUCCESS",
+                "intent_key": "control:session-runtime:write",
+                "control_action": "submit_task",
+                "http_method": "POST",
+                "http_path": "/tasks",
+                "actor": "qa-user",
+                "source": "unit-test",
+            },
+            default_chain_mode="guiagent_v2",
+        )
+        valid, detail = validate_event(event)
+        self.assertTrue(valid)
+        self.assertEqual(detail["code"], "OK")
+
 
 if __name__ == "__main__":
     unittest.main()

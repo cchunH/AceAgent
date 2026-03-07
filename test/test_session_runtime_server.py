@@ -48,14 +48,22 @@ class TestSessionRuntimeServer(unittest.TestCase):
                 "session_id": kwargs.get("session_id"),
             }
 
+        self._td = tempfile.TemporaryDirectory()
+        self._lockfile_path = os.path.join(self._td.name, "server-main.lock")
         self.runtime = SessionRuntime(runner=fake_runner, per_session_max_workers=1)
-        self.server = SessionRuntimeAPIServer(runtime=self.runtime, host="127.0.0.1", port=0)
+        self.server = SessionRuntimeAPIServer(
+            runtime=self.runtime,
+            host="127.0.0.1",
+            port=0,
+            lockfile_path=self._lockfile_path,
+        )
         self.server.start()
         self.base_url = self.server.base_url
 
     def tearDown(self):
         self.server.stop()
         self.runtime.shutdown(wait=True)
+        self._td.cleanup()
 
     def test_health_and_session_lifecycle(self):
         code, body = _http_json(self.base_url, "GET", "/health")
@@ -210,6 +218,7 @@ class TestSessionRuntimeServer(unittest.TestCase):
             port=0,
             api_token="secret-123",
             require_auth_on_read=False,
+            lockfile_path=os.path.join(self._td.name, "server-auth-write.lock"),
         )
         secure_server.start()
         secure_base = secure_server.base_url
@@ -242,6 +251,7 @@ class TestSessionRuntimeServer(unittest.TestCase):
             port=0,
             api_token="secret-456",
             require_auth_on_read=True,
+            lockfile_path=os.path.join(self._td.name, "server-auth-read.lock"),
         )
         secure_server.start()
         secure_base = secure_server.base_url
@@ -263,6 +273,132 @@ class TestSessionRuntimeServer(unittest.TestCase):
             self.assertTrue(body["ok"])
         finally:
             secure_server.stop()
+
+    def test_lockfile_conflict_between_instances(self):
+        def fake_runner(**kwargs):
+            return {"status": "SUCCESS", "task_id": kwargs.get("task_id")}
+
+        with tempfile.TemporaryDirectory() as td:
+            lockfile_path = os.path.join(td, "session_runtime.lock")
+            runtime_a = SessionRuntime(runner=fake_runner)
+            runtime_b = SessionRuntime(runner=fake_runner)
+            server_a = SessionRuntimeAPIServer(
+                runtime=runtime_a,
+                host="127.0.0.1",
+                port=0,
+                lockfile_path=lockfile_path,
+            )
+            server_b = SessionRuntimeAPIServer(
+                runtime=runtime_b,
+                host="127.0.0.1",
+                port=0,
+                lockfile_path=lockfile_path,
+            )
+            try:
+                server_a.start()
+                with self.assertRaises(RuntimeError):
+                    server_b.start()
+            finally:
+                server_b.stop()
+                server_a.stop()
+                runtime_a.shutdown(wait=True)
+                runtime_b.shutdown(wait=True)
+
+    def test_stale_lockfile_is_recovered(self):
+        with tempfile.TemporaryDirectory() as td:
+            lockfile_path = os.path.join(td, "session_runtime.lock")
+            with open(lockfile_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "instance_id": "stale-old",
+                        "pid": 999999,
+                        "host": "127.0.0.1",
+                        "port": 8787,
+                    },
+                    f,
+                )
+
+            runtime = SessionRuntime(runner=lambda **kwargs: {"status": "SUCCESS"})
+            server = SessionRuntimeAPIServer(
+                runtime=runtime,
+                host="127.0.0.1",
+                port=0,
+                lockfile_path=lockfile_path,
+            )
+            try:
+                server.start()
+                with open(lockfile_path, "r", encoding="utf-8") as f:
+                    payload = json.load(f)
+                self.assertEqual(payload["instance_id"], server.instance_id)
+            finally:
+                server.stop()
+                runtime.shutdown(wait=True)
+
+    def test_control_plane_audit_log_for_write_ops(self):
+        with tempfile.TemporaryDirectory() as td:
+            audit_path = os.path.join(td, "session_runtime_audit.jsonl")
+            audit_server = SessionRuntimeAPIServer(
+                runtime=self.runtime,
+                host="127.0.0.1",
+                port=0,
+                audit_log_path=audit_path,
+                lockfile_path=os.path.join(self._td.name, "server-audit.lock"),
+            )
+            audit_server.start()
+            audit_base = audit_server.base_url
+            try:
+                code, _ = _http_json(
+                    audit_base,
+                    "POST",
+                    "/sessions",
+                    {"session_id": "sess-audit"},
+                    headers={
+                        "X-Actor": "qa-user",
+                        "X-Source": "unit-test",
+                        "X-Trace-Id": "trace-audit-1",
+                    },
+                )
+                self.assertEqual(code, 201)
+
+                code, _ = _http_json(
+                    audit_base,
+                    "POST",
+                    "/tasks",
+                    {"instruction": "  ", "session_id": "sess-audit"},
+                    headers={
+                        "X-Actor": "qa-user",
+                        "X-Source": "unit-test",
+                        "X-Trace-Id": "trace-audit-2",
+                    },
+                )
+                self.assertEqual(code, 400)
+            finally:
+                audit_server.stop()
+
+            with open(audit_path, "r", encoding="utf-8") as f:
+                lines = [json.loads(line) for line in f if line.strip()]
+            self.assertGreaterEqual(len(lines), 2)
+
+            ensure_events = [
+                item
+                for item in lines
+                if item.get("control_action") == "ensure_session"
+            ]
+            submit_failed_events = [
+                item
+                for item in lines
+                if item.get("control_action") == "submit_task"
+                and item.get("status") == "FAILED"
+            ]
+            self.assertTrue(ensure_events)
+            self.assertTrue(submit_failed_events)
+            self.assertEqual(ensure_events[0].get("actor"), "qa-user")
+            self.assertEqual(ensure_events[0].get("source"), "unit-test")
+            self.assertEqual(ensure_events[0].get("trace_id"), "trace-audit-1")
+            self.assertEqual(
+                submit_failed_events[0].get("reason_code"),
+                "INVALID_INSTRUCTION",
+            )
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.9`
+- 版本：`v1.10`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -32,10 +32,12 @@
 18. `SessionRuntime` 新增会话/任务索引持久化恢复（`--session_runtime_state_path`），支持服务重启后恢复 session/task 查询面。
 19. `SessionRuntimeServer` 新增 token 鉴权（默认写接口，读接口可选），并发布 API 契约文档 `session-runtime-api-contract-v1.md`。
 20. `v2_executor` 的 web 通道从单步 probe 升级为多步执行 v1：`web_plan -> web_step_start/adapter_call/web_step_end`，失败时统一 `skill_fallback` 回退移动端主链。
+21. `SessionRuntimeServer` 新增 lockfile 多实例治理（实例 ID、僵尸锁清理、可选端口冲突回退）与实例标识响应头。
+22. 控制面写操作新增审计事件 `control_plane_audit`（`actor/source/trace_id/control_action`），并支持独立审计 JSONL 文件输出。
 
 尚未落地：
 1. `watchdog` 深化生产化（告警升级策略、跨任务聚合、下载/安全扩展插件）。
-2. `SessionRuntime` 生产级进程化（当前已具备本地 HTTP IPC + 索引恢复 + token 鉴权，仍缺多实例治理）。
+2. `SessionRuntime` 生产级进程化（当前已具备本地 HTTP IPC + 索引恢复 + token 鉴权 + 多实例治理 + 控制面审计，仍缺服务发现与跨节点协调）。
 3. 真正的生产级 web 子任务执行闭环（当前为启发式多步 v1 + fallback，尚缺复杂网页任务策略）。
 
 ## 0. 决策基线（先定方向）
@@ -179,6 +181,7 @@ class AgentBrowserSkill:
 - `watchdog_alert`
 - `skill_route`
 - `skill_fallback`
+- `control_plane_audit`
 
 建议新增关键字段：
 - `session_id`

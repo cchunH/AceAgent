@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import os
 import secrets
+import tempfile
 import threading
+import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from .event_bus import JSONLEventBus
 from .session_runtime import SessionRuntime, get_global_session_runtime
 
 
@@ -29,6 +34,46 @@ def _first_query(params: dict[str, list[str]], name: str) -> str | None:
     return value or None
 
 
+def _sanitize_for_filename(value: str) -> str:
+    normalized = str(value).strip().lower()
+    if not normalized:
+        return "unknown"
+    return "".join(ch if ch.isalnum() else "_" for ch in normalized)
+
+
+def _pid_exists(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except Exception:
+        return True
+    return True
+
+
+def _is_addr_in_use(exc: OSError) -> bool:
+    if getattr(exc, "errno", None) == errno.EADDRINUSE:
+        return True
+    return "address already in use" in str(exc).lower()
+
+
+def _default_lockfile_path(host: str, port: int, persistence_path: str | None) -> str:
+    raw_persistence = str(persistence_path or "").strip()
+    if raw_persistence:
+        state_dir = os.path.dirname(raw_persistence) or "."
+        return os.path.join(state_dir, "session_runtime_server.lock")
+    safe_host = _sanitize_for_filename(host)
+    safe_port = str(int(port)) if int(port) > 0 else "auto"
+    return os.path.join(
+        tempfile.gettempdir(),
+        f"guiagent_session_runtime_{safe_host}_{safe_port}.lock",
+    )
+
+
 class SessionRuntimeAPIServer:
     """Lightweight HTTP API server for SessionRuntime IPC control plane."""
 
@@ -39,12 +84,29 @@ class SessionRuntimeAPIServer:
         port: int = 0,
         api_token: str | None = None,
         require_auth_on_read: bool = False,
+        lockfile_path: str | None = None,
+        allow_port_fallback: bool = False,
+        audit_log_path: str | None = None,
     ):
         self.runtime = runtime or get_global_session_runtime()
         self.host = str(host).strip() or "127.0.0.1"
         self.port = int(port)
         self.api_token = str(api_token).strip() if api_token else None
         self.require_auth_on_read = bool(require_auth_on_read)
+        self.allow_port_fallback = bool(allow_port_fallback)
+        self.instance_id = "rt-" + uuid.uuid4().hex[:12]
+        self.audit_log_path = str(audit_log_path).strip() if audit_log_path else None
+        self._audit_bus = (
+            JSONLEventBus(
+                file_path=self.audit_log_path,
+                default_chain_mode="guiagent_v2",
+            )
+            if self.audit_log_path
+            else None
+        )
+        self._lockfile_path_input = str(lockfile_path).strip() if lockfile_path else None
+        self._active_lockfile_path: str | None = None
+        self._active_lock_owner_pid: int | None = None
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -61,20 +123,194 @@ class SessionRuntimeAPIServer:
         host, port = self.address
         return f"http://{host}:{port}"
 
+    def _runtime_persistence_path(self) -> str | None:
+        raw = getattr(self.runtime, "_persistence_path", None)
+        value = str(raw).strip() if raw else ""
+        return value or None
+
+    def _resolve_lockfile_path(self) -> str:
+        raw = self._lockfile_path_input
+        if raw:
+            if raw.endswith(os.sep) or os.path.isdir(raw):
+                return os.path.join(raw, "session_runtime_server.lock")
+            return raw
+        return _default_lockfile_path(
+            host=self.host,
+            port=self.port,
+            persistence_path=self._runtime_persistence_path(),
+        )
+
+    def _read_lockfile(self, path: str) -> dict[str, Any] | None:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return payload
+
+    def _acquire_lockfile(self) -> None:
+        lockfile_path = self._resolve_lockfile_path()
+        directory = os.path.dirname(lockfile_path) or "."
+        os.makedirs(directory, exist_ok=True)
+
+        payload: dict[str, Any] = {
+            "instance_id": self.instance_id,
+            "pid": os.getpid(),
+            "host": self.host,
+            "port": int(self.port),
+            "created_at": time.time(),
+        }
+        while True:
+            try:
+                fd = os.open(
+                    lockfile_path,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    0o600,
+                )
+            except FileExistsError:
+                existing = self._read_lockfile(lockfile_path) or {}
+                existing_pid = int(existing.get("pid", 0) or 0)
+                existing_instance_id = str(existing.get("instance_id", "")).strip()
+                if existing_pid > 0 and not _pid_exists(existing_pid):
+                    try:
+                        os.remove(lockfile_path)
+                        continue
+                    except OSError:
+                        pass
+                if existing_instance_id and existing_instance_id == self.instance_id:
+                    self._active_lockfile_path = lockfile_path
+                    self._active_lock_owner_pid = os.getpid()
+                    return
+                raise RuntimeError(
+                    "session runtime server lock is held by another instance: "
+                    f"path={lockfile_path}, instance_id={existing.get('instance_id')}, pid={existing.get('pid')}, "
+                    f"host={existing.get('host')}, port={existing.get('port')}"
+                )
+            else:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(payload, f, ensure_ascii=False, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                self._active_lockfile_path = lockfile_path
+                self._active_lock_owner_pid = os.getpid()
+                return
+
+    def _refresh_lockfile(self, *, host: str, port: int) -> None:
+        path = self._active_lockfile_path
+        if not path:
+            return
+        payload = self._read_lockfile(path) or {}
+        if str(payload.get("instance_id", "")).strip() != self.instance_id:
+            return
+        payload["host"] = str(host)
+        payload["port"] = int(port)
+        payload["updated_at"] = time.time()
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+        except Exception:
+            return
+
+    def _release_lockfile(self) -> None:
+        path = self._active_lockfile_path
+        self._active_lockfile_path = None
+        self._active_lock_owner_pid = None
+        if not path:
+            return
+        payload = self._read_lockfile(path) or {}
+        owner_pid = int(payload.get("pid", 0) or 0)
+        instance_id = str(payload.get("instance_id", "")).strip()
+        if owner_pid > 0 and owner_pid != os.getpid():
+            return
+        if instance_id and instance_id != self.instance_id:
+            return
+        try:
+            os.remove(path)
+        except OSError:
+            return
+
+    def _emit_control_plane_audit(
+        self,
+        *,
+        action: str,
+        method: str,
+        path: str,
+        status: str,
+        actor: str | None,
+        source: str | None,
+        session_id: str | None = None,
+        request_id: str | None = None,
+        trace_id: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        if self._audit_bus is None:
+            return
+        resolved_request_id = str(request_id or "").strip()
+        resolved_session_id = str(session_id or "").strip() or None
+        payload: dict[str, Any] = {
+            "run_id": "session-runtime-control-plane",
+            "task_id": resolved_request_id or "control",
+            "step_id": 0,
+            "chain_mode": "guiagent_v2",
+            "event_type": "control_plane_audit",
+            "status": str(status).upper(),
+            "intent_key": "control:session-runtime:write",
+            "session_id": resolved_session_id,
+            "instance_id": self.instance_id,
+            "control_action": str(action),
+            "http_method": str(method).upper(),
+            "http_path": str(path),
+            "actor": str(actor or "anonymous"),
+            "source": str(source or "unknown"),
+        }
+        if resolved_request_id:
+            payload["request_id"] = resolved_request_id
+        if trace_id:
+            payload["trace_id"] = str(trace_id).strip()
+        if detail:
+            for key, value in detail.items():
+                if key not in payload:
+                    payload[key] = value
+        self._audit_bus.emit(payload)
+
     def start(self) -> tuple[str, int]:
         with self._lock:
             if self._server is not None:
                 return self._server.server_address
-            server = ThreadingHTTPServer((self.host, self.port), self._build_handler())
-            thread = threading.Thread(
-                target=server.serve_forever,
-                name="guiagent-session-runtime-api",
-                daemon=True,
-            )
-            thread.start()
-            self._server = server
-            self._thread = thread
-            return server.server_address
+            self._acquire_lockfile()
+            bind_port = int(self.port)
+            server: ThreadingHTTPServer | None = None
+            try:
+                try:
+                    server = ThreadingHTTPServer((self.host, bind_port), self._build_handler())
+                except OSError as exc:
+                    if self.allow_port_fallback and bind_port > 0 and _is_addr_in_use(exc):
+                        server = ThreadingHTTPServer((self.host, 0), self._build_handler())
+                    else:
+                        raise
+                thread = threading.Thread(
+                    target=server.serve_forever,
+                    name="guiagent-session-runtime-api",
+                    daemon=True,
+                )
+                thread.start()
+                self._server = server
+                self._thread = thread
+                bound_host, bound_port = server.server_address
+                self.host = str(bound_host).strip() or self.host
+                self.port = int(bound_port)
+                self._refresh_lockfile(host=self.host, port=self.port)
+                return server.server_address
+            except Exception:
+                if server is not None:
+                    try:
+                        server.server_close()
+                    except Exception:
+                        pass
+                self._release_lockfile()
+                raise
 
     def stop(self) -> None:
         with self._lock:
@@ -87,11 +323,13 @@ class SessionRuntimeAPIServer:
             server.server_close()
         if thread is not None:
             thread.join(timeout=2.0)
+        self._release_lockfile()
 
     def _build_handler(self):
         runtime = self.runtime
         api_token = self.api_token
         require_auth_on_read = self.require_auth_on_read
+        server_instance = self
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, format, *args):  # noqa: A003
@@ -102,6 +340,7 @@ class SessionRuntimeAPIServer:
                 self.send_response(status_code)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
+                self.send_header("X-Session-Runtime-Instance-Id", server_instance.instance_id)
                 self.end_headers()
                 self.wfile.write(body)
 
@@ -131,7 +370,65 @@ class SessionRuntimeAPIServer:
                     return token_header
                 return None
 
-            def _check_auth(self, write: bool) -> bool:
+            def _actor(self, payload: dict[str, Any] | None = None) -> str:
+                actor = str(self.headers.get("X-Actor", "")).strip()
+                if actor:
+                    return actor
+                if isinstance(payload, dict):
+                    actor = str(payload.get("actor", "")).strip()
+                    if actor:
+                        return actor
+                return "anonymous"
+
+            def _source(self, payload: dict[str, Any] | None = None) -> str:
+                source = str(self.headers.get("X-Source", "")).strip()
+                if source:
+                    return source
+                if isinstance(payload, dict):
+                    source = str(payload.get("source", "")).strip()
+                    if source:
+                        return source
+                return str(self.client_address[0] if self.client_address else "unknown")
+
+            def _trace_id(self, payload: dict[str, Any] | None = None) -> str | None:
+                trace_id = str(self.headers.get("X-Trace-Id", "")).strip()
+                if trace_id:
+                    return trace_id
+                request_id = str(self.headers.get("X-Request-Id", "")).strip()
+                if request_id:
+                    return request_id
+                if isinstance(payload, dict):
+                    trace_id = str(payload.get("trace_id", "")).strip()
+                    if trace_id:
+                        return trace_id
+                return None
+
+            def _audit_write(
+                self,
+                *,
+                action: str,
+                method: str,
+                path: str,
+                status: str,
+                payload: dict[str, Any] | None = None,
+                session_id: str | None = None,
+                request_id: str | None = None,
+                detail: dict[str, Any] | None = None,
+            ) -> None:
+                server_instance._emit_control_plane_audit(
+                    action=action,
+                    method=method,
+                    path=path,
+                    status=status,
+                    actor=self._actor(payload),
+                    source=self._source(payload),
+                    session_id=session_id,
+                    request_id=request_id,
+                    trace_id=self._trace_id(payload),
+                    detail=detail,
+                )
+
+            def _check_auth(self, write: bool, method: str, path: str) -> bool:
                 if not api_token:
                     return True
                 if not write and not require_auth_on_read:
@@ -141,6 +438,14 @@ class SessionRuntimeAPIServer:
                 if provided and secrets.compare_digest(str(provided), str(api_token)):
                     return True
                 self._error("UNAUTHORIZED", "missing or invalid api token", status_code=401)
+                if write:
+                    self._audit_write(
+                        action="auth_rejected",
+                        method=method,
+                        path=path,
+                        status="FAILED",
+                        detail={"reason_code": "UNAUTHORIZED"},
+                    )
                 return False
 
             def _read_json_body(self) -> dict[str, Any]:
@@ -168,10 +473,16 @@ class SessionRuntimeAPIServer:
                 params = parse_qs(parsed.query, keep_blank_values=False)
 
                 if path == "/health":
-                    self._ok({"status": "ok"})
+                    self._ok(
+                        {
+                            "status": "ok",
+                            "instance_id": server_instance.instance_id,
+                            "pid": os.getpid(),
+                        }
+                    )
                     return
 
-                if not self._check_auth(write=False):
+                if not self._check_auth(write=False, method="GET", path=path):
                     return
 
                 if path == "/sessions":
@@ -258,12 +569,19 @@ class SessionRuntimeAPIServer:
             def do_POST(self):  # noqa: N802
                 parsed = urlparse(self.path)
                 path = parsed.path or "/"
-                if not self._check_auth(write=True):
+                if not self._check_auth(write=True, method="POST", path=path):
                     return
                 try:
                     payload = self._read_json_body()
                 except ValueError as exc:
                     self._error("INVALID_BODY", str(exc), status_code=400)
+                    self._audit_write(
+                        action="invalid_body",
+                        method="POST",
+                        path=path,
+                        status="FAILED",
+                        detail={"reason_code": "INVALID_BODY"},
+                    )
                     return
 
                 if path == "/sessions":
@@ -272,12 +590,29 @@ class SessionRuntimeAPIServer:
                         metadata=payload.get("metadata"),
                     )
                     self._ok(session, status_code=201)
+                    self._audit_write(
+                        action="ensure_session",
+                        method="POST",
+                        path=path,
+                        status="SUCCESS",
+                        payload=payload,
+                        session_id=session.get("session_id"),
+                    )
                     return
 
                 if path == "/tasks":
                     instruction = str(payload.get("instruction", "")).strip()
                     if not instruction:
                         self._error("INVALID_INSTRUCTION", "instruction must not be empty", status_code=400)
+                        self._audit_write(
+                            action="submit_task",
+                            method="POST",
+                            path=path,
+                            status="FAILED",
+                            payload=payload,
+                            session_id=str(payload.get("session_id", "")).strip() or None,
+                            detail={"reason_code": "INVALID_INSTRUCTION"},
+                        )
                         return
                     try:
                         item = runtime.submit_task(
@@ -290,8 +625,26 @@ class SessionRuntimeAPIServer:
                         )
                     except Exception as exc:
                         self._error("TASK_SUBMIT_FAILED", str(exc), status_code=500)
+                        self._audit_write(
+                            action="submit_task",
+                            method="POST",
+                            path=path,
+                            status="FAILED",
+                            payload=payload,
+                            session_id=str(payload.get("session_id", "")).strip() or None,
+                            detail={"reason_code": "TASK_SUBMIT_FAILED"},
+                        )
                         return
                     self._ok(item, status_code=201)
+                    self._audit_write(
+                        action="submit_task",
+                        method="POST",
+                        path=path,
+                        status="SUCCESS",
+                        payload=payload,
+                        session_id=item.get("session_id"),
+                        request_id=item.get("request_id"),
+                    )
                     return
 
                 if path.startswith("/tasks/") and path.endswith("/wait"):
@@ -300,26 +653,74 @@ class SessionRuntimeAPIServer:
                     item = runtime.wait(request_id=request_id, timeout=timeout)
                     if item is None:
                         self._error("TASK_NOT_FOUND", f"task not found: {request_id}", status_code=404)
+                        self._audit_write(
+                            action="wait_task",
+                            method="POST",
+                            path=path,
+                            status="FAILED",
+                            payload=payload,
+                            request_id=request_id,
+                            detail={"reason_code": "TASK_NOT_FOUND"},
+                        )
                         return
                     self._ok(item)
+                    self._audit_write(
+                        action="wait_task",
+                        method="POST",
+                        path=path,
+                        status="SUCCESS",
+                        payload=payload,
+                        session_id=item.get("session_id"),
+                        request_id=request_id,
+                    )
                     return
 
                 self._error("NOT_FOUND", f"path not found: {path}", status_code=404)
+                self._audit_write(
+                    action="unknown_write_path",
+                    method="POST",
+                    path=path,
+                    status="FAILED",
+                    payload=payload,
+                    detail={"reason_code": "NOT_FOUND"},
+                )
 
             def do_DELETE(self):  # noqa: N802
                 parsed = urlparse(self.path)
                 path = parsed.path or "/"
-                if not self._check_auth(write=True):
+                if not self._check_auth(write=True, method="DELETE", path=path):
                     return
                 if path.startswith("/sessions/"):
                     session_id = path.split("/", 2)[2].strip()
                     removed = runtime.shutdown_session(session_id=session_id, wait=True)
                     if not removed:
                         self._error("SESSION_NOT_FOUND", f"session not found: {session_id}", status_code=404)
+                        self._audit_write(
+                            action="delete_session",
+                            method="DELETE",
+                            path=path,
+                            status="FAILED",
+                            session_id=session_id,
+                            detail={"reason_code": "SESSION_NOT_FOUND"},
+                        )
                         return
                     self._ok({"session_id": session_id, "removed": True})
+                    self._audit_write(
+                        action="delete_session",
+                        method="DELETE",
+                        path=path,
+                        status="SUCCESS",
+                        session_id=session_id,
+                    )
                     return
                 self._error("NOT_FOUND", f"path not found: {path}", status_code=404)
+                self._audit_write(
+                    action="unknown_write_path",
+                    method="DELETE",
+                    path=path,
+                    status="FAILED",
+                    detail={"reason_code": "NOT_FOUND"},
+                )
 
         return Handler
 
@@ -332,6 +733,9 @@ def get_global_session_runtime_server(
     persistence_path: str | None = None,
     api_token: str | None = None,
     require_auth_on_read: bool = False,
+    lockfile_path: str | None = None,
+    allow_port_fallback: bool = False,
+    audit_log_path: str | None = None,
 ) -> SessionRuntimeAPIServer:
     global _GLOBAL_API_SERVER
     if _GLOBAL_API_SERVER is not None:
@@ -342,6 +746,9 @@ def get_global_session_runtime_server(
                 runtime=get_global_session_runtime(persistence_path=persistence_path),
                 api_token=api_token,
                 require_auth_on_read=require_auth_on_read,
+                lockfile_path=lockfile_path,
+                allow_port_fallback=allow_port_fallback,
+                audit_log_path=audit_log_path,
             )
     return _GLOBAL_API_SERVER
 
@@ -352,11 +759,17 @@ def start_global_session_runtime_server(
     persistence_path: str | None = None,
     api_token: str | None = None,
     require_auth_on_read: bool = False,
+    lockfile_path: str | None = None,
+    allow_port_fallback: bool = False,
+    audit_log_path: str | None = None,
 ) -> tuple[str, int]:
     server = get_global_session_runtime_server(
         persistence_path=persistence_path,
         api_token=api_token,
         require_auth_on_read=require_auth_on_read,
+        lockfile_path=lockfile_path,
+        allow_port_fallback=allow_port_fallback,
+        audit_log_path=audit_log_path,
     )
     server.host = host
     server.port = int(port)
@@ -379,6 +792,9 @@ def _main() -> None:
     parser.add_argument("--persistence_path", type=str, default=None)
     parser.add_argument("--api_token", type=str, default=None)
     parser.add_argument("--require_auth_on_read", action="store_true", default=False)
+    parser.add_argument("--lockfile_path", type=str, default=None)
+    parser.add_argument("--allow_port_fallback", action="store_true", default=False)
+    parser.add_argument("--audit_log_path", type=str, default=None)
     args = parser.parse_args()
 
     api_token = args.api_token or os.getenv("GUIAGENT_SESSION_RUNTIME_API_TOKEN")
@@ -389,6 +805,9 @@ def _main() -> None:
         port=args.port,
         api_token=api_token,
         require_auth_on_read=args.require_auth_on_read,
+        lockfile_path=args.lockfile_path,
+        allow_port_fallback=args.allow_port_fallback,
+        audit_log_path=args.audit_log_path,
     )
     host, port = server.start()
     print(f"SessionRuntime API server started at http://{host}:{port}")

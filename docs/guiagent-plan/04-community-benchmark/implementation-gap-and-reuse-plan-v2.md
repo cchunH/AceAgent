@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.7`
+- 版本：`v2.8`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 
@@ -99,19 +99,29 @@
 - 现状：支持 watchdog 插件启停、最小严重级过滤、去重窗口、节流窗口与热重载参数。
 - 距离评估：`完成（v1）`
 
+17. `SessionRuntimeServer` 多实例治理
+- 证据模块：`guiagent_v2/runtime/session_runtime_server.py`, `test/test_session_runtime_server.py`
+- 现状：支持 lockfile 抢占保护、实例 ID、僵尸锁清理、可选端口冲突回退。
+- 距离评估：`完成（v1）`
+
+18. 控制面写操作审计
+- 证据模块：`guiagent_v2/runtime/session_runtime_server.py`, `guiagent_v2/runtime/event_bus.py`, `run.py`
+- 现状：写接口产出 `control_plane_audit` 事件并支持审计 JSONL（含 `actor/source/trace_id/control_action`）。
+- 距离评估：`完成（v1）`
+
 ### 2.2 部分落地（需增强）
 
 1. `SessionRuntime`
 - 证据模块：`guiagent_v2/runtime/session_runtime.py`, `guiagent_v2/runtime/session_runtime_server.py`, `run.py`
-- 现状：已落地会话隔离 + 本地 HTTP IPC v1 + 索引持久化恢复 + token 鉴权。
+- 现状：已落地会话隔离 + 本地 HTTP IPC v1 + 索引持久化恢复 + token 鉴权 + lockfile 多实例治理 + 控制面审计日志。
 - 距离评估：`部分完成`
-- 关键差距：缺多实例治理与端口协调策略。
+- 关键差距：缺服务发现/租约心跳与跨节点状态一致性。
 
 2. 事件治理
 - 证据模块：`guiagent_v2/runtime/event_bus.py`, `status_api.py`
-- 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合，事件 schema 校验已接入。
+- 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合，事件 schema 校验已接入，并新增控制面审计事件。
 - 距离评估：`部分完成`
-- 关键差距：schema 仅 v0（未做严格 fail-fast 与向后兼容策略）；watchdog 仍缺跨任务聚合与告警升级策略。
+- 关键差距：schema 严格模式尚未开启（未做 fail-fast）；watchdog 仍缺跨任务聚合与告警升级策略。
 
 3. Web 子任务闭环
 - 证据模块：`v2_executor.py`, `agent_browser_skill.py`
@@ -200,8 +210,10 @@
 3. 已完成：抽离本地 HTTP IPC 通道（`session_runtime_server`）并提供独立启动模式。
 4. 已完成：补齐 session/task 索引持久化恢复。
 5. 已完成：补齐 token 鉴权与 API 契约冻结。
-6. 待继续：补齐多实例治理。
-7. 待继续：把 `session_id` 作为控制面一等键接入后续前端适配层与任务分发策略。
+6. 已完成：补齐多实例治理（lockfile + instance_id + stale lock recovery + 可选端口回退）。
+7. 已完成：补齐控制面写操作审计（`control_plane_audit` + audit JSONL）。
+8. 待继续：把 `session_id` 作为控制面一等键接入后续前端适配层与任务分发策略。
+9. 待继续：补齐服务发现/租约心跳与跨节点一致性策略。
 
 退出条件：
 - 会话隔离可验证。
