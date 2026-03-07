@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import os
 from threading import Lock
 from typing import Any
 
@@ -34,12 +35,46 @@ def _normalize_limit(limit: int | None, default: int | None = None) -> int | Non
     return min(value, 500)
 
 
+def _env_positive_int(name: str) -> int | None:
+    raw = str(os.getenv(name, "")).strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except Exception:
+        return None
+    if value <= 0:
+        return None
+    return value
+
+
 class TaskStatusStore:
     """In-process task status and timeline store for future frontend control plane."""
 
-    def __init__(self):
+    def __init__(self, max_timeline_events_per_task: int | None = None):
+        if max_timeline_events_per_task is None:
+            max_timeline_events_per_task = _env_positive_int(
+                "GUIAGENT_STATUS_TIMELINE_MAX_EVENTS_PER_TASK"
+            )
+        if max_timeline_events_per_task is not None:
+            try:
+                max_timeline_events_per_task = int(max_timeline_events_per_task)
+            except Exception:
+                max_timeline_events_per_task = None
+            if max_timeline_events_per_task is not None and max_timeline_events_per_task <= 0:
+                max_timeline_events_per_task = None
         self._lock = Lock()
         self._items: dict[tuple[str, str], dict[str, Any]] = {}
+        self._max_timeline_events_per_task = max_timeline_events_per_task
+
+    def configure_limits(self, *, max_timeline_events_per_task: int | None = None) -> None:
+        normalized = max_timeline_events_per_task
+        if normalized is not None:
+            normalized = int(normalized)
+            if normalized <= 0:
+                normalized = None
+        with self._lock:
+            self._max_timeline_events_per_task = normalized
 
     def update(self, event: dict[str, Any]) -> None:
         run_id = str(event.get("run_id", ""))
@@ -61,6 +96,7 @@ class TaskStatusStore:
                     "updated_at": event.get("ts"),
                     "event_count": 0,
                     "timeline": [],
+                    "timeline_dropped": 0,
                 },
             )
             item["event_count"] += 1
@@ -74,6 +110,12 @@ class TaskStatusStore:
                 item["status"] = status
 
             item["timeline"].append(event)
+            max_events = self._max_timeline_events_per_task
+            if max_events is not None and len(item["timeline"]) > max_events:
+                overflow = len(item["timeline"]) - max_events
+                if overflow > 0:
+                    del item["timeline"][:overflow]
+                    item["timeline_dropped"] = int(item.get("timeline_dropped", 0)) + overflow
 
     def get_task_status(self, run_id: str, task_id: str) -> dict[str, Any] | None:
         with self._lock:
@@ -88,6 +130,7 @@ class TaskStatusStore:
                 "last_event_type": item["last_event_type"],
                 "updated_at": item["updated_at"],
                 "event_count": item["event_count"],
+                "timeline_dropped": int(item.get("timeline_dropped", 0)),
             }
 
     def get_task_timeline(self, run_id: str, task_id: str) -> list[dict[str, Any]]:
@@ -126,6 +169,7 @@ class TaskStatusStore:
                         "last_event_type": item["last_event_type"],
                         "updated_at": item["updated_at"],
                         "event_count": item["event_count"],
+                        "timeline_dropped": int(item.get("timeline_dropped", 0)),
                     }
                 )
         items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
@@ -266,6 +310,12 @@ _GLOBAL_STATUS_STORE = TaskStatusStore()
 
 def get_global_status_store() -> TaskStatusStore:
     return _GLOBAL_STATUS_STORE
+
+
+def configure_global_status_store(*, max_timeline_events_per_task: int | None = None) -> None:
+    _GLOBAL_STATUS_STORE.configure_limits(
+        max_timeline_events_per_task=max_timeline_events_per_task,
+    )
 
 
 def get_task_status(run_id: str, task_id: str) -> dict[str, Any] | None:

@@ -14,9 +14,15 @@ def _utc_now_iso() -> str:
 class JSONLEventBus:
     """Append-only JSONL event writer for runtime observability."""
 
-    def __init__(self, file_path: str, default_chain_mode: str):
+    def __init__(
+        self,
+        file_path: str,
+        default_chain_mode: str,
+        strict_schema: bool = False,
+    ):
         self.file_path = file_path
         self.default_chain_mode = default_chain_mode
+        self.strict_schema = bool(strict_schema)
         self._lock = Lock()
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
@@ -29,6 +35,8 @@ class JSONLEventBus:
         normalized["schema_valid"] = valid
         if not valid:
             normalized["schema_error"] = detail
+            if self.strict_schema:
+                raise ValueError(f"strict schema validation failed: {detail}")
 
         with self._lock:
             with open(self.file_path, "a", encoding="utf-8") as f:

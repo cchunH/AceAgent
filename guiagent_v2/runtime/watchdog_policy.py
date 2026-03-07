@@ -23,6 +23,10 @@ DEFAULT_WATCHDOG_POLICY: dict[str, Any] = {
         "emit_throttle_sec": 120.0,
         "severity": "HIGH",
         "group_by_fields": ["watchdog_name", "reason_code", "alert_category"],
+        "dedup_window_sec": 30.0,
+        "throttle_window_sec": 60.0,
+        "max_alerts_per_key": 1,
+        "dedup_key_fields": ["watchdog_name", "aggregated_group_key", "reason_code"],
     },
 }
 
@@ -110,6 +114,21 @@ def _normalize_cross_task_aggregation(value: Any, default: dict[str, Any]) -> di
     fields = _normalize_str_list(value.get("group_by_fields"))
     if fields:
         cfg["group_by_fields"] = fields
+    cfg["dedup_window_sec"] = _as_non_negative_float(
+        value.get("dedup_window_sec"),
+        cfg["dedup_window_sec"],
+    )
+    cfg["throttle_window_sec"] = _as_non_negative_float(
+        value.get("throttle_window_sec"),
+        cfg["throttle_window_sec"],
+    )
+    cfg["max_alerts_per_key"] = _as_positive_int(
+        value.get("max_alerts_per_key"),
+        cfg["max_alerts_per_key"],
+    )
+    dedup_fields = _normalize_str_list(value.get("dedup_key_fields"))
+    if dedup_fields:
+        cfg["dedup_key_fields"] = dedup_fields
     return cfg
 
 

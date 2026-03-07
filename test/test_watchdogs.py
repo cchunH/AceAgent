@@ -322,6 +322,59 @@ class TestWatchdogs(unittest.TestCase):
         self.assertEqual(aggregate[0].get("aggregated_distinct_tasks"), 2)
         self.assertEqual(aggregate[0].get("reason_code"), "CROSS_TASK_ALERT_SPIKE")
 
+    def test_cross_task_aggregation_respects_dedup_gate(self):
+        manager = WatchdogManager(
+            plugins=[SecurityWatchdog()],
+            policy_loader=_PolicyLoader(
+                {
+                    "version": "v1",
+                    "enabled_watchdogs": ["security_watchdog"],
+                    "min_severity": "LOW",
+                    "dedup_window_sec": 0.0,
+                    "max_alerts_per_key": 10,
+                    "throttle_window_sec": 60.0,
+                    "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
+                    "cross_task_aggregation": {
+                        "enabled": True,
+                        "window_sec": 120.0,
+                        "min_distinct_tasks": 2,
+                        "emit_throttle_sec": 0.0,
+                        "severity": "CRITICAL",
+                        "group_by_fields": ["watchdog_name", "reason_code", "alert_category"],
+                        "dedup_window_sec": 60.0,
+                        "throttle_window_sec": 60.0,
+                        "max_alerts_per_key": 1,
+                        "dedup_key_fields": ["watchdog_name", "aggregated_group_key", "reason_code"],
+                    },
+                }
+            ),
+        )
+
+        base = {
+            "step_id": 1,
+            "chain_mode": "guiagent_v2",
+            "event_type": "guard_decision",
+            "status": "HANDOVER",
+            "intent_key": "global:TAP:SUBMIT",
+            "policy_decision": "deny",
+            "policy_reason": "ACTION_DENIED_BY_POLICY",
+        }
+        e1 = dict(base, run_id="r20", task_id="t20")
+        e2 = dict(base, run_id="r21", task_id="t21")
+        e3 = dict(base, run_id="r22", task_id="t22")
+
+        alerts1 = manager.process(e1)
+        alerts2 = manager.process(e2)
+        alerts3 = manager.process(e3)
+
+        agg1 = [item for item in alerts1 if item.get("watchdog_name") == "aggregate_watchdog"]
+        agg2 = [item for item in alerts2 if item.get("watchdog_name") == "aggregate_watchdog"]
+        agg3 = [item for item in alerts3 if item.get("watchdog_name") == "aggregate_watchdog"]
+
+        self.assertEqual(len(agg1), 0)
+        self.assertEqual(len(agg2), 1)
+        self.assertEqual(len(agg3), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

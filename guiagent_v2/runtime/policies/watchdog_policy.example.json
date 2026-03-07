@@ -22,6 +22,10 @@
     "min_distinct_tasks": 3,
     "emit_throttle_sec": 120.0,
     "severity": "HIGH",
-    "group_by_fields": ["watchdog_name", "reason_code", "alert_category"]
+    "group_by_fields": ["watchdog_name", "reason_code", "alert_category"],
+    "dedup_window_sec": 30.0,
+    "throttle_window_sec": 60.0,
+    "max_alerts_per_key": 1,
+    "dedup_key_fields": ["watchdog_name", "aggregated_group_key", "reason_code"]
   }
 }

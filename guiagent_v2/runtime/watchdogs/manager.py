@@ -85,6 +85,8 @@ class WatchdogManager:
                 agg_severity_rank = _SEVERITY_RANK.get(agg_severity, _SEVERITY_RANK["LOW"])
                 if agg_severity_rank < min_severity_rank:
                     continue
+                if not self._allow_aggregated_alert(aggregated, policy):
+                    continue
                 alerts.append(aggregated)
         return alerts
 
@@ -262,6 +264,31 @@ class WatchdogManager:
         if not parts:
             parts.append(f"watchdog_name={alert.get('watchdog_name')}")
         return "|".join(parts)
+
+    def _allow_aggregated_alert(self, alert: dict[str, Any], policy: dict[str, Any]) -> bool:
+        cfg = policy.get("cross_task_aggregation")
+        if not isinstance(cfg, dict):
+            return self._allow_alert(alert, policy)
+
+        aggregate_policy = dict(policy)
+        aggregate_policy["dedup_window_sec"] = cfg.get(
+            "dedup_window_sec",
+            aggregate_policy.get("dedup_window_sec", 0.0),
+        )
+        aggregate_policy["throttle_window_sec"] = cfg.get(
+            "throttle_window_sec",
+            aggregate_policy.get("throttle_window_sec", 0.0),
+        )
+        aggregate_policy["max_alerts_per_key"] = cfg.get(
+            "max_alerts_per_key",
+            aggregate_policy.get("max_alerts_per_key", 1),
+        )
+        dedup_fields = cfg.get("dedup_key_fields")
+        if isinstance(dedup_fields, list):
+            normalized_fields = [str(item).strip() for item in dedup_fields if str(item).strip()]
+            if normalized_fields:
+                aggregate_policy["dedup_key_fields"] = normalized_fields
+        return self._allow_alert(alert, aggregate_policy)
 
     def _allow_alert(self, alert: dict[str, Any], policy: dict[str, Any]) -> bool:
         dedup_key = self._build_dedup_key(alert, policy)

@@ -37,6 +37,10 @@ class TestWatchdogPolicy(unittest.TestCase):
                     "emit_throttle_sec": "30",
                     "severity": "critical",
                     "group_by_fields": ["watchdog_name", "reason_code"],
+                    "dedup_window_sec": "45",
+                    "throttle_window_sec": "90",
+                    "max_alerts_per_key": "2",
+                    "dedup_key_fields": ["watchdog_name", "aggregated_group_key"],
                 },
             }
         )
@@ -57,6 +61,13 @@ class TestWatchdogPolicy(unittest.TestCase):
         self.assertEqual(policy["cross_task_aggregation"]["emit_throttle_sec"], 30.0)
         self.assertEqual(policy["cross_task_aggregation"]["severity"], "CRITICAL")
         self.assertEqual(policy["cross_task_aggregation"]["group_by_fields"], ["watchdog_name", "reason_code"])
+        self.assertEqual(policy["cross_task_aggregation"]["dedup_window_sec"], 45.0)
+        self.assertEqual(policy["cross_task_aggregation"]["throttle_window_sec"], 90.0)
+        self.assertEqual(policy["cross_task_aggregation"]["max_alerts_per_key"], 2)
+        self.assertEqual(
+            policy["cross_task_aggregation"]["dedup_key_fields"],
+            ["watchdog_name", "aggregated_group_key"],
+        )
 
     def test_loader_from_file(self):
         with tempfile.TemporaryDirectory() as td:

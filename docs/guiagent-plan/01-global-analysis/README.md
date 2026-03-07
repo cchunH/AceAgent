@@ -27,3 +27,6 @@
 
 8. [post-r3-gap-review-and-next-plan-v1.md](./post-r3-gap-review-and-next-plan-v1.md)  
    R3/R4 实装后的差距审查与下一阶段深度规划（P0/P1/P2 + 3 轮迭代计划）。
+
+9. [post-r4-deep-assessment-and-next-plan-v2.md](./post-r4-deep-assessment-and-next-plan-v2.md)  
+   代码与文档深度对齐审查后的新计划（R5-R8：治理硬化、Web 执行增强、控制面数据面、跨节点会话治理）。

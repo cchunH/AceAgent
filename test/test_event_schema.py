@@ -108,6 +108,27 @@ class TestEventSchema(unittest.TestCase):
         self.assertTrue(valid)
         self.assertEqual(detail["code"], "OK")
 
+    def test_event_bus_strict_schema_raises_and_skips_write(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "events.jsonl")
+            bus = JSONLEventBus(
+                p,
+                default_chain_mode="guiagent_v2",
+                strict_schema=True,
+            )
+            with self.assertRaises(ValueError):
+                bus.emit(
+                    {
+                        "run_id": "r4",
+                        "task_id": "t4",
+                        "step_id": 1,
+                        "event_type": "guard_decision",
+                        "status": "SUCCESS",
+                        "intent_key": "global:TAP:SEARCH",
+                    }
+                )
+            self.assertFalse(os.path.exists(p))
+
 
 if __name__ == "__main__":
     unittest.main()

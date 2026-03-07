@@ -42,6 +42,12 @@ docs/guiagent-plan/
 7. [guiagent-refactor-recommendation-final-v1.md](./01-global-analysis/guiagent-refactor-recommendation-final-v1.md)  
    改造正式推荐与迁移说明（运行模式、快轨下线、控制面接入点）。
 
+8. [post-r3-gap-review-and-next-plan-v1.md](./01-global-analysis/post-r3-gap-review-and-next-plan-v1.md)  
+   R3/R4 实装后的差距审查与三轮迭代规划。
+
+9. [post-r4-deep-assessment-and-next-plan-v2.md](./01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md)  
+   新一轮代码-文档深度审查与 R5-R8 推进计划（治理硬化优先）。
+
 ## 2) 分阶段实施（02-phase-0）
 
 1. [phase0-execution-checklist.md](./02-phase-0/phase0-execution-checklist.md)  

@@ -75,6 +75,46 @@ class TestRuntimeStatusApi(unittest.TestCase):
         )
         self.assertEqual(store.list_run_ids(), ["run-a", "run-z"])
 
+    def test_timeline_cap_drops_old_events(self):
+        store = TaskStatusStore(max_timeline_events_per_task=2)
+        store.update(
+            {
+                "run_id": "run-cap",
+                "task_id": "t-cap",
+                "event_type": "task_start",
+                "status": "RUNNING",
+                "ts": "2026-03-07T11:00:00Z",
+            }
+        )
+        store.update(
+            {
+                "run_id": "run-cap",
+                "task_id": "t-cap",
+                "event_type": "step_start",
+                "status": "RUNNING",
+                "ts": "2026-03-07T11:00:01Z",
+            }
+        )
+        store.update(
+            {
+                "run_id": "run-cap",
+                "task_id": "t-cap",
+                "event_type": "task_end",
+                "status": "SUCCESS",
+                "ts": "2026-03-07T11:00:02Z",
+            }
+        )
+
+        timeline = store.get_task_timeline("run-cap", "t-cap")
+        self.assertEqual(len(timeline), 2)
+        self.assertEqual(timeline[0]["event_type"], "step_start")
+        self.assertEqual(timeline[1]["event_type"], "task_end")
+
+        status = store.get_task_status("run-cap", "t-cap")
+        self.assertIsNotNone(status)
+        self.assertEqual(status["event_count"], 3)
+        self.assertEqual(status["timeline_dropped"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
