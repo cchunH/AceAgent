@@ -209,7 +209,7 @@ while True:
 - `action_registry.py`: 动作注册、参数校验、分发统一入口。
 - `guard_policy.py`: 执行前 allow/deny/confirm 门禁决策。
 - `policy_loader.py`: GuardPolicy 文件化配置加载与缓存重载。
-- `v2_executor.py`: `guiagent_v2(_shadow)` probe 执行链（含 web fallback 到 mobile_native）。
+- `v2_executor.py`: `guiagent_v2(_shadow)` 执行链，支持 Web 多步执行 v1（`web_plan/web_step_*`）与失败回退到 `mobile_native`。
 - `loop_detector.py` + `context_compaction.py`: 循环检测与上下文压缩治理能力。
 - `task_service.py` + `session_runtime.py`: 任务提交、状态查询、会话级隔离调度（进程内 v0）。
 - `session_runtime_server.py`: SessionRuntime 本地 HTTP IPC 控制面（session/task/status/timeline）。
@@ -231,6 +231,9 @@ while True:
 - `loop_warning`
 - `context_compaction`
 - `watchdog_alert`
+- `web_plan`
+- `web_step_start`
+- `web_step_end`
 
 可选运行参数（v2）：
 - `--v2_skip_legacy`

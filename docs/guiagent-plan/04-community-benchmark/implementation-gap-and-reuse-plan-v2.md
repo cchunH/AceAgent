@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.6`
+- 版本：`v2.7`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 
@@ -41,8 +41,8 @@
 
 5. `v2_executor` 探针链路
 - 证据模块：`guiagent_v2/runtime/v2_executor.py`
-- 现状：已形成 `skill_route -> guard_decision -> dispatch -> adapter_call -> skill_fallback` 闭环。
-- 距离评估：`部分完成（probe 级）`
+- 现状：已形成 `skill_route -> guard_decision -> web_plan/web_step -> adapter_call -> skill_fallback` 闭环。
+- 距离评估：`部分完成（多步 v1）`
 
 6. 运行入口参数
 - 证据模块：`run.py`, `guiagent_v2/runtime/orchestrator_v2.py`
@@ -115,9 +115,9 @@
 
 3. Web 子任务闭环
 - 证据模块：`v2_executor.py`, `agent_browser_skill.py`
-- 现状：可走 web probe 与 fallback。
+- 现状：可走启发式 web 多步执行 v1 与 fallback。
 - 距离评估：`部分完成`
-- 关键差距：未接入真实多步任务编排与生产级会话生命周期管理。
+- 关键差距：未接入复杂网页任务规划与回溯策略；缺少步骤级学习反馈。
 
 ### 2.3 未落地（待实施）
 

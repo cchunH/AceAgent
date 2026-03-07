@@ -27,6 +27,12 @@ _WEB_HINTS = (
     "web",
     "h5",
 )
+_WEB_SNAPSHOT_HINTS = (
+    "snapshot",
+    "截图",
+    "检查",
+    "校验",
+)
 
 
 @dataclass
@@ -159,6 +165,42 @@ def _normalize_step_status(status: str) -> str:
     return "FAILED"
 
 
+def _build_web_execution_plan(
+    instruction: str,
+    route_context: dict[str, Any],
+    max_steps: int,
+) -> list[dict[str, Any]]:
+    max_steps = max(1, int(max_steps))
+    text = str(instruction or "").strip().lower()
+    base_task = route_context.get("web_task")
+    if not isinstance(base_task, dict):
+        base_task = {"action": "snapshot", "interactive": True}
+
+    plan: list[dict[str, Any]] = []
+    action_name = str(base_task.get("action", "snapshot")).strip().lower()
+    if action_name == "open":
+        url = str(base_task.get("url", "")).strip()
+        if url:
+            plan.append({"action": "open", "url": url})
+        else:
+            plan.append({"action": "snapshot", "interactive": True})
+        if len(plan) < max_steps:
+            plan.append({"action": "snapshot", "interactive": True})
+    elif action_name:
+        plan.append(dict(base_task))
+    else:
+        plan.append({"action": "snapshot", "interactive": True})
+
+    if len(plan) < max_steps and any(hint in text for hint in _WEB_SNAPSHOT_HINTS):
+        plan.append({"action": "snapshot", "interactive": True})
+
+    deduped: list[dict[str, Any]] = []
+    for task in plan:
+        if not deduped or deduped[-1] != task:
+            deduped.append(task)
+    return deduped[:max_steps]
+
+
 def run_probe_step(
     instruction: str,
     run_id: str,
@@ -175,6 +217,7 @@ def run_probe_step(
     context_compactor: ContextCompactor | None = None,
     screen_width: int = 1080,
     screen_height: int = 2340,
+    web_max_steps: int = 3,
 ) -> V2ProbeResult:
     loop_detector = loop_detector or LoopDetector()
     context_compactor = context_compactor or ContextCompactor()
@@ -343,54 +386,130 @@ def run_probe_step(
     registry = build_default_action_registry(pipeline=pipeline, web_skill=web_skill)
 
     dispatch_name = "web_skill_agent_browser" if route_info.get("channel") == "web_skill" else "mobile_native_shadow"
-    payload: dict[str, Any]
-    if dispatch_name == "web_skill_agent_browser":
-        payload = {
-            "web_task": route_context.get("web_task") or {"action": "snapshot", "interactive": True},
-            "session_id": runtime_session_id or task_id,
-        }
-    else:
-        payload = {
-            "legacy_action": action_obj,
-            "step_context": step_context,
-        }
-
-    try:
-        exec_result = registry.dispatch(dispatch_name, payload, context={})
-    except Exception as exc:
-        exec_result = {
-            "status": "FAILED",
-            "assertion_result": {"passed": False, "reason_code": "EXEC_DISPATCH_ERROR"},
-            "post_check": {"passed": False, "reason_code": "EXEC_DISPATCH_ERROR"},
-            "recovery_level": "L3",
-            "latency_ms": 0,
-            "adapter_call": {
-                "success": False,
-                "error": str(exc),
-            },
-        }
-
     final_route_info = dict(route_info)
     if route_info.get("channel") == "web_skill":
-        adapter_call = exec_result.get("adapter_call", {})
-        adapter_success = bool(adapter_call.get("success", False))
+        web_plan = _build_web_execution_plan(
+            instruction=instruction,
+            route_context=route_context,
+            max_steps=web_max_steps,
+        )
         _emit(
             {
                 "run_id": run_id,
                 "task_id": task_id,
                 "step_id": step_id,
                 "chain_mode": chain_mode,
-                "event_type": "adapter_call",
-                "status": "SUCCESS" if adapter_success else "FAILED",
+                "event_type": "web_plan",
+                "status": "SUCCESS",
                 "intent_key": request.intent_key,
-                "adapter_backend": "agent-browser",
-                "adapter_session_id": str(exec_result.get("session_id", runtime_session_id or task_id)),
-                "error": adapter_call.get("error"),
+                "web_step_count": len(web_plan),
+                "web_plan": web_plan,
                 **route_info,
             }
         )
 
-        if not adapter_success:
+        last_result: dict[str, Any] | None = None
+        failed_reason = "WEB_SKILL_EXEC_FAILED"
+        failed_on_web_step = 0
+        total_latency_ms = 0
+        for idx, web_task in enumerate(web_plan, start=1):
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "web_step_start",
+                    "status": "RUNNING",
+                    "intent_key": request.intent_key,
+                    "web_step_index": idx,
+                    "web_step_count": len(web_plan),
+                    "web_step_task": dict(web_task),
+                    **route_info,
+                }
+            )
+            try:
+                step_result = registry.dispatch(
+                    "web_skill_agent_browser",
+                    {
+                        "web_task": dict(web_task),
+                        "session_id": runtime_session_id or task_id,
+                    },
+                    context={},
+                )
+            except Exception as exc:
+                step_result = {
+                    "status": "FAILED",
+                    "assertion_result": {"passed": False, "reason_code": "EXEC_DISPATCH_ERROR"},
+                    "post_check": {"passed": False, "reason_code": "EXEC_DISPATCH_ERROR"},
+                    "recovery_level": "L3",
+                    "latency_ms": 0,
+                    "adapter_call": {
+                        "success": False,
+                        "error": str(exc),
+                    },
+                    "session_id": runtime_session_id or task_id,
+                }
+
+            last_result = step_result
+            step_latency_ms = int(step_result.get("latency_ms", 0) or 0)
+            total_latency_ms += step_latency_ms
+            adapter_call = step_result.get("adapter_call", {})
+            adapter_success = bool(adapter_call.get("success", False))
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "adapter_call",
+                    "status": "SUCCESS" if adapter_success else "FAILED",
+                    "intent_key": request.intent_key,
+                    "adapter_backend": "agent-browser",
+                    "adapter_session_id": str(step_result.get("session_id", runtime_session_id or task_id)),
+                    "error": adapter_call.get("error"),
+                    "web_step_index": idx,
+                    "web_step_count": len(web_plan),
+                    "web_step_task": dict(web_task),
+                    **route_info,
+                }
+            )
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "web_step_end",
+                    "status": "SUCCESS" if adapter_success else "FAILED",
+                    "intent_key": request.intent_key,
+                    "latency_ms": step_latency_ms,
+                    "web_step_index": idx,
+                    "web_step_count": len(web_plan),
+                    "web_step_task": dict(web_task),
+                    **route_info,
+                }
+            )
+
+            if not adapter_success:
+                failed_reason = str(adapter_call.get("error") or "WEB_SKILL_EXEC_FAILED")
+                failed_on_web_step = idx
+                break
+
+        if last_result is None:
+            exec_result = {
+                "status": "FAILED",
+                "assertion_result": {"passed": False, "reason_code": "WEB_PLAN_EMPTY"},
+                "post_check": {"passed": False, "reason_code": "WEB_PLAN_EMPTY"},
+                "recovery_level": "L3",
+                "latency_ms": 0,
+                "adapter_call": {"success": False, "error": "WEB_PLAN_EMPTY"},
+            }
+        else:
+            exec_result = dict(last_result)
+            exec_result["latency_ms"] = total_latency_ms
+
+        if str(exec_result.get("status", "")).upper() != "SUCCESS":
             _emit(
                 {
                     "run_id": run_id,
@@ -401,7 +520,8 @@ def run_probe_step(
                     "status": "HANDOVER",
                     "intent_key": request.intent_key,
                     "fallback_to": "mobile_native",
-                    "reason_code": str(adapter_call.get("error") or "WEB_SKILL_EXEC_FAILED"),
+                    "reason_code": failed_reason,
+                    "failed_on_web_step": failed_on_web_step,
                     **route_info,
                 }
             )
@@ -418,6 +538,28 @@ def run_probe_step(
                 "channel": "mobile_native",
                 "route_reason": "skill_fallback_to_mobile_native",
                 "skill_name": route_info.get("skill_name"),
+            }
+    else:
+        try:
+            exec_result = registry.dispatch(
+                dispatch_name,
+                {
+                    "legacy_action": action_obj,
+                    "step_context": step_context,
+                },
+                context={},
+            )
+        except Exception as exc:
+            exec_result = {
+                "status": "FAILED",
+                "assertion_result": {"passed": False, "reason_code": "EXEC_DISPATCH_ERROR"},
+                "post_check": {"passed": False, "reason_code": "EXEC_DISPATCH_ERROR"},
+                "recovery_level": "L3",
+                "latency_ms": 0,
+                "adapter_call": {
+                    "success": False,
+                    "error": str(exc),
+                },
             }
 
     status = _normalize_step_status(exec_result.get("status", "FAILED"))

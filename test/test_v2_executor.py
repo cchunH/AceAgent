@@ -10,9 +10,11 @@ from guiagent_v2.runtime.web_skill_router import WebSkillRouter
 
 
 class _FakeWebSkill:
-    def __init__(self, success=True, error=None):
+    def __init__(self, success=True, error=None, success_sequence=None, error_sequence=None):
         self.success = success
         self.error = error
+        self.success_sequence = list(success_sequence) if success_sequence is not None else None
+        self.error_sequence = list(error_sequence) if error_sequence is not None else None
         self.calls = []
 
     def invoke(self, task, session=None, constraints=None):
@@ -23,11 +25,18 @@ class _FakeWebSkill:
                 "constraints": constraints,
             }
         )
+        idx = len(self.calls) - 1
+        success = self.success
+        error = self.error
+        if self.success_sequence is not None and idx < len(self.success_sequence):
+            success = bool(self.success_sequence[idx])
+        if self.error_sequence is not None and idx < len(self.error_sequence):
+            error = self.error_sequence[idx]
         return {
-            "success": self.success,
+            "success": success,
             "result": {"task": task},
             "trace": [],
-            "error": self.error,
+            "error": error,
             "raw": {},
         }
 
@@ -92,12 +101,20 @@ class TestV2Executor(unittest.TestCase):
         self.assertEqual(result.channel, "web_skill")
         self.assertEqual(result.status, "SUCCESS")
         event_types = [e["event_type"] for e in events]
+        self.assertIn("web_plan", event_types)
+        self.assertIn("web_step_start", event_types)
+        self.assertIn("web_step_end", event_types)
         self.assertIn("adapter_call", event_types)
         self.assertNotIn("skill_fallback", event_types)
+        self.assertGreaterEqual(len(web_skill.calls), 2)
 
     def test_run_probe_web_failed_then_fallback(self):
         events = []
-        web_skill = _FakeWebSkill(success=False, error="CLI_NOT_FOUND")
+        web_skill = _FakeWebSkill(
+            success=True,
+            success_sequence=[True, False],
+            error_sequence=[None, "CLI_NOT_FOUND"],
+        )
 
         result = run_probe_step(
             instruction="open https://example.com",
@@ -119,6 +136,8 @@ class TestV2Executor(unittest.TestCase):
         self.assertIn("adapter_call", event_types)
         self.assertIn("skill_fallback", event_types)
         self.assertIn("step_end", event_types)
+        self.assertIn("web_step_end", event_types)
+        self.assertGreaterEqual(len(web_skill.calls), 2)
 
     def test_run_probe_emits_loop_warning_when_repeated(self):
         events = []
