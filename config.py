@@ -84,7 +84,6 @@ class Models:
         "NOTETAKER": os.environ.get("NOTETAKER_MODEL", "gpt-4o"),
         "EVOLUTION": os.environ.get("EVOLUTION_MODEL", "gpt-4o"),
         "JSON_REPAIR": os.environ.get("JSON_REPAIR_MODEL", "gpt-4o-mini"),
-        "FAST_TRACK_EXECUTOR": os.environ.get("FAST_TRACK_EXECUTOR_MODEL", "gpt-4o"),
         "DEFAULT": "gpt-4o"
     }
     
@@ -95,7 +94,6 @@ class Models:
         "NOTETAKER": os.environ.get("NOTETAKER_MODEL", "Qwen/Qwen2.5-VL-32B-Instruct"),
         "EVOLUTION": os.environ.get("EVOLUTION_MODEL", "Qwen/Qwen2.5-32B-Instruct"),
         "JSON_REPAIR": os.environ.get("JSON_REPAIR_MODEL", "Qwen/Qwen3-8B"),
-        "FAST_TRACK_EXECUTOR": os.environ.get("FAST_TRACK_EXECUTOR_MODEL", "Qwen/Qwen2.5-VL-32B-Instruct"),
         "DEFAULT": "Qwen/Qwen2.5-VL-32B-Instruct"
     }
     
@@ -126,9 +124,6 @@ class Models:
     
     @property
     def JSON_REPAIR(self): return self._current_models["JSON_REPAIR"]
-    
-    @property
-    def FAST_TRACK_EXECUTOR(self): return self._current_models["FAST_TRACK_EXECUTOR"]
     
     @property
     def DEFAULT(self): return self._current_models["DEFAULT"]
@@ -202,5 +197,4 @@ print(f"  - Verifier: {models.VERIFIER}")
 print(f"  - Notetaker: {models.NOTETAKER}")
 print(f"  - Evolution Engine: {models.EVOLUTION}")
 print(f"  - JSON Repair: {models.JSON_REPAIR}")
-print(f"  - Fast Track Executor: {models.FAST_TRACK_EXECUTOR}")
 print(f"  - Perceptor Caption Model: {models.Perceptor.CAPTION_MODEL}")

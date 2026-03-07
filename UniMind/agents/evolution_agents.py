@@ -77,13 +77,12 @@ class SkillLearningCore(BaseAgent):
         prompt += "---\n"
         prompt += "Carefully reflect on the interaction history of the current task. Check if there are any subgoals that are accomplished by a sequence of successful actions and can be consolidated into new \"Skills\" to improve efficiency for future tasks? These skills are subroutines consisting of a series of atomic actions that can be executed under specific preconditions. For example, tap, type and enter text in a search bar or creating a new note in Notes.\n\n"
         
-        # 双轨制系统技能学习
-        prompt += "### 双轨制系统技能学习 ###\n"
+        prompt += "### 关键学习关注点 ###\n"
         prompt += "请特别关注以下方面：\n"
-        prompt += "1. 高速通道成功执行的操作序列，这些是高效技能的重要来源\n"
-        prompt += "2. 专家轨道解决复杂问题的操作模式，这些可以转化为高级技能\n"
-        prompt += "3. 两个轨道之间的切换点，这些地方往往需要特殊的技能组合\n"
-        prompt += "4. 如何设计既能快速执行又能保证成功率的复合技能\n\n"
+        prompt += "1. 高成功率操作序列，可抽象为可复用技能\n"
+        prompt += "2. 复杂问题解决模式，可沉淀为高级技能\n"
+        prompt += "3. 失败后的恢复动作组合，可形成稳健技能模板\n"
+        prompt += "4. 兼顾效率和成功率的复合技能设计\n\n"
 
         prompt += "Provide your output in the following format:\n\n"
 
@@ -165,15 +164,13 @@ class HeuristicsLearningCore(BaseAgent):
         prompt += "---\n"
         prompt += "Carefully reflect on the interaction history of the current task. Check if there are any general heuristics that might be useful for handling future tasks, such as advice on preventing certain common errors?\n\n"
         
-        # 双轨制系统特殊分析
-        prompt += "### 双轨制系统分析 ###\n"
-        prompt += "请重点分析那些导致从高速通道切换到专家会诊的失败案例，并总结出能避免未来发生类似切换的启发性规则。这些案例是我们学习和改进的关键。\n\n"
-        
+        prompt += "### 失败与恢复分析 ###\n"
+        prompt += "请重点分析失败案例和恢复过程，总结能提升稳定性的启发式规则。\n\n"
         prompt += "分析要点：\n"
-        prompt += "1. 高速通道失败的原因分析\n"
-        prompt += "2. 专家轨道成功的关键因素\n"
-        prompt += "3. 如何优化高速通道以避免切换\n"
-        prompt += "4. 双轨制系统的协同优化策略\n\n"
+        prompt += "1. 失败的主要原因\n"
+        prompt += "2. 成功恢复的关键因素\n"
+        prompt += "3. 如何在前置判断中规避失败\n"
+        prompt += "4. 如何减少重复错误\n\n"
 
         prompt += "Provide your output in the following format:\n\n"
 
@@ -249,136 +246,4 @@ class ExperienceRetrieverHeuristics(BaseAgent):
     def parse_response(self, response: str) -> dict:
         selected_heuristics = response.split("### Selected Heuristics ###")[-1].replace("\n", " ").replace("  ", " ").strip()        
         return {"selected_heuristics": selected_heuristics}
-
-
-# 双轨制系统进化学习工具函数
-def analyze_dual_track_performance(info_pool: InfoPool) -> dict:
-    """分析双轨制系统的性能表现"""
-    analysis = {
-        "fast_track_success_rate": 0.0,
-        "expert_track_usage": 0,
-        "track_switches": 0,
-        "learning_opportunities": []
-    }
-    
-    # 分析轨道切换情况
-    if hasattr(info_pool, 'action_history') and info_pool.action_history:
-        total_actions = len(info_pool.action_history)
-        successful_actions = sum(1 for outcome in info_pool.action_outcomes if outcome == "A")
-        
-        if total_actions > 0:
-            analysis["fast_track_success_rate"] = successful_actions / total_actions
-    
-    # 识别学习机会
-    if hasattr(info_pool, 'error_descriptions') and info_pool.error_descriptions:
-        for error in info_pool.error_descriptions:
-            if "高速通道" in error or "Fast Track" in error:
-                analysis["learning_opportunities"].append({
-                    "type": "fast_track_failure",
-                    "description": error,
-                    "suggestion": "优化高速通道决策逻辑"
-                })
-    
-    return analysis
-
-
-def generate_dual_track_insights(info_pool: InfoPool) -> str:
-    """生成双轨制系统的洞察报告"""
-    insights = []
-    
-    # 分析成功模式
-    if hasattr(info_pool, 'action_history') and info_pool.action_history:
-        successful_sequences = []
-        current_sequence = []
-        
-        for i, outcome in enumerate(info_pool.action_outcomes):
-            if outcome == "A":
-                current_sequence.append(info_pool.action_history[i])
-            else:
-                if len(current_sequence) > 1:
-                    successful_sequences.append(current_sequence)
-                current_sequence = []
-        
-        if current_sequence and len(current_sequence) > 1:
-            successful_sequences.append(current_sequence)
-        
-        if successful_sequences:
-            insights.append(f"发现 {len(successful_sequences)} 个成功的操作序列")
-    
-    # 分析失败模式
-    if hasattr(info_pool, 'error_descriptions') and info_pool.error_descriptions:
-        error_patterns = {}
-        for error in info_pool.error_descriptions:
-            error_type = "未知错误"
-            if "坐标" in error or "position" in error:
-                error_type = "坐标错误"
-            elif "文字" in error or "text" in error:
-                error_type = "文字识别错误"
-            elif "图标" in error or "icon" in error:
-                error_type = "图标识别错误"
-            
-            error_patterns[error_type] = error_patterns.get(error_type, 0) + 1
-        
-        for error_type, count in error_patterns.items():
-            insights.append(f"{error_type}: {count} 次")
-    
-    return "\n".join(insights) if insights else "暂无特殊洞察"
-
-
-def optimize_dual_track_strategy(info_pool: InfoPool) -> dict:
-    """优化双轨制策略"""
-    optimization = {
-        "fast_track_threshold": 0.8,  # 高速通道成功率阈值
-        "expert_track_trigger": ["连续失败", "复杂操作", "未知状态"],
-        "learning_focus": []
-    }
-    
-    # 根据历史表现调整阈值
-    if hasattr(info_pool, 'action_outcomes') and info_pool.action_outcomes:
-        recent_outcomes = info_pool.action_outcomes[-10:]  # 最近10次操作
-        if recent_outcomes:
-            success_rate = sum(1 for o in recent_outcomes if o == "A") / len(recent_outcomes)
-            if success_rate < 0.6:
-                optimization["fast_track_threshold"] = 0.9  # 提高阈值
-                optimization["learning_focus"].append("提高高速通道成功率")
-            elif success_rate > 0.9:
-                optimization["fast_track_threshold"] = 0.7  # 降低阈值
-                optimization["learning_focus"].append("优化专家轨道使用策略")
-    
-    return optimization
-
-
-# 测试函数
-def test_dual_track_evolution():
-    """测试双轨制进化学习系统"""
-    print("=== 测试双轨制进化学习系统 ===")
-    
-    # 创建模拟的InfoPool
-    from .base import InfoPool
-    
-    mock_info_pool = InfoPool(
-        instruction="测试任务",
-        action_history=[{"name": "Tap", "arguments": {"x": 100, "y": 200}}],
-        action_outcomes=["A"],
-        error_descriptions=["高速通道失败：坐标错误"],
-        progress_status="进行中"
-    )
-    
-    # 测试分析函数
-    analysis = analyze_dual_track_performance(mock_info_pool)
-    print(f"性能分析: {analysis}")
-    
-    # 测试洞察生成
-    insights = generate_dual_track_insights(mock_info_pool)
-    print(f"洞察报告: {insights}")
-    
-    # 测试策略优化
-    optimization = optimize_dual_track_strategy(mock_info_pool)
-    print(f"策略优化: {optimization}")
-    
-    print("双轨制进化学习系统测试完成")
-
-
-if __name__ == "__main__":
-    test_dual_track_evolution()
 
