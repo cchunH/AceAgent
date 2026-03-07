@@ -1,5 +1,11 @@
 # 风险点与优化建议
 
+## 关联阅读
+
+- 深度总报告：[`deep-system-audit-report.md`](./deep-system-audit-report.md)
+- 设计权衡：[`system-tradeoff-analysis.md`](./system-tradeoff-analysis.md)
+- 模块定位：[`module-locator-index.md`](./module-locator-index.md)
+
 ## P0（应优先处理）
 
 1. 密钥安全风险  
@@ -48,4 +54,3 @@
 1. 先做密钥治理 + 非交互运行 + 双轨参数化（风险收益比最高）  
 2. 再做线程收尾与耗时日志修正  
 3. 最后推进状态机重构与结构化 schema
-

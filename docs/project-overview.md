@@ -1,5 +1,11 @@
 # 项目总览与架构
 
+## 关联阅读
+
+- 深度总报告：[`deep-system-audit-report.md`](./deep-system-audit-report.md)
+- Agent 深潜：[`agent-architecture-deep-dive.md`](./agent-architecture-deep-dive.md)
+- 模块定位：[`module-locator-index.md`](./module-locator-index.md)
+
 ## 1. 项目定位
 
 Uni-Mind 是一个“面向移动设备自动操作”的多智能体系统。输入是自然语言任务，输出是 Android 设备上的一系列 ADB 操作与任务日志。
@@ -56,4 +62,3 @@ run.py
 - 强容错：动作 JSON 先走规则修复，再可选调用轻量模型修复。
 - 可进化：任务完成后将成功经验沉淀为“技能”和“启发式规则”。
 - 可降级：快轨失败会回落到专家轨，保证任务鲁棒性。
-

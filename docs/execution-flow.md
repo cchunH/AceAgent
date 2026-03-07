@@ -1,5 +1,11 @@
 # 任务执行流程（端到端）
 
+## 关联阅读
+
+- 总览：[`project-overview.md`](./project-overview.md)
+- 深度总报告：[`deep-system-audit-report.md`](./deep-system-audit-report.md)
+- 模块定位：[`module-locator-index.md`](./module-locator-index.md)
+
 ## 1. 入口流程
 
 `run.py` 负责参数解析与模式分发：
@@ -75,4 +81,3 @@
 并在需要时更新：
 - `persistent_heuristics.txt`
 - `persistent_skills.json`
-

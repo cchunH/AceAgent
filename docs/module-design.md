@@ -1,5 +1,11 @@
 # 模块设计详解
 
+## 关联阅读
+
+- Agent 深潜：[`agent-architecture-deep-dive.md`](./agent-architecture-deep-dive.md)
+- 设计权衡：[`system-tradeoff-analysis.md`](./system-tradeoff-analysis.md)
+- 模块定位：[`module-locator-index.md`](./module-locator-index.md)
+
 ## 1. Orchestrator（编排层）
 
 职责：
@@ -83,4 +89,3 @@
 
 图标描述路径：
 - 图标裁剪后并发调用 `process_image` -> `get_model_api_response`
-

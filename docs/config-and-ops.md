@@ -1,5 +1,11 @@
 # 配置、运行与产物
 
+## 关联阅读
+
+- 总览：[`project-overview.md`](./project-overview.md)
+- 执行流程：[`execution-flow.md`](./execution-flow.md)
+- 模块定位：[`module-locator-index.md`](./module-locator-index.md)
+
 ## 1. 配置入口
 
 统一配置在 `config.py`，分为四类：
@@ -86,4 +92,3 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 - Android 设备开启 USB 调试并可被 `adb devices` 识别
 - 建议安装并激活 ADB Keyboard（用于 `Type` 稳定输入）
 - 首次运行会下载感知模型，需保证网络与磁盘空间
-

@@ -1,0 +1,23 @@
+# 01 Global Analysis
+
+本目录存放 GUIAgent 的全局分析类文档，用于“先判断方向，再落实施工”。
+
+## 文件
+
+1. [guiagent-feasibility-report.md](./guiagent-feasibility-report.md)  
+   可行性评估。
+
+2. [guiagent-gap-mapping-report.md](./guiagent-gap-mapping-report.md)  
+   与现有 Uni-Mind 的差距映射。
+
+3. [guiagent-implementation-decision-report.md](./guiagent-implementation-decision-report.md)  
+   实施路径决策（迭代/重构/混合）。
+
+4. [guiagent-roadmap-report.md](./guiagent-roadmap-report.md)  
+   分阶段路线图。
+
+5. [pre-recommendation-assessment-v1.md](./pre-recommendation-assessment-v1.md)  
+   推荐前评估（Go/No-Go）。
+
+6. [code-doc-practice-assessment-v1.md](./code-doc-practice-assessment-v1.md)  
+   代码与文档实践细节评估（推荐前执行质量审计）。
