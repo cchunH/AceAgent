@@ -27,6 +27,7 @@ from .action_registry import ActionRegistry
 from .context_compaction import ContextCompactor
 from .guard_policy import GuardPolicy
 from .loop_detector import LoopDetector
+from .policy_loader import PolicyLoader
 from .v2_executor import V2ProbeResult, infer_probe_action, run_probe_step
 
 __all__ = [
@@ -54,6 +55,7 @@ __all__ = [
     "ContextCompactor",
     "GuardPolicy",
     "LoopDetector",
+    "PolicyLoader",
     "V2ProbeResult",
     "infer_probe_action",
     "run_probe_step",

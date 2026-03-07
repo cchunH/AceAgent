@@ -207,7 +207,9 @@ while True:
 - `agent_browser_skill.py`: `agent-browser` 外部进程适配器与 `AgentBrowserSkill` 封装。
 - `action_registry.py`: 动作注册、参数校验、分发统一入口。
 - `guard_policy.py`: 执行前 allow/deny/confirm 门禁决策。
+- `policy_loader.py`: GuardPolicy 文件化配置加载与缓存重载。
 - `v2_executor.py`: `guiagent_v2(_shadow)` probe 执行链（含 web fallback 到 mobile_native）。
+- `loop_detector.py` + `context_compaction.py`: 循环检测与上下文压缩治理能力。
 
 当前路由可观测字段：
 - `channel`
@@ -219,6 +221,13 @@ while True:
 - `skill_fallback`
 - `guard_decision`
 - `adapter_call`
+- `loop_warning`
+- `context_compaction`
+
+可选运行参数（v2）：
+- `--v2_skip_legacy`
+- `--guard_policy_path`
+- `--guard_policy_reload_interval`
 
 ## 工作流程详解
 

@@ -445,6 +445,8 @@ def run_single_task_with_runtime(
     screenrecord=False,
     runtime_mode="legacy",
     v2_skip_legacy=False,
+    guard_policy_path=None,
+    guard_policy_reload_interval=1.0,
 ):
     future_tasks = future_tasks or []
     runtime_config = _load_runtime_config()
@@ -462,7 +464,13 @@ def run_single_task_with_runtime(
     )
     blueprint_repo = BlueprintRepository(os.path.join(log_dir, "blueprints.json"))
     router = WebSkillRouter()
-    guard_policy = GuardPolicy()
+    if guard_policy_path:
+        guard_policy = GuardPolicy.from_policy_file(
+            policy_path=str(guard_policy_path),
+            reload_interval_sec=float(guard_policy_reload_interval),
+        )
+    else:
+        guard_policy = GuardPolicy()
     web_skill = AgentBrowserSkill()
     loop_detector = LoopDetector()
     context_compactor = ContextCompactor()

@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "high_risk_tokens": ["PAY", "TRANSFER", "DELETE", "PURCHASE", "SEND", "SUBMIT"],
+  "deny_intent_prefixes": ["global:FORBIDDEN:"],
+  "confirm_intent_prefixes": ["global:PAY:", "global:TRANSFER:"],
+  "deny_actions_by_channel": {
+    "web_skill": ["tap", "swipe", "open_app", "home", "back"]
+  },
+  "allow_actions_by_channel": {
+    "web_skill": ["web_open", "web_snapshot"]
+  },
+  "blocked_mobile_actions_on_web_skill": true
+}

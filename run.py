@@ -18,6 +18,8 @@ import shutil
 def _run_with_mode(runtime_mode: str, **kwargs):
     if runtime_mode == "legacy":
         kwargs.pop("v2_skip_legacy", None)
+        kwargs.pop("guard_policy_path", None)
+        kwargs.pop("guard_policy_reload_interval", None)
         return run_single_task(**kwargs)
     kwargs["runtime_mode"] = runtime_mode
     return run_single_task_with_runtime(**kwargs)
@@ -53,6 +55,18 @@ def main():
         action="store_true",
         default=False,
         help="Only for runtime_mode=guiagent_v2: skip delegating to legacy orchestrator.",
+    )
+    parser.add_argument(
+        "--guard_policy_path",
+        type=str,
+        default=None,
+        help="Optional JSON path for guiagent_v2 guard policy.",
+    )
+    parser.add_argument(
+        "--guard_policy_reload_interval",
+        type=float,
+        default=1.0,
+        help="Reload interval (seconds) for guard policy file checks.",
     )
 
     args = parser.parse_args()
@@ -106,6 +120,8 @@ def main():
                 temperature=args.temperature,
                 screenrecord=args.screenrecord,
                 v2_skip_legacy=args.v2_skip_legacy,
+                guard_policy_path=args.guard_policy_path,
+                guard_policy_reload_interval=args.guard_policy_reload_interval,
             )
         except Exception as e:
             print(f"Failed when doing task: {args.instruction}")
@@ -176,6 +192,8 @@ def main():
                 temperature=args.temperature,
                 screenrecord=args.screenrecord,
                 v2_skip_legacy=args.v2_skip_legacy,
+                guard_policy_path=args.guard_policy_path,
+                guard_policy_reload_interval=args.guard_policy_reload_interval,
             )
             print("\n\nDONE:", task["instruction"])
             print("IMPORTANT: Please reset the device as needed before running the next task!")

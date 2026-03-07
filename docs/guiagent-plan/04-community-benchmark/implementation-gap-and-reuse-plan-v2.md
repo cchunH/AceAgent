@@ -59,6 +59,11 @@
 - 现状：已支持事件窗口压缩，并在 runtime 输出 `context_compaction` 事件。
 - 距离评估：`完成（v0）`
 
+9. `GuardPolicy` 文件化策略
+- 证据模块：`guiagent_v2/runtime/policy_loader.py`, `guiagent_v2/runtime/guard_policy.py`
+- 现状：支持 JSON 策略加载、缓存与手动 reload，运行入口支持策略路径与检查间隔参数。
+- 距离评估：`完成（v0）`
+
 ### 2.2 部分落地（需增强）
 
 1. `SessionRuntime`
@@ -85,9 +90,9 @@
 - 目标来源：`browser-use`（watchdog 基座）
 - 差距：无 crash/security/download 守护插件。
 
-2. Domain Filter / Action Policy 热配置
+2. Domain Filter 与高级 Action Policy 治理
 - 目标来源：`agent-browser`
-- 差距：GuardPolicy 仍是代码常量，未形成文件化策略与热加载。
+- 差距：已具备基础文件化策略，但未实现域名级策略联动与动态策略分层（环境/任务级）。
 
 ## 3. 复用优先级重排（基于已实现状态）
 
@@ -107,7 +112,8 @@
 
 3. `GuardPolicy` 文件化 + 热加载（来自 agent-browser policy 思路）
 - 落位：`guiagent_v2/runtime/policy_loader.py`
-- 验收：支持 `allow/deny/confirm` 规则配置，不改代码即可更新策略。
+- 状态：`已落地 v0`
+- 后续增强：增加分环境策略、域名策略联动、策略冲突检测。
 
 ## P1（P0 稳定后进入）
 
@@ -144,8 +150,9 @@
 
 ### 阶段 R2：策略外置（2-3 天）
 
-1. `GuardPolicy` 改为“默认策略 + 文件策略”组合。
-2. 支持策略 reload（先手动触发，再考虑自动 reload）。
+1. 已完成：`GuardPolicy` 改为“默认策略 + 文件策略”组合。
+2. 已完成：支持策略 reload（`reload_policy()` + 入口参数检查间隔）。
+3. 待继续：加入域名级策略与多层策略合并（全局/任务）。
 
 退出条件：
 - 至少 3 类策略可配置（高风险确认、web 路由阻断、黑名单动作）。

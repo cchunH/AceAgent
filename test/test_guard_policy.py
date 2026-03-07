@@ -1,3 +1,5 @@
+import json
+import tempfile
 import unittest
 
 from guiagent_v2.runtime.guard_policy import GuardPolicy
@@ -32,6 +34,55 @@ class TestGuardPolicy(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "confirm")
         self.assertEqual(result["category"], "risk_control")
+
+    def test_policy_file_confirm_prefix(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "version": "v-test",
+                    "high_risk_tokens": [],
+                    "confirm_intent_prefixes": ["global:WAIT:"],
+                },
+                f,
+                ensure_ascii=False,
+            )
+            f.flush()
+            policy = GuardPolicy.from_policy_file(f.name, reload_interval_sec=0.0)
+            result = policy.decide(
+                "global:WAIT:TASK",
+                {"name": "Wait", "arguments": {}},
+                {"channel": "mobile_native"},
+            )
+            self.assertEqual(result["decision"], "confirm")
+            self.assertEqual(result["reason"], "INTENT_PREFIX_CONFIRM")
+            self.assertEqual(result["policy_version"], "v-test")
+
+    def test_policy_file_reload_to_deny_prefix(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json", encoding="utf-8") as f:
+            json.dump({"version": "v1", "deny_intent_prefixes": []}, f, ensure_ascii=False)
+            f.flush()
+            policy = GuardPolicy.from_policy_file(f.name, reload_interval_sec=0.0)
+            allow = policy.decide(
+                "global:CUSTOM:ACTION",
+                {"name": "Custom", "arguments": {}},
+                {"channel": "mobile_native"},
+            )
+            self.assertEqual(allow["decision"], "allow")
+
+            f.seek(0)
+            f.truncate()
+            json.dump({"version": "v2", "deny_intent_prefixes": ["global:CUSTOM:"]}, f, ensure_ascii=False)
+            f.flush()
+            policy.reload_policy()
+
+            deny = policy.decide(
+                "global:CUSTOM:ACTION",
+                {"name": "Custom", "arguments": {}},
+                {"channel": "mobile_native"},
+            )
+            self.assertEqual(deny["decision"], "deny")
+            self.assertEqual(deny["reason"], "INTENT_PREFIX_DENIED")
+            self.assertEqual(deny["policy_version"], "v2")
 
 
 if __name__ == "__main__":

@@ -289,6 +289,8 @@ def run_probe_step(
             "policy_decision": guard_decision,
             "policy_reason": guard.get("reason"),
             "policy_category": guard.get("category"),
+            "policy_source": guard.get("policy_source"),
+            "policy_version": guard.get("policy_version"),
             **route_info,
         }
     )
