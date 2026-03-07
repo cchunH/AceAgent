@@ -57,6 +57,9 @@
 8. [guiagent-refactor-recommendation-final-v1.md](./guiagent-plan/01-global-analysis/guiagent-refactor-recommendation-final-v1.md)  
    GUIAgent 改造正式推荐与迁移说明。
 
+9. [community benchmark](./guiagent-plan/04-community-benchmark/README.md)  
+   社区标杆项目深度对标（agent-browser + browser-use）与复用落地蓝图。
+
 ## 推荐阅读顺序
 
 1. `deep-system-audit-report`（先建立全局认知）

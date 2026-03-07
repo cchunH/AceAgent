@@ -10,12 +10,14 @@ docs/guiagent-plan/
   01-global-analysis/
   02-phase-0/
   03-governance/
+  04-community-benchmark/
 ```
 
 子目录索引：
 - [01-global-analysis/README.md](./01-global-analysis/README.md)
 - [02-phase-0/README.md](./02-phase-0/README.md)
 - [03-governance/README.md](./03-governance/README.md)
+- [04-community-benchmark/README.md](./04-community-benchmark/README.md)
 
 ## 1) 全局分析（01-global-analysis）
 
@@ -68,8 +70,26 @@ docs/guiagent-plan/
 1. [documentation-standard-v1.md](./03-governance/documentation-standard-v1.md)  
    GUIAgent 文档规范（结构、命名、术语、冻结规则）。
 
+## 4) 社区对标与复用（04-community-benchmark）
+
+1. [agent-browser-deep-analysis.md](./04-community-benchmark/agent-browser-deep-analysis.md)  
+   `agent-browser` 深度分析：IPC、协议校验、安全边界、快照与 diff 能力。
+
+2. [browser-use-deep-analysis.md](./04-community-benchmark/browser-use-deep-analysis.md)  
+   `browser-use` 深度分析：Agent 循环、消息压缩、循环检测、工具注册、watchdog、会话服务。
+
+3. [cross-project-tradeoff-and-patterns.md](./04-community-benchmark/cross-project-tradeoff-and-patterns.md)  
+   两项目横向对比与选型矩阵。
+
+4. [reusable-module-catalog-for-unimind.md](./04-community-benchmark/reusable-module-catalog-for-unimind.md)  
+   面向 Uni-Mind 的 P0/P1/P2 可复用模块目录。
+
+5. [integration-blueprint-v1.md](./04-community-benchmark/integration-blueprint-v1.md)  
+   社区能力集成蓝图（接口草案 + 分阶段实施 + 退出条件）。
+
 ## 推荐阅读顺序
 
 1. 先读 `01-global-analysis/*` 建立全局判断。
 2. 再读 `02-phase-0/*` 进入执行。
-3. 最后用 `03-governance/*` 约束文档与评审流程。
+3. 用 `04-community-benchmark/*` 形成外部能力复用清单。
+4. 最后用 `03-governance/*` 约束文档与评审流程。
