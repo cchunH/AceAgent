@@ -1,6 +1,11 @@
 from typing import Any
 
-from .schema import ExecutionResult, ExecutionRequest, build_intent_key
+from .schema import (
+    ExecutionAssertion,
+    ExecutionResult,
+    ExecutionRequest,
+    build_intent_key,
+)
 
 
 _ACTION_TO_VERB = {
@@ -24,17 +29,33 @@ def map_legacy_action_to_request(
     context = context or {}
     action_obj = action_obj or {"name": "Wait", "arguments": {}}
     action_name = str(action_obj.get("name", "Wait"))
+    arguments = action_obj.get("arguments", {}) or {}
     verb = _ACTION_TO_VERB.get(action_name.lower(), action_name.upper())
     domain = context.get("domain", "global")
     obj = context.get("object", "UNSPECIFIED_TARGET")
     intent_key = build_intent_key(domain, verb, obj)
+    expected_semantics = list(context.get("expected_semantics", []))
+    if not expected_semantics:
+        if action_name.lower() == "type":
+            text = arguments.get("text")
+            if isinstance(text, str) and text.strip():
+                expected_semantics.append(text.strip())
+        elif action_name.lower() == "open_app":
+            app_name = arguments.get("app_name")
+            if isinstance(app_name, str) and app_name.strip():
+                expected_semantics.append(app_name.strip())
 
     return ExecutionRequest(
         intent_key=intent_key,
         action={
             "name": action_name,
-            "arguments": action_obj.get("arguments", {}) or {},
+            "arguments": arguments,
         },
+        assertion=ExecutionAssertion(
+            expected_semantics=expected_semantics,
+            check_region=context.get("check_region"),
+            fail_policy=context.get("fail_policy", "HANDOVER_S2"),
+        ),
         timeout_ms=int(context.get("timeout_ms", 3000)),
         retry_policy={
             "max_retries": int(context.get("max_retries", 0)),
@@ -78,4 +99,3 @@ def map_legacy_outcome_to_result(
         recovery_level=recovery,
         latency_ms=max(0, int(latency_ms)),
     )
-

@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 from guiagent_v2.intent_contract import map_legacy_action_to_request
+from .default_hooks import post_state_check_hook, semantic_pre_assertion_hook
 from .event_bus import JSONLEventBus
 from .hooks import HookManager
 from .pipeline import StepPipeline
@@ -60,7 +61,34 @@ def _map_intent_key(step: dict[str, Any]) -> str:
     return "global:UNKNOWN:UNSPECIFIED_TARGET"
 
 
-def _translate_legacy_step_to_events(step: dict[str, Any]) -> list[dict[str, Any]]:
+def _build_hook_manager() -> HookManager:
+    hooks = HookManager()
+    hooks.register_pre_assertion_hook(semantic_pre_assertion_hook)
+    hooks.register_post_check_hook(post_state_check_hook)
+    return hooks
+
+
+def _build_legacy_context_index(steps: list[dict[str, Any]]) -> dict[str, dict[int, Any]]:
+    perception_by_step: dict[int, Any] = {}
+    action_by_step: dict[int, Any] = {}
+    for step in steps:
+        operation = str(step.get("operation", ""))
+        step_id = int(step.get("step", 0))
+        if operation == "perception":
+            perception_by_step[step_id] = step.get("perception_infos", [])
+        elif operation == "action":
+            action_by_step[step_id] = step
+    return {
+        "perception_by_step": perception_by_step,
+        "action_by_step": action_by_step,
+    }
+
+
+def _translate_legacy_step_to_events(
+    step: dict[str, Any],
+    context_index: dict[str, dict[int, Any]],
+    hooks: HookManager,
+) -> list[dict[str, Any]]:
     operation = str(step.get("operation", "unknown"))
     step_id = int(step.get("step", 0))
     duration = step.get("duration")
@@ -93,23 +121,59 @@ def _translate_legacy_step_to_events(step: dict[str, Any]) -> list[dict[str, Any
         return [event]
 
     if operation == "action_reflection":
+        action_step = context_index.get("action_by_step", {}).get(step_id, {})
+        action_obj = action_step.get("action_object")
+        step_context = {
+            "perception_infos_pre": context_index.get("perception_by_step", {}).get(step_id, []),
+            "perception_infos_post": context_index.get("perception_by_step", {}).get(step_id + 1, []),
+        }
+        request = map_legacy_action_to_request(action_obj, context=step_context)
+        assertion_result = hooks.run_pre_assertion(request, context=step_context)
+        post_check_result = hooks.run_post_check(request, context=step_context)
+
         outcome = str(step.get("outcome", "")).upper()
         success = "A" in outcome
         reason = "OK" if success else str(step.get("error_description", "UNKNOWN_ERROR"))
         status = "SUCCESS" if success else "HANDOVER"
-        recovery = "NONE" if success else ("L2" if "B" in outcome else "L1")
+        if "B" in outcome:
+            recovery = "L2"
+        elif "C" in outcome:
+            recovery = "L1"
+        else:
+            recovery = "NONE" if success else "L3"
+
+        if not success:
+            if "C" in outcome and assertion_result.get("passed", True):
+                assertion_result = {
+                    "passed": False,
+                    "reason_code": "ASSERTION_MISMATCH",
+                }
+            if "B" in outcome and post_check_result.get("passed", True):
+                post_check_result = {
+                    "passed": False,
+                    "reason_code": "POST_CHECK_FAILED",
+                }
 
         events = [
             {
                 "step_id": step_id,
                 "event_type": "assertion",
-                "status": "SUCCESS" if success else "FAILED",
+                "status": "SUCCESS" if assertion_result.get("passed", False) else "FAILED",
                 "intent_key": intent_key,
-                "assertion_result": {"passed": success, "reason_code": reason},
+                "assertion_result": assertion_result,
                 "recovery_level": recovery,
-                "s2_takeover": not success,
+                "s2_takeover": not success or not assertion_result.get("passed", False),
             }
         ]
+        events.append(
+            {
+                "step_id": step_id,
+                "event_type": "post_check",
+                "status": "SUCCESS" if post_check_result.get("passed", False) else "FAILED",
+                "intent_key": intent_key,
+                "post_check": post_check_result,
+            }
+        )
         if not success:
             events.append(
                 {
@@ -125,6 +189,9 @@ def _translate_legacy_step_to_events(step: dict[str, Any]) -> list[dict[str, Any
             "event_type": "step_end",
             "status": status,
             "intent_key": intent_key,
+            "assertion_result": assertion_result,
+            "post_check": post_check_result,
+            "recovery_level": recovery,
         }
         if latency_ms is not None:
             step_end_event["latency_ms"] = latency_ms
@@ -159,9 +226,11 @@ def _emit_events_from_legacy_steps(
         return "FAILED"
 
     final_status = "FAILED"
+    context_index = _build_legacy_context_index(steps)
+    hooks = _build_hook_manager()
 
     for step in steps:
-        translated_events = _translate_legacy_step_to_events(step)
+        translated_events = _translate_legacy_step_to_events(step, context_index, hooks)
         for event in translated_events:
             event["run_id"] = run_id
             event["task_id"] = task_id
@@ -223,9 +292,12 @@ def run_single_task_with_runtime(
     )
 
     if runtime_mode in {"guiagent_v2_shadow", "guiagent_v2"}:
-        hooks = HookManager()
+        hooks = _build_hook_manager()
         pipeline = StepPipeline(hooks=hooks)
-        request, result = pipeline.run_shadow_step({"name": "Wait", "arguments": {}})
+        request, result = pipeline.run_shadow_step(
+            {"name": "Wait", "arguments": {}},
+            context={"perception_infos_pre": [], "perception_infos_post": []},
+        )
         _emit_and_track(
             bus,
             {
@@ -236,6 +308,32 @@ def run_single_task_with_runtime(
                 "status": "RUNNING",
                 "intent_key": request["intent_key"],
                 "request_id": request["request_id"],
+            },
+        )
+        _emit_and_track(
+            bus,
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": 1,
+                "event_type": "assertion",
+                "status": "SUCCESS" if result.assertion_result.get("passed", False) else "FAILED",
+                "intent_key": request["intent_key"],
+                "assertion_result": result.assertion_result,
+                "recovery_level": result.recovery_level,
+                "s2_takeover": not result.assertion_result.get("passed", False),
+            },
+        )
+        _emit_and_track(
+            bus,
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": 1,
+                "event_type": "post_check",
+                "status": "SUCCESS" if result.post_check.get("passed", False) else "FAILED",
+                "intent_key": request["intent_key"],
+                "post_check": result.post_check,
             },
         )
         _emit_and_track(

@@ -4,7 +4,10 @@ import tempfile
 import unittest
 
 from guiagent_v2.runtime.metrics import compute_metrics_from_jsonl
-from guiagent_v2.runtime.orchestrator_v2 import _translate_legacy_step_to_events
+from guiagent_v2.runtime.orchestrator_v2 import (
+    _build_hook_manager,
+    _translate_legacy_step_to_events,
+)
 
 
 class TestRuntimeMetricsAndTranslation(unittest.TestCase):
@@ -17,9 +20,25 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
             "action_object": {"name": "Tap", "arguments": {"x": 1, "y": 2}},
             "duration": 0.2,
         }
-        events = _translate_legacy_step_to_events(step)
+        context_index = {
+            "action_by_step": {
+                3: {
+                    "action_object": {"name": "Tap", "arguments": {"x": 1, "y": 2}},
+                }
+            },
+            "perception_by_step": {
+                3: [{"text": "Home", "coordinates": (1, 1)}],
+                4: [{"text": "Error", "coordinates": (1, 1)}],
+            },
+        }
+        events = _translate_legacy_step_to_events(
+            step,
+            context_index=context_index,
+            hooks=_build_hook_manager(),
+        )
         event_types = [e["event_type"] for e in events]
         self.assertIn("assertion", event_types)
+        self.assertIn("post_check", event_types)
         self.assertIn("handover", event_types)
         self.assertIn("step_end", event_types)
 
@@ -88,4 +107,3 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

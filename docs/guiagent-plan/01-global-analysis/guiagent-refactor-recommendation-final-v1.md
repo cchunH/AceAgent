@@ -36,6 +36,12 @@
 2. 主链只保留统一专家轨执行路径
 3. 后续优化应在 `guiagent_v2` 模块内演进，不再回填快轨分支
 
+## 3.1 Hook 现状
+
+1. 已接入默认 `semantic_pre_assertion_hook` 与 `post_state_check_hook`
+2. legacy 回放时会基于 `perception_infos_pre/post` 生成 `assertion/post_check` 事件
+3. 当前为规则型实现，后续可替换为模型判定或拓扑匹配判定
+
 ## 4. 前端控制面接入点（预留）
 
 1. 任务状态：`get_task_status(run_id, task_id)`
@@ -46,6 +52,6 @@
 
 ## 5. 下一步推荐（进入 Phase 1）
 
-1. 把 pre/post hook 从 no-op 升级为真实断言与后验检查
+1. 把规则型 hook 升级为“拓扑+语义”联合断言与后验检查
 2. 在 `guiagent_v2` 中引入页面状态识别与拓扑匹配
 3. 补齐基于 `events.jsonl` 的指标统计脚本与回归看板
