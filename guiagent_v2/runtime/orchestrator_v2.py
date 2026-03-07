@@ -15,7 +15,7 @@ from .guard_policy import GuardPolicy
 from .hooks import HookManager
 from .loop_detector import LoopDetector
 from .reporting import write_runtime_summary
-from .status_api import get_global_status_store
+from .status_api import configure_global_status_store, get_global_status_store
 from .v2_executor import run_probe_step
 from .web_skill_router import WebSkillRouter
 from .watchdogs import WatchdogManager, build_default_watchdog_manager
@@ -463,6 +463,10 @@ def run_single_task_with_runtime(
     watchdog_policy_path=None,
     watchdog_policy_reload_interval=1.0,
     session_id=None,
+    strict_event_schema=False,
+    status_timeline_max_events=None,
+    web_max_steps=3,
+    web_replan_max_attempts=1,
 ):
     future_tasks = future_tasks or []
     runtime_config = _load_runtime_config()
@@ -473,11 +477,16 @@ def run_single_task_with_runtime(
     chain_mode = _normalize_chain_mode(runtime_mode)
     run_id = f"{run_name}:{task_id}"
     runtime_session_id = str(session_id or "").strip() or None
+    if status_timeline_max_events is not None:
+        configure_global_status_store(
+            max_timeline_events_per_task=int(status_timeline_max_events),
+        )
     log_dir = _build_log_dir(log_root, run_name, task_id)
     os.makedirs(log_dir, exist_ok=True)
     bus = JSONLEventBus(
         file_path=os.path.join(log_dir, "events.jsonl"),
         default_chain_mode=chain_mode,
+        strict_schema=bool(strict_event_schema),
     )
     blueprint_repo = BlueprintRepository(os.path.join(log_dir, "blueprints.json"))
     router = WebSkillRouter()
@@ -529,6 +538,8 @@ def run_single_task_with_runtime(
             context_compactor=context_compactor,
             screen_width=1080,
             screen_height=2340,
+            web_max_steps=int(web_max_steps),
+            web_replan_max_attempts=int(web_replan_max_attempts),
         )
 
     should_delegate_legacy = not (runtime_mode == "guiagent_v2" and bool(v2_skip_legacy))

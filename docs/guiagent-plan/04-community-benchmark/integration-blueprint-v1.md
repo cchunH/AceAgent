@@ -39,11 +39,18 @@
 25. `/runtime/audit` 已支持 `cursor + since_ts/until_ts`，用于长周期审计分页与时间窗口查询。
 26. `WatchdogPolicy` 已支持 `escalation_rules`，可按窗口与阈值将重复异常升级为更高严重级（如 `CRITICAL`）。
 27. `WatchdogManager` 已支持 `cross_task_aggregation`，可按配置对跨任务重复异常输出聚合告警。
+28. `JSONLEventBus` 新增 `strict_schema` 模式；`run.py` 新增 `--strict_event_schema`，可在治理阶段对 schema 无效事件 fail-fast。
+29. `cross_task_aggregation` 新增独立去重/节流门控参数（`dedup_window_sec/throttle_window_sec/max_alerts_per_key/dedup_key_fields`），聚合告警纳入统一门禁。
+30. `TaskStatusStore` 新增每任务时间线内存上限能力（`max_timeline_events_per_task`，CLI: `--status_timeline_max_events`）与 `timeline_dropped` 统计。
+31. 新增轻量 `web_planner`，`v2_executor` 支持 `initial plan + failure local replan`（单次重规划）执行链。
+32. `v2_executor` 的 web 步骤新增 `web_plan_id/web_trace_id/web_plan_revision/web_step_checkpoint` 证据字段，便于步骤级追溯。
+33. `web_skill` 失败后的移动端回退从固定 `Wait` 升级为“上下文感知 fallback action”并产出 `fallback_action_selected` 事件。
+34. `run.py` 新增 `--web_max_steps/--web_replan_max_attempts`；`v2_executor` 已支持按错误码分流重规划策略与多次重规划（可配置）。
 
 尚未落地：
 1. `watchdog` 深化生产化（下载/安全扩展插件、聚合统计导出）。
 2. `SessionRuntime` 生产级进程化（当前已具备本地 HTTP IPC + 索引恢复 + token 鉴权 + 多实例治理 + 控制面审计，仍缺服务发现与跨节点协调）。
-3. 真正的生产级 web 子任务执行闭环（当前为启发式多步 v1 + fallback，尚缺复杂网页任务策略）。
+3. 真正的生产级 web 子任务执行闭环（当前已具备启发式 plan + 单次局部重规划 + fallback，仍缺复杂任务策略与学习反馈）。
 
 ## 0. 决策基线（先定方向）
 
@@ -186,6 +193,9 @@ class AgentBrowserSkill:
 - `watchdog_alert`
 - `skill_route`
 - `skill_fallback`
+- `web_replan`
+- `web_replan_skipped`
+- `fallback_action_selected`
 - `control_plane_audit`
 
 建议新增关键字段：
@@ -198,6 +208,10 @@ class AgentBrowserSkill:
 - `channel`
 - `skill_name`
 - `route_reason`
+- `web_plan_id`
+- `web_trace_id`
+- `web_plan_revision`
+- `web_replan_strategy`
 
 ## 3.1 关键健康指标（用于判断方案是否跑偏）
 

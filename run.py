@@ -28,6 +28,10 @@ def _run_with_mode(runtime_mode: str, **kwargs):
         kwargs.pop("watchdog_policy_path", None)
         kwargs.pop("watchdog_policy_reload_interval", None)
         kwargs.pop("session_id", None)
+        kwargs.pop("strict_event_schema", None)
+        kwargs.pop("status_timeline_max_events", None)
+        kwargs.pop("web_max_steps", None)
+        kwargs.pop("web_replan_max_attempts", None)
         return run_single_task(**kwargs)
     kwargs["runtime_mode"] = runtime_mode
     return run_single_task_with_runtime(**kwargs)
@@ -81,6 +85,30 @@ def main():
         type=str,
         default=None,
         help="Optional logical session id for guiagent_v2 task tracking.",
+    )
+    parser.add_argument(
+        "--strict_event_schema",
+        action="store_true",
+        default=False,
+        help="Fail-fast when guiagent_v2 runtime emits schema-invalid events.",
+    )
+    parser.add_argument(
+        "--status_timeline_max_events",
+        type=int,
+        default=None,
+        help="Optional cap for in-memory timeline events per task in guiagent_v2 status store.",
+    )
+    parser.add_argument(
+        "--web_max_steps",
+        type=int,
+        default=3,
+        help="Max web steps for guiagent_v2 web skill execution plan.",
+    )
+    parser.add_argument(
+        "--web_replan_max_attempts",
+        type=int,
+        default=1,
+        help="Max local replan attempts for guiagent_v2 web execution.",
     )
     parser.add_argument(
         "--watchdog_policy_path",
@@ -244,6 +272,10 @@ def main():
                 watchdog_policy_path=args.watchdog_policy_path,
                 watchdog_policy_reload_interval=args.watchdog_policy_reload_interval,
                 session_id=args.session_id,
+                strict_event_schema=args.strict_event_schema,
+                status_timeline_max_events=args.status_timeline_max_events,
+                web_max_steps=args.web_max_steps,
+                web_replan_max_attempts=args.web_replan_max_attempts,
             )
         except Exception as e:
             print(f"Failed when doing task: {args.instruction}")
@@ -319,6 +351,10 @@ def main():
                 watchdog_policy_path=args.watchdog_policy_path,
                 watchdog_policy_reload_interval=args.watchdog_policy_reload_interval,
                 session_id=args.session_id,
+                strict_event_schema=args.strict_event_schema,
+                status_timeline_max_events=args.status_timeline_max_events,
+                web_max_steps=args.web_max_steps,
+                web_replan_max_attempts=args.web_replan_max_attempts,
             )
             print("\n\nDONE:", task["instruction"])
             print("IMPORTANT: Please reset the device as needed before running the next task!")

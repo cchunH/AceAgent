@@ -181,6 +181,43 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
                 {
                     "run_id": "r1",
                     "task_id": "t1",
+                    "step_id": 2,
+                    "chain_mode": "guiagent_v2",
+                    "event_type": "web_plan",
+                    "status": "SUCCESS",
+                    "intent_key": "web:OPEN:URL",
+                },
+                {
+                    "run_id": "r1",
+                    "task_id": "t1",
+                    "step_id": 2,
+                    "chain_mode": "guiagent_v2",
+                    "event_type": "web_replan",
+                    "status": "RUNNING",
+                    "intent_key": "web:OPEN:URL",
+                },
+                {
+                    "run_id": "r1",
+                    "task_id": "t1",
+                    "step_id": 2,
+                    "chain_mode": "guiagent_v2",
+                    "event_type": "web_step_end",
+                    "status": "SUCCESS",
+                    "intent_key": "web:OPEN:URL",
+                    "latency_ms": 80,
+                },
+                {
+                    "run_id": "r1",
+                    "task_id": "t1",
+                    "step_id": 2,
+                    "chain_mode": "guiagent_v2",
+                    "event_type": "fallback_action_selected",
+                    "status": "SUCCESS",
+                    "intent_key": "web:OPEN:URL",
+                },
+                {
+                    "run_id": "r1",
+                    "task_id": "t1",
                     "step_id": 999999,
                     "chain_mode": "legacy",
                     "event_type": "task_end",
@@ -196,6 +233,10 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
             self.assertAlmostEqual(metrics["task_success_rate"], 1.0)
             self.assertAlmostEqual(metrics["s2_takeover_rate"], 0.5)
             self.assertEqual(metrics["step_latency_p50_ms"], 150.0)
+            self.assertEqual(metrics["web_plan_count"], 1)
+            self.assertEqual(metrics["web_replan_count"], 1)
+            self.assertEqual(metrics["fallback_action_selected_count"], 1)
+            self.assertAlmostEqual(metrics["web_step_success_rate"], 1.0)
 
 
 if __name__ == "__main__":

@@ -107,6 +107,10 @@ class TestV2Executor(unittest.TestCase):
         self.assertIn("adapter_call", event_types)
         self.assertNotIn("skill_fallback", event_types)
         self.assertGreaterEqual(len(web_skill.calls), 2)
+        adapter_events = [item for item in events if item.get("event_type") == "adapter_call"]
+        self.assertTrue(adapter_events)
+        self.assertTrue(all(str(item.get("web_trace_id", "")).strip() for item in adapter_events))
+        self.assertTrue(all(str(item.get("web_plan_id", "")).strip() for item in adapter_events))
 
     def test_run_probe_web_failed_then_fallback(self):
         events = []
@@ -137,7 +141,70 @@ class TestV2Executor(unittest.TestCase):
         self.assertIn("skill_fallback", event_types)
         self.assertIn("step_end", event_types)
         self.assertIn("web_step_end", event_types)
-        self.assertGreaterEqual(len(web_skill.calls), 2)
+        self.assertIn("fallback_action_selected", event_types)
+        self.assertIn("web_replan_skipped", event_types)
+        self.assertNotIn("web_replan", event_types)
+        self.assertEqual(len(web_skill.calls), 2)
+        fallback_events = [item for item in events if item.get("event_type") == "fallback_action_selected"]
+        self.assertEqual(fallback_events[-1].get("fallback_action", {}).get("name"), "Back")
+
+    def test_run_probe_web_replan_then_recover(self):
+        events = []
+        web_skill = _FakeWebSkill(
+            success=True,
+            success_sequence=[False, True, True],
+            error_sequence=["CLI_TIMEOUT", None, None],
+        )
+
+        result = run_probe_step(
+            instruction="open https://example.com",
+            run_id="r3r",
+            task_id="t3r",
+            session_id="sess-web-replan",
+            step_id=1,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+        )
+
+        self.assertEqual(result.channel, "web_skill")
+        self.assertEqual(result.status, "SUCCESS")
+        event_types = [e["event_type"] for e in events]
+        self.assertIn("web_replan", event_types)
+        self.assertNotIn("skill_fallback", event_types)
+
+    def test_run_probe_web_supports_multiple_replans(self):
+        events = []
+        web_skill = _FakeWebSkill(
+            success=True,
+            success_sequence=[False, False, True, True, True],
+            error_sequence=["CLI_TIMEOUT", "SELECTOR_NOT_FOUND", None, None, None],
+        )
+
+        result = run_probe_step(
+            instruction="open https://example.com",
+            run_id="r3m",
+            task_id="t3m",
+            session_id="sess-web-replan-multi",
+            step_id=1,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+            web_max_steps=5,
+            web_replan_max_attempts=2,
+        )
+
+        self.assertEqual(result.status, "SUCCESS")
+        replan_events = [e for e in events if e.get("event_type") == "web_replan"]
+        self.assertGreaterEqual(len(replan_events), 2)
+        self.assertEqual(replan_events[0].get("web_replan_strategy"), "timeout_wait_then_snapshot")
+        self.assertEqual(replan_events[1].get("web_replan_strategy"), "selector_refresh_snapshot")
 
     def test_run_probe_emits_loop_warning_when_repeated(self):
         events = []

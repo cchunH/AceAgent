@@ -6,6 +6,7 @@
 - 版本：`v2.13`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
+- 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
 
 ## 1. 评估范围
 
@@ -124,15 +125,15 @@
 
 2. 事件治理
 - 证据模块：`guiagent_v2/runtime/event_bus.py`, `status_api.py`
-- 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合，事件 schema 校验已接入，并新增控制面审计事件与任务级聚合。
+- 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合，事件 schema 校验已接入；新增 `strict_schema` 可选 fail-fast；`status_api` 支持时间线容量上限与 `timeline_dropped` 统计。
 - 距离评估：`部分完成`
-- 关键差距：schema 严格模式尚未开启（未做 fail-fast）；watchdog 聚合统计导出缺失；审计归档与跨文件聚合未完成。
+- 关键差距：schema 严格模式已具备但默认未启用；watchdog 聚合统计导出缺失；审计归档与跨文件聚合未完成。
 
 3. Web 子任务闭环
 - 证据模块：`v2_executor.py`, `agent_browser_skill.py`
-- 现状：可走启发式 web 多步执行 v1 与 fallback。
+- 现状：可走 `initial web plan + 错误码分流的局部 replan + 上下文感知 fallback`，支持 `web_replan_max_attempts` 配置，并输出步骤级追踪字段（`web_plan_id/web_trace_id`）。
 - 距离评估：`部分完成`
-- 关键差距：未接入复杂网页任务规划与回溯策略；缺少步骤级学习反馈。
+- 关键差距：复杂网页任务规划能力仍偏启发式；缺少步骤级学习反馈与跨任务经验回灌。
 
 ### 2.3 未落地（待实施）
 

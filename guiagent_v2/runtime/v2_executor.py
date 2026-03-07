@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -14,6 +15,7 @@ from .hooks import HookManager
 from .loop_detector import LoopDetector
 from .pipeline import StepPipeline
 from .web_skill_router import WebSkillRouter
+from .web_planner import WebPlanStep, build_initial_web_plan, build_replan_after_failure
 
 
 EventEmitter = Callable[[dict[str, Any]], None]
@@ -26,12 +28,6 @@ _WEB_HINTS = (
     "browser",
     "web",
     "h5",
-)
-_WEB_SNAPSHOT_HINTS = (
-    "snapshot",
-    "截图",
-    "检查",
-    "校验",
 )
 
 
@@ -165,40 +161,30 @@ def _normalize_step_status(status: str) -> str:
     return "FAILED"
 
 
-def _build_web_execution_plan(
-    instruction: str,
-    route_context: dict[str, Any],
-    max_steps: int,
-) -> list[dict[str, Any]]:
-    max_steps = max(1, int(max_steps))
-    text = str(instruction or "").strip().lower()
-    base_task = route_context.get("web_task")
-    if not isinstance(base_task, dict):
-        base_task = {"action": "snapshot", "interactive": True}
+def _select_mobile_fallback_action(route_context: dict[str, Any], failed_reason: str) -> dict[str, Any]:
+    del failed_reason
+    web_task = route_context.get("web_task")
+    if not isinstance(web_task, dict):
+        return {"name": "Wait", "arguments": {}}
 
-    plan: list[dict[str, Any]] = []
-    action_name = str(base_task.get("action", "snapshot")).strip().lower()
-    if action_name == "open":
-        url = str(base_task.get("url", "")).strip()
-        if url:
-            plan.append({"action": "open", "url": url})
-        else:
-            plan.append({"action": "snapshot", "interactive": True})
-        if len(plan) < max_steps:
-            plan.append({"action": "snapshot", "interactive": True})
-    elif action_name:
-        plan.append(dict(base_task))
-    else:
-        plan.append({"action": "snapshot", "interactive": True})
+    base_action = str(web_task.get("action", "")).strip().lower()
+    if base_action in {"open", "click", "type", "fill", "hover", "check", "uncheck"}:
+        return {"name": "Back", "arguments": {}}
+    return {"name": "Wait", "arguments": {}}
 
-    if len(plan) < max_steps and any(hint in text for hint in _WEB_SNAPSHOT_HINTS):
-        plan.append({"action": "snapshot", "interactive": True})
 
-    deduped: list[dict[str, Any]] = []
-    for task in plan:
-        if not deduped or deduped[-1] != task:
-            deduped.append(task)
-    return deduped[:max_steps]
+def _normalize_adapter_error(step_result: dict[str, Any]) -> str:
+    adapter_call = step_result.get("adapter_call", {})
+    error = None
+    if isinstance(adapter_call, dict):
+        error = adapter_call.get("error")
+    if error:
+        return str(error)
+    return str(
+        step_result.get("post_check", {}).get("reason_code")
+        or step_result.get("assertion_result", {}).get("reason_code")
+        or "WEB_SKILL_EXEC_FAILED"
+    )
 
 
 def run_probe_step(
@@ -218,6 +204,7 @@ def run_probe_step(
     screen_width: int = 1080,
     screen_height: int = 2340,
     web_max_steps: int = 3,
+    web_replan_max_attempts: int = 1,
 ) -> V2ProbeResult:
     loop_detector = loop_detector or LoopDetector()
     context_compactor = context_compactor or ContextCompactor()
@@ -388,11 +375,13 @@ def run_probe_step(
     dispatch_name = "web_skill_agent_browser" if route_info.get("channel") == "web_skill" else "mobile_native_shadow"
     final_route_info = dict(route_info)
     if route_info.get("channel") == "web_skill":
-        web_plan = _build_web_execution_plan(
+        web_plan = build_initial_web_plan(
             instruction=instruction,
             route_context=route_context,
             max_steps=web_max_steps,
         )
+        web_plan_id = f"wp-{uuid.uuid4().hex[:12]}"
+        plan_payload = [step.to_event_payload() for step in web_plan]
         _emit(
             {
                 "run_id": run_id,
@@ -402,8 +391,9 @@ def run_probe_step(
                 "event_type": "web_plan",
                 "status": "SUCCESS",
                 "intent_key": request.intent_key,
-                "web_step_count": len(web_plan),
-                "web_plan": web_plan,
+                "web_plan_id": web_plan_id,
+                "web_step_count": len(plan_payload),
+                "web_plan": plan_payload,
                 **route_info,
             }
         )
@@ -412,7 +402,16 @@ def run_probe_step(
         failed_reason = "WEB_SKILL_EXEC_FAILED"
         failed_on_web_step = 0
         total_latency_ms = 0
-        for idx, web_task in enumerate(web_plan, start=1):
+        executed_steps = 0
+        replan_attempt = 0
+        max_replan_attempts = max(0, int(web_replan_max_attempts))
+        pending_steps: list[WebPlanStep] = list(web_plan)
+
+        while pending_steps and executed_steps < int(web_max_steps):
+            plan_step = pending_steps.pop(0)
+            web_task = dict(plan_step.task)
+            executed_steps += 1
+            web_trace_id = f"wtrace-{uuid.uuid4().hex[:10]}"
             _emit(
                 {
                     "run_id": run_id,
@@ -422,8 +421,13 @@ def run_probe_step(
                     "event_type": "web_step_start",
                     "status": "RUNNING",
                     "intent_key": request.intent_key,
-                    "web_step_index": idx,
-                    "web_step_count": len(web_plan),
+                    "web_plan_id": web_plan_id,
+                    "web_trace_id": web_trace_id,
+                    "web_plan_revision": int(plan_step.revision),
+                    "web_step_checkpoint": plan_step.checkpoint,
+                    "web_step_rationale": plan_step.rationale,
+                    "web_step_index": executed_steps,
+                    "web_step_count": int(web_max_steps),
                     "web_step_task": dict(web_task),
                     **route_info,
                 }
@@ -432,7 +436,7 @@ def run_probe_step(
                 step_result = registry.dispatch(
                     "web_skill_agent_browser",
                     {
-                        "web_task": dict(web_task),
+                        "web_task": web_task,
                         "session_id": runtime_session_id or task_id,
                     },
                     context={},
@@ -466,10 +470,13 @@ def run_probe_step(
                     "status": "SUCCESS" if adapter_success else "FAILED",
                     "intent_key": request.intent_key,
                     "adapter_backend": "agent-browser",
+                    "web_plan_id": web_plan_id,
+                    "web_trace_id": web_trace_id,
                     "adapter_session_id": str(step_result.get("session_id", runtime_session_id or task_id)),
                     "error": adapter_call.get("error"),
-                    "web_step_index": idx,
-                    "web_step_count": len(web_plan),
+                    "adapter_trace": adapter_call.get("trace"),
+                    "web_step_index": executed_steps,
+                    "web_step_count": int(web_max_steps),
                     "web_step_task": dict(web_task),
                     **route_info,
                 }
@@ -483,18 +490,72 @@ def run_probe_step(
                     "event_type": "web_step_end",
                     "status": "SUCCESS" if adapter_success else "FAILED",
                     "intent_key": request.intent_key,
+                    "web_plan_id": web_plan_id,
+                    "web_trace_id": web_trace_id,
+                    "web_plan_revision": int(plan_step.revision),
+                    "web_step_checkpoint": plan_step.checkpoint,
                     "latency_ms": step_latency_ms,
-                    "web_step_index": idx,
-                    "web_step_count": len(web_plan),
+                    "web_step_index": executed_steps,
+                    "web_step_count": int(web_max_steps),
                     "web_step_task": dict(web_task),
                     **route_info,
                 }
             )
 
-            if not adapter_success:
-                failed_reason = str(adapter_call.get("error") or "WEB_SKILL_EXEC_FAILED")
-                failed_on_web_step = idx
-                break
+            if adapter_success:
+                continue
+
+            failed_reason = _normalize_adapter_error(step_result)
+            failed_on_web_step = executed_steps
+            remaining_steps = int(web_max_steps) - executed_steps
+            if replan_attempt < max_replan_attempts and remaining_steps > 0:
+                replan_attempt += 1
+                replan_strategy, replanned_steps = build_replan_after_failure(
+                    failed_step=plan_step,
+                    failed_reason=failed_reason,
+                    route_context=route_context,
+                    remaining_steps=remaining_steps,
+                    revision=replan_attempt,
+                )
+                if replanned_steps:
+                    pending_steps = list(replanned_steps) + pending_steps
+                    _emit(
+                        {
+                            "run_id": run_id,
+                            "task_id": task_id,
+                            "step_id": step_id,
+                            "chain_mode": chain_mode,
+                            "event_type": "web_replan",
+                            "status": "RUNNING",
+                            "intent_key": request.intent_key,
+                            "web_plan_id": web_plan_id,
+                            "web_replan_attempt": replan_attempt,
+                            "failed_on_web_step": failed_on_web_step,
+                            "failed_reason": failed_reason,
+                            "web_replan_strategy": replan_strategy,
+                            "replanned_steps": [item.to_event_payload() for item in replanned_steps],
+                            **route_info,
+                        }
+                    )
+                    continue
+                _emit(
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": step_id,
+                        "chain_mode": chain_mode,
+                        "event_type": "web_replan_skipped",
+                        "status": "HANDOVER",
+                        "intent_key": request.intent_key,
+                        "web_plan_id": web_plan_id,
+                        "web_replan_attempt": replan_attempt,
+                        "failed_on_web_step": failed_on_web_step,
+                        "failed_reason": failed_reason,
+                        "web_replan_strategy": replan_strategy,
+                        **route_info,
+                    }
+                )
+            break
 
         if last_result is None:
             exec_result = {
@@ -525,10 +586,26 @@ def run_probe_step(
                     **route_info,
                 }
             )
+            fallback_action = _select_mobile_fallback_action(route_context, failed_reason)
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "fallback_action_selected",
+                    "status": "SUCCESS",
+                    "intent_key": request.intent_key,
+                    "fallback_to": "mobile_native",
+                    "fallback_action": fallback_action,
+                    "reason_code": failed_reason,
+                    **route_info,
+                }
+            )
             fallback_result = registry.dispatch(
                 "mobile_native_shadow",
                 {
-                    "legacy_action": {"name": "Wait", "arguments": {}},
+                    "legacy_action": fallback_action,
                     "step_context": step_context,
                 },
                 context={},
