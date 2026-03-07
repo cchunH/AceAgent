@@ -124,3 +124,16 @@ guiagent_v2/
 1. 先落 `intent_contract + runtime/event_logger`  
 2. 再接 `brain_adapter + action_engine(assertion)`  
 3. 最后接 `state_engine(topology)` 与 `blueprint_hub`
+
+## 6. 当前落地进展（2026-03-07）
+
+已落地：
+- `intent_contract`：`ExecutionRequest/ExecutionResult` + legacy 映射
+- `runtime`：`orchestrator_v2 + event_bus + status_api + metrics`
+- `state_engine`：`anchor_extractor + topology_matcher`（规则型 MVP）
+- `action_engine`：`assertion_guard + post_check + affine_runtime(占位投射)`
+- `brain_adapter`：`planner_bridge + executor_bridge`（复用 Uni-Mind 既有 Agent）
+
+待落地：
+- `blueprint_hub`（版本化蓝图库与 patch 应用）
+- `state_engine/action_engine` 从规则型升级为拓扑+语义联合判定

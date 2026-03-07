@@ -42,6 +42,17 @@
 2. legacy 回放时会基于 `perception_infos_pre/post` 生成 `assertion/post_check` 事件
 3. 当前为规则型实现，后续可替换为模型判定或拓扑匹配判定
 
+## 3.2 状态面/动作面进展
+
+1. `state_engine` 已实现 `anchor_extractor + topology_matcher`（Top/Bottom 优先锚点策略）
+2. `action_engine` 已实现 `run_pre_assertion + run_post_check`，并接入 runtime 事件翻译链
+3. `affine_runtime` 已预留统一投射接口，当前保持向后兼容
+
+## 3.3 复用桥接进展
+
+1. 已新增 `brain_adapter/planner_bridge.py` 与 `executor_bridge.py`
+2. 通过桥接层复用原项目 `Planner/Executor` 能力，避免重复建设
+
 ## 4. 前端控制面接入点（预留）
 
 1. 任务状态：`get_task_status(run_id, task_id)`

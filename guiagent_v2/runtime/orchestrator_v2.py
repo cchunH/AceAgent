@@ -3,6 +3,7 @@ import os
 import time
 from typing import Any
 
+from guiagent_v2.action_engine.affine_runtime import project_action
 from guiagent_v2.intent_contract import map_legacy_action_to_request
 from .default_hooks import post_state_check_hook, semantic_pre_assertion_hook
 from .event_bus import JSONLEventBus
@@ -71,6 +72,8 @@ def _build_hook_manager() -> HookManager:
 def _build_legacy_context_index(steps: list[dict[str, Any]]) -> dict[str, dict[int, Any]]:
     perception_by_step: dict[int, Any] = {}
     action_by_step: dict[int, Any] = {}
+    screen_width = 1080
+    screen_height = 2340
     for step in steps:
         operation = str(step.get("operation", ""))
         step_id = int(step.get("step", 0))
@@ -78,9 +81,17 @@ def _build_legacy_context_index(steps: list[dict[str, Any]]) -> dict[str, dict[i
             perception_by_step[step_id] = step.get("perception_infos", [])
         elif operation == "action":
             action_by_step[step_id] = step
+        elif operation == "init":
+            init_pool = step.get("init_info_pool", {})
+            try:
+                screen_width = int(init_pool.get("width", screen_width))
+                screen_height = int(init_pool.get("height", screen_height))
+            except Exception:
+                pass
     return {
         "perception_by_step": perception_by_step,
         "action_by_step": action_by_step,
+        "screen_size": {"width": screen_width, "height": screen_height},
     }
 
 
@@ -107,12 +118,14 @@ def _translate_legacy_step_to_events(
 
     if operation == "action":
         action_obj = step.get("action_object")
+        request = map_legacy_action_to_request(action_obj)
+        projected_action = project_action(request=request)
         event = {
             "step_id": step_id,
             "event_type": "action_exec",
             "status": "RUNNING",
             "intent_key": intent_key,
-            "action": action_obj,
+            "action": projected_action,
             "timeout_ms": 3000,
             "retry_count": 0,
         }
@@ -123,9 +136,12 @@ def _translate_legacy_step_to_events(
     if operation == "action_reflection":
         action_step = context_index.get("action_by_step", {}).get(step_id, {})
         action_obj = action_step.get("action_object")
+        screen_size = context_index.get("screen_size", {"width": 1080, "height": 2340})
         step_context = {
             "perception_infos_pre": context_index.get("perception_by_step", {}).get(step_id, []),
             "perception_infos_post": context_index.get("perception_by_step", {}).get(step_id + 1, []),
+            "screen_width": int(screen_size.get("width", 1080)),
+            "screen_height": int(screen_size.get("height", 2340)),
         }
         request = map_legacy_action_to_request(action_obj, context=step_context)
         assertion_result = hooks.run_pre_assertion(request, context=step_context)
@@ -296,7 +312,12 @@ def run_single_task_with_runtime(
         pipeline = StepPipeline(hooks=hooks)
         request, result = pipeline.run_shadow_step(
             {"name": "Wait", "arguments": {}},
-            context={"perception_infos_pre": [], "perception_infos_post": []},
+            context={
+                "perception_infos_pre": [],
+                "perception_infos_post": [],
+                "screen_width": 1080,
+                "screen_height": 2340,
+            },
         )
         _emit_and_track(
             bus,
