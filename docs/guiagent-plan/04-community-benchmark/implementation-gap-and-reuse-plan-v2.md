@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.3`
+- 版本：`v2.4`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 
@@ -69,17 +69,22 @@
 - 现状：已支持会话创建、会话级提交/查询/等待、跨会话任务隔离调度，并兼容旧任务服务。
 - 距离评估：`完成（v0，非进程化）`
 
-11. `Typed Event Schema`
+11. `SessionRuntimeServer`（本地 IPC v1）
+- 证据模块：`guiagent_v2/runtime/session_runtime_server.py`, `run.py`
+- 现状：提供本地 HTTP API（`health/sessions/tasks/runtime status/timeline`），支持独立进程模式启动。
+- 距离评估：`完成（v1，本地 IPC）`
+
+12. `Typed Event Schema`
 - 证据模块：`guiagent_v2/runtime/event_schema.py`, `guiagent_v2/runtime/event_bus.py`
 - 现状：事件入总线前完成标准化，写入 `event_schema_version/schema_valid/schema_error`，为后续控制面稳定消费打基础。
 - 距离评估：`完成（v0）`
 
-12. `Watchdog` 插件骨架
+13. `Watchdog` 插件骨架
 - 证据模块：`guiagent_v2/runtime/watchdogs/*`, `guiagent_v2/runtime/orchestrator_v2.py`
 - 现状：已接入 `crash_watchdog/security_watchdog`，可从主事件派生 `watchdog_alert`。
 - 距离评估：`完成（v0）`
 
-13. `WatchdogPolicy`（守护治理 v1）
+14. `WatchdogPolicy`（守护治理 v1）
 - 证据模块：`guiagent_v2/runtime/watchdog_policy.py`, `guiagent_v2/runtime/watchdogs/manager.py`, `run.py`
 - 现状：支持 watchdog 插件启停、最小严重级过滤、去重窗口、节流窗口与热重载参数。
 - 距离评估：`完成（v1）`
@@ -87,10 +92,10 @@
 ### 2.2 部分落地（需增强）
 
 1. `SessionRuntime`
-- 证据模块：`guiagent_v2/runtime/session_runtime.py`, `guiagent_v2/runtime/task_service.py`
-- 现状：进程内会话隔离已落地，支持 `session_id` 注入执行链与状态查询过滤。
+- 证据模块：`guiagent_v2/runtime/session_runtime.py`, `guiagent_v2/runtime/session_runtime_server.py`, `run.py`
+- 现状：已落地会话隔离 + 本地 HTTP IPC v1，支持控制面最小读写闭环。
 - 距离评估：`部分完成`
-- 关键差距：无跨进程会话、无重启恢复、无 IPC 控制面协议。
+- 关键差距：缺任务/会话持久化恢复、缺鉴权、缺多实例治理与端口协调策略。
 
 2. 事件治理
 - 证据模块：`guiagent_v2/runtime/event_bus.py`, `status_api.py`
@@ -182,8 +187,9 @@
 
 1. 已完成：在现有 `RuntimeTaskService` 上增量抽象 `SessionRuntime`（进程内 v0）。
 2. 已完成：保留旧 API 兼容，新增 session 级提交与查询接口。
-3. 待继续：抽离独立进程/IPC 通道，并补齐重启恢复策略。
-4. 待继续：把 `session_id` 作为控制面一等键接入后续状态 API/前端适配层。
+3. 已完成：抽离本地 HTTP IPC 通道（`session_runtime_server`）并提供独立启动模式。
+4. 待继续：补齐重启恢复策略、鉴权与多实例治理。
+5. 待继续：把 `session_id` 作为控制面一等键接入后续前端适配层与任务分发策略。
 
 退出条件：
 - 会话隔离可验证。

@@ -212,6 +212,7 @@ while True:
 - `v2_executor.py`: `guiagent_v2(_shadow)` probe 执行链（含 web fallback 到 mobile_native）。
 - `loop_detector.py` + `context_compaction.py`: 循环检测与上下文压缩治理能力。
 - `task_service.py` + `session_runtime.py`: 任务提交、状态查询、会话级隔离调度（进程内 v0）。
+- `session_runtime_server.py`: SessionRuntime 本地 HTTP IPC 控制面（session/task/status/timeline）。
 - `watchdogs/*`: `crash_watchdog/security_watchdog` 插件骨架与 `watchdog_alert` 派生事件。
 - `watchdog_policy.py`: Watchdog 策略加载与热更新（启停、最小严重级、去重节流参数）。
 
@@ -237,6 +238,9 @@ while True:
 - `--watchdog_policy_path`
 - `--watchdog_policy_reload_interval`
 - `--session_id`
+- `--start_session_runtime_server`
+- `--session_runtime_server_host`
+- `--session_runtime_server_port`
 
 ## 工作流程详解
 

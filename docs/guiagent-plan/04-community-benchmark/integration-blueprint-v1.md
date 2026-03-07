@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.5`
+- 版本：`v1.6`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -28,10 +28,11 @@
 14. 新增 `WatchdogManager` 与 `crash/security` 插件骨架，接入 `orchestrator_v2` 事件链并派生 `watchdog_alert` 事件。
 15. 新增 `watchdog_policy`，支持插件启停、最小严重级、告警去重与节流，并新增入口参数 `--watchdog_policy_path/--watchdog_policy_reload_interval`。
 16. 提供策略样例文件：`guiagent_v2/runtime/policies/watchdog_policy.example.json`。
+17. 新增 `session_runtime_server` 本地 HTTP IPC 服务（`/health /sessions /tasks /runtime/status /runtime/timeline`），并支持 `run.py --start_session_runtime_server` 独立启动。
 
 尚未落地：
 1. `watchdog` 深化生产化（告警升级策略、跨任务聚合、下载/安全扩展插件）。
-2. `SessionRuntime` 真正进程化/IPC 化（当前为进程内 v0，会话隔离已可用）。
+2. `SessionRuntime` 生产级进程化（当前已具备本地 HTTP IPC v1，仍缺持久化恢复、鉴权与多实例治理）。
 3. 真正的生产级 web 子任务执行闭环（当前是 probe + fallback 的可控最小实现）。
 
 ## 0. 决策基线（先定方向）

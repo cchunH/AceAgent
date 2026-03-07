@@ -8,11 +8,16 @@ from orchestrator import (
     DEFAULT_MODEL,
 )
 from guiagent_v2.runtime.orchestrator_v2 import run_single_task_with_runtime
+from guiagent_v2.runtime.session_runtime_server import (
+    start_global_session_runtime_server,
+    stop_global_session_runtime_server,
+)
 
 import torch
 import os
 import json
 import shutil
+import time
 
 
 def _run_with_mode(runtime_mode: str, **kwargs):
@@ -89,12 +94,45 @@ def main():
         default=1.0,
         help="Reload interval (seconds) for watchdog policy file checks.",
     )
+    parser.add_argument(
+        "--start_session_runtime_server",
+        action="store_true",
+        default=False,
+        help="Start SessionRuntime HTTP API server and block.",
+    )
+    parser.add_argument(
+        "--session_runtime_server_host",
+        type=str,
+        default="127.0.0.1",
+        help="SessionRuntime HTTP API server bind host.",
+    )
+    parser.add_argument(
+        "--session_runtime_server_port",
+        type=int,
+        default=8787,
+        help="SessionRuntime HTTP API server bind port.",
+    )
 
     args = parser.parse_args()
     torch.manual_seed(args.seed)
 
     if args.log_root is None:
         args.log_root = f"logs/{DEFAULT_MODEL}/unimind_agent"
+
+    if args.start_session_runtime_server:
+        host, port = start_global_session_runtime_server(
+            host=args.session_runtime_server_host,
+            port=args.session_runtime_server_port,
+        )
+        print(f"SessionRuntime API server started at http://{host}:{port}")
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            stop_global_session_runtime_server()
+        return
 
     if args.instruction is None and args.tasks_json is None:
         raise ValueError("You must provide either instruction or tasks_json.")
