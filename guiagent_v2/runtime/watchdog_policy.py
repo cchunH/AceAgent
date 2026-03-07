@@ -15,6 +15,7 @@ DEFAULT_WATCHDOG_POLICY: dict[str, Any] = {
     "max_alerts_per_key": 3,
     "throttle_window_sec": 60.0,
     "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
+    "escalation_rules": [],
 }
 
 
@@ -46,6 +47,42 @@ def _normalize_str_list(value: Any) -> list[str]:
     return out
 
 
+def _normalize_escalation_rules(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rules: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip() or f"rule_{index}"
+        threshold = _as_positive_int(item.get("threshold"), default=3)
+        window_sec = _as_non_negative_float(item.get("window_sec"), default=120.0)
+        target = str(item.get("target_severity", "CRITICAL") or "CRITICAL").upper()
+        if target not in _SEVERITY:
+            target = "CRITICAL"
+        rule: dict[str, Any] = {
+            "name": name,
+            "threshold": threshold,
+            "window_sec": window_sec,
+            "target_severity": target,
+        }
+        for key in (
+            "watchdog_name",
+            "reason_code",
+            "source_event_type",
+            "alert_category",
+            "policy_decision",
+        ):
+            raw = item.get(key)
+            if raw is None:
+                continue
+            text = str(raw).strip()
+            if text:
+                rule[key] = text
+        rules.append(rule)
+    return rules
+
+
 def normalize_watchdog_policy(raw: dict[str, Any] | None) -> dict[str, Any]:
     policy = deepcopy(DEFAULT_WATCHDOG_POLICY)
     if not isinstance(raw, dict):
@@ -71,6 +108,8 @@ def normalize_watchdog_policy(raw: dict[str, Any] | None) -> dict[str, Any]:
     dedup_fields = [item.strip() for item in _normalize_str_list(raw.get("dedup_key_fields"))]
     if dedup_fields:
         policy["dedup_key_fields"] = dedup_fields
+
+    policy["escalation_rules"] = _normalize_escalation_rules(raw.get("escalation_rules"))
     return policy
 
 

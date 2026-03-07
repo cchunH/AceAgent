@@ -32,6 +32,7 @@ class WatchdogManager:
         self._lock = Lock()
         self._last_emit_at: dict[str, float] = {}
         self._window_emit_at: dict[str, list[float]] = defaultdict(list)
+        self._escalation_observed_at: dict[str, list[float]] = defaultdict(list)
 
     def process(self, event: dict[str, Any]) -> list[dict[str, Any]]:
         if str(event.get("event_type", "")) == "watchdog_alert":
@@ -67,6 +68,7 @@ class WatchdogManager:
                 ]
             for alert in generated:
                 hydrated = self._hydrate_alert(event, alert, policy_version=str(policy.get("version", "v1")))
+                hydrated = self._apply_escalation(hydrated, policy)
                 severity = str(hydrated.get("watchdog_severity", "LOW")).upper()
                 severity_rank = _SEVERITY_RANK.get(severity, _SEVERITY_RANK["LOW"])
                 if severity_rank < min_severity_rank:
@@ -95,6 +97,79 @@ class WatchdogManager:
         if "session_id" not in payload and source_session_id is not None:
             payload["session_id"] = source_session_id
         return payload
+
+    def _rule_match(self, alert: dict[str, Any], rule: dict[str, Any]) -> bool:
+        for key in (
+            "watchdog_name",
+            "reason_code",
+            "source_event_type",
+            "alert_category",
+            "policy_decision",
+        ):
+            expected = rule.get(key)
+            if expected is None:
+                continue
+            actual = str(alert.get(key, "")).strip()
+            if actual != str(expected).strip():
+                return False
+        return True
+
+    def _apply_escalation(self, alert: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
+        rules = policy.get("escalation_rules")
+        if not isinstance(rules, list) or not rules:
+            return alert
+
+        base = dict(alert)
+        current = str(base.get("watchdog_severity", "LOW")).upper()
+        current_rank = _SEVERITY_RANK.get(current, _SEVERITY_RANK["LOW"])
+        dedup_key = self._build_dedup_key(base, policy)
+        now = time.monotonic()
+        matched_escalation = False
+        matched_rule_name = None
+        matched_count = 0
+        matched_window = 0.0
+
+        with self._lock:
+            for idx, rule in enumerate(rules):
+                if not isinstance(rule, dict):
+                    continue
+                if not self._rule_match(base, rule):
+                    continue
+
+                threshold = max(1, int(rule.get("threshold", 3) or 3))
+                window_sec = max(0.0, float(rule.get("window_sec", 120.0) or 0.0))
+                hist_key = f"{idx}|{dedup_key}"
+                history = self._escalation_observed_at[hist_key]
+                if window_sec > 0:
+                    history = [ts for ts in history if (now - ts) <= window_sec]
+                history.append(now)
+                self._escalation_observed_at[hist_key] = history
+                if len(history) < threshold:
+                    continue
+
+                target = str(rule.get("target_severity", "CRITICAL") or "CRITICAL").upper()
+                target_rank = _SEVERITY_RANK.get(target, _SEVERITY_RANK["CRITICAL"])
+                if target_rank <= current_rank:
+                    continue
+
+                current = target
+                current_rank = target_rank
+                matched_escalation = True
+                matched_rule_name = str(rule.get("name", f"rule_{idx}"))
+                matched_count = len(history)
+                matched_window = window_sec
+
+        if not matched_escalation:
+            return base
+
+        escalated = dict(base)
+        escalated["watchdog_severity_original"] = str(base.get("watchdog_severity", "LOW")).upper()
+        escalated["watchdog_severity"] = current
+        escalated["watchdog_escalated"] = True
+        escalated["watchdog_escalation_rule"] = matched_rule_name
+        escalated["watchdog_escalation_count"] = matched_count
+        escalated["watchdog_escalation_window_sec"] = matched_window
+        return escalated
 
     def _build_dedup_key(self, alert: dict[str, Any], policy: dict[str, Any]) -> str:
         fields = policy.get("dedup_key_fields", []) or ["watchdog_name", "task_id", "reason_code"]

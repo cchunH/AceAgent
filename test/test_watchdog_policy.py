@@ -20,6 +20,16 @@ class TestWatchdogPolicy(unittest.TestCase):
                 "max_alerts_per_key": "2",
                 "throttle_window_sec": "15",
                 "dedup_key_fields": ["watchdog_name", "reason_code"],
+                "escalation_rules": [
+                    {
+                        "name": "deny-twice",
+                        "watchdog_name": "security_watchdog",
+                        "policy_decision": "deny",
+                        "threshold": "2",
+                        "window_sec": "120",
+                        "target_severity": "CRITICAL",
+                    }
+                ],
             }
         )
         self.assertEqual(policy["version"], "v2")
@@ -29,6 +39,10 @@ class TestWatchdogPolicy(unittest.TestCase):
         self.assertEqual(policy["max_alerts_per_key"], 2)
         self.assertEqual(policy["throttle_window_sec"], 15.0)
         self.assertEqual(policy["dedup_key_fields"], ["watchdog_name", "reason_code"])
+        self.assertEqual(policy["escalation_rules"][0]["name"], "deny-twice")
+        self.assertEqual(policy["escalation_rules"][0]["threshold"], 2)
+        self.assertEqual(policy["escalation_rules"][0]["window_sec"], 120.0)
+        self.assertEqual(policy["escalation_rules"][0]["target_severity"], "CRITICAL")
 
     def test_loader_from_file(self):
         with tempfile.TemporaryDirectory() as td:
@@ -43,6 +57,7 @@ class TestWatchdogPolicy(unittest.TestCase):
                         "max_alerts_per_key": 1,
                         "throttle_window_sec": 30,
                         "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
+                        "escalation_rules": [],
                     },
                     f,
                 )
@@ -51,6 +66,7 @@ class TestWatchdogPolicy(unittest.TestCase):
             self.assertEqual(policy["version"], "v3")
             self.assertEqual(policy["enabled_watchdogs"], ["security_watchdog"])
             self.assertEqual(policy["max_alerts_per_key"], 1)
+            self.assertEqual(policy["escalation_rules"], [])
             self.assertEqual(loader.source(), path)
 
 

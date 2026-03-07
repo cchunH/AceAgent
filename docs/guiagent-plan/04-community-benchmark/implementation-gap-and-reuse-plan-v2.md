@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.11`
+- 版本：`v2.12`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 
@@ -96,7 +96,7 @@
 
 16. `WatchdogPolicy`（守护治理 v1）
 - 证据模块：`guiagent_v2/runtime/watchdog_policy.py`, `guiagent_v2/runtime/watchdogs/manager.py`, `run.py`
-- 现状：支持 watchdog 插件启停、最小严重级过滤、去重窗口、节流窗口与热重载参数。
+- 现状：支持 watchdog 插件启停、最小严重级过滤、去重窗口、节流窗口、`escalation_rules` 与热重载参数。
 - 距离评估：`完成（v1）`
 
 17. `SessionRuntimeServer` 多实例治理
@@ -126,7 +126,7 @@
 - 证据模块：`guiagent_v2/runtime/event_bus.py`, `status_api.py`
 - 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合，事件 schema 校验已接入，并新增控制面审计事件与任务级聚合。
 - 距离评估：`部分完成`
-- 关键差距：schema 严格模式尚未开启（未做 fail-fast）；watchdog 仍缺跨任务聚合与告警升级策略；审计归档与跨文件聚合未完成。
+- 关键差距：schema 严格模式尚未开启（未做 fail-fast）；watchdog 仍缺跨任务聚合；审计归档与跨文件聚合未完成。
 
 3. Web 子任务闭环
 - 证据模块：`v2_executor.py`, `agent_browser_skill.py`
@@ -228,8 +228,9 @@
 
 1. 已完成：`event_schema v1` 与 `watchdog_alert` 主链接入。
 2. 已完成：watchdog 策略文件化与去重/节流接入（`watchdog_policy`）。
-3. 待继续：事件 schema 版本迁移策略（`v1 -> v2`）与兼容校验测试。
-4. 待继续：watchdog 告警升级策略与跨任务聚合。
+3. 已完成：watchdog 告警升级策略（`escalation_rules`）。
+4. 待继续：事件 schema 版本迁移策略（`v1 -> v2`）与兼容校验测试。
+5. 待继续：watchdog 跨任务聚合。
 
 退出条件：
 - 关键事件字段稳定且可回溯，schema 升级不破坏已有消费方。

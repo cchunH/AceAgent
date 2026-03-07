@@ -5,5 +5,15 @@
   "dedup_window_sec": 30.0,
   "max_alerts_per_key": 3,
   "throttle_window_sec": 60.0,
-  "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"]
+  "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
+  "escalation_rules": [
+    {
+      "name": "security_deny_repeated",
+      "watchdog_name": "security_watchdog",
+      "policy_decision": "deny",
+      "threshold": 2,
+      "window_sec": 120.0,
+      "target_severity": "CRITICAL"
+    }
+  ]
 }

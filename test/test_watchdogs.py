@@ -183,6 +183,90 @@ class TestWatchdogs(unittest.TestCase):
         self.assertGreaterEqual(len(first), 1)
         self.assertEqual(second, [])
 
+    def test_escalation_rules_raise_alert_severity(self):
+        manager = WatchdogManager(
+            plugins=[SecurityWatchdog()],
+            policy_loader=_PolicyLoader(
+                {
+                    "version": "v1",
+                    "enabled_watchdogs": ["security_watchdog"],
+                    "min_severity": "LOW",
+                    "dedup_window_sec": 0.0,
+                    "max_alerts_per_key": 10,
+                    "throttle_window_sec": 60.0,
+                    "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
+                    "escalation_rules": [
+                        {
+                            "name": "deny-to-critical",
+                            "watchdog_name": "security_watchdog",
+                            "policy_decision": "deny",
+                            "threshold": 2,
+                            "window_sec": 60.0,
+                            "target_severity": "CRITICAL",
+                        }
+                    ],
+                }
+            ),
+        )
+        event = {
+            "run_id": "r8",
+            "task_id": "t8",
+            "step_id": 1,
+            "chain_mode": "guiagent_v2",
+            "event_type": "guard_decision",
+            "status": "HANDOVER",
+            "intent_key": "global:TAP:SUBMIT",
+            "policy_decision": "deny",
+            "policy_reason": "ACTION_DENIED_BY_POLICY",
+        }
+        first = manager.process(event)
+        second = manager.process(event)
+        self.assertEqual(first[0]["watchdog_severity"], "HIGH")
+        self.assertFalse(first[0].get("watchdog_escalated", False))
+        self.assertEqual(second[0]["watchdog_severity"], "CRITICAL")
+        self.assertTrue(second[0].get("watchdog_escalated", False))
+        self.assertEqual(second[0].get("watchdog_escalation_rule"), "deny-to-critical")
+
+    def test_escalation_rule_not_matched_keeps_original_severity(self):
+        manager = WatchdogManager(
+            plugins=[SecurityWatchdog()],
+            policy_loader=_PolicyLoader(
+                {
+                    "version": "v1",
+                    "enabled_watchdogs": ["security_watchdog"],
+                    "min_severity": "LOW",
+                    "dedup_window_sec": 0.0,
+                    "max_alerts_per_key": 10,
+                    "throttle_window_sec": 60.0,
+                    "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
+                    "escalation_rules": [
+                        {
+                            "name": "deny-to-critical",
+                            "watchdog_name": "security_watchdog",
+                            "policy_decision": "deny",
+                            "threshold": 1,
+                            "window_sec": 60.0,
+                            "target_severity": "CRITICAL",
+                        }
+                    ],
+                }
+            ),
+        )
+        confirm_event = {
+            "run_id": "r9",
+            "task_id": "t9",
+            "step_id": 1,
+            "chain_mode": "guiagent_v2",
+            "event_type": "guard_decision",
+            "status": "RUNNING",
+            "intent_key": "global:TAP:SUBMIT",
+            "policy_decision": "confirm",
+            "policy_reason": "NEEDS_CONFIRM",
+        }
+        alerts = manager.process(confirm_event)
+        self.assertEqual(alerts[0]["watchdog_severity"], "MEDIUM")
+        self.assertFalse(alerts[0].get("watchdog_escalated", False))
+
 
 if __name__ == "__main__":
     unittest.main()
