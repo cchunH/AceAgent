@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.7`
+- 版本：`v1.8`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -30,10 +30,11 @@
 16. 提供策略样例文件：`guiagent_v2/runtime/policies/watchdog_policy.example.json`。
 17. 新增 `session_runtime_server` 本地 HTTP IPC 服务（`/health /sessions /tasks /runtime/status /runtime/timeline`），并支持 `run.py --start_session_runtime_server` 独立启动。
 18. `SessionRuntime` 新增会话/任务索引持久化恢复（`--session_runtime_state_path`），支持服务重启后恢复 session/task 查询面。
+19. `SessionRuntimeServer` 新增 token 鉴权（默认写接口，读接口可选），并发布 API 契约文档 `session-runtime-api-contract-v1.md`。
 
 尚未落地：
 1. `watchdog` 深化生产化（告警升级策略、跨任务聚合、下载/安全扩展插件）。
-2. `SessionRuntime` 生产级进程化（当前已具备本地 HTTP IPC + 索引恢复，仍缺鉴权与多实例治理）。
+2. `SessionRuntime` 生产级进程化（当前已具备本地 HTTP IPC + 索引恢复 + token 鉴权，仍缺多实例治理）。
 3. 真正的生产级 web 子任务执行闭环（当前是 probe + fallback 的可控最小实现）。
 
 ## 0. 决策基线（先定方向）

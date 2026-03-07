@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.5`
+- 版本：`v2.6`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 
@@ -79,17 +79,22 @@
 - 现状：支持 session/task 索引持久化与恢复（`session_runtime_state_path`），重启后可恢复控制面查询能力。
 - 距离评估：`完成（v1）`
 
-13. `Typed Event Schema`
+13. `SessionRuntimeServer` 鉴权与契约
+- 证据模块：`guiagent_v2/runtime/session_runtime_server.py`, `docs/guiagent-plan/02-phase-0/session-runtime-api-contract-v1.md`
+- 现状：支持 token 鉴权（默认写接口，读接口可选）并冻结 v1 API 契约。
+- 距离评估：`完成（v1）`
+
+14. `Typed Event Schema`
 - 证据模块：`guiagent_v2/runtime/event_schema.py`, `guiagent_v2/runtime/event_bus.py`
 - 现状：事件入总线前完成标准化，写入 `event_schema_version/schema_valid/schema_error`，为后续控制面稳定消费打基础。
 - 距离评估：`完成（v0）`
 
-14. `Watchdog` 插件骨架
+15. `Watchdog` 插件骨架
 - 证据模块：`guiagent_v2/runtime/watchdogs/*`, `guiagent_v2/runtime/orchestrator_v2.py`
 - 现状：已接入 `crash_watchdog/security_watchdog`，可从主事件派生 `watchdog_alert`。
 - 距离评估：`完成（v0）`
 
-15. `WatchdogPolicy`（守护治理 v1）
+16. `WatchdogPolicy`（守护治理 v1）
 - 证据模块：`guiagent_v2/runtime/watchdog_policy.py`, `guiagent_v2/runtime/watchdogs/manager.py`, `run.py`
 - 现状：支持 watchdog 插件启停、最小严重级过滤、去重窗口、节流窗口与热重载参数。
 - 距离评估：`完成（v1）`
@@ -98,9 +103,9 @@
 
 1. `SessionRuntime`
 - 证据模块：`guiagent_v2/runtime/session_runtime.py`, `guiagent_v2/runtime/session_runtime_server.py`, `run.py`
-- 现状：已落地会话隔离 + 本地 HTTP IPC v1 + 索引持久化恢复。
+- 现状：已落地会话隔离 + 本地 HTTP IPC v1 + 索引持久化恢复 + token 鉴权。
 - 距离评估：`部分完成`
-- 关键差距：缺 IPC 鉴权、缺多实例治理与端口协调策略。
+- 关键差距：缺多实例治理与端口协调策略。
 
 2. 事件治理
 - 证据模块：`guiagent_v2/runtime/event_bus.py`, `status_api.py`
@@ -194,8 +199,9 @@
 2. 已完成：保留旧 API 兼容，新增 session 级提交与查询接口。
 3. 已完成：抽离本地 HTTP IPC 通道（`session_runtime_server`）并提供独立启动模式。
 4. 已完成：补齐 session/task 索引持久化恢复。
-5. 待继续：补齐鉴权与多实例治理。
-6. 待继续：把 `session_id` 作为控制面一等键接入后续前端适配层与任务分发策略。
+5. 已完成：补齐 token 鉴权与 API 契约冻结。
+6. 待继续：补齐多实例治理。
+7. 待继续：把 `session_id` 作为控制面一等键接入后续前端适配层与任务分发策略。
 
 退出条件：
 - 会话隔离可验证。

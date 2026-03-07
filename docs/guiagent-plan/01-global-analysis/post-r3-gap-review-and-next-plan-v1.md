@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.1`
+- 版本：`v1.2`
 - 更新时间：`2026-03-08`
 - 范围：基于当前 `main` 代码，对 `R3(会话进程化) + R4(治理生产化)` 进行实装后差距审查
 
@@ -29,23 +29,23 @@
 
 ## P0（建议立即推进）
 
-1. IPC 安全边界缺口
-- 问题：本地 HTTP API 目前无鉴权。
-- 证据模块：`session_runtime_server.py`
-- 影响：同机进程可直接提交/查询任务，存在控制面滥用风险。
-- 建议：增加 `api_token` 机制与可选 `origin/process` 白名单。
-
-2. Web 子任务仍是 probe 级
+1. Web 子任务仍是 probe 级
 - 问题：`v2_executor` 的 web 分支仍偏单步探针+回退。
 - 证据模块：`v2_executor.py`
 - 影响：网页多步任务成功率和可解释性仍受限。
 - 建议：补“多步 web action 计划执行器”最小版本（3-5 步上限 + step watchdog）。
 
-3. API 契约缺口
-- 问题：接口已可用，但缺少独立 API contract 文档与错误码规范。
+2. 多实例治理缺口
+- 问题：当前 server 仍为单实例模式，缺少冲突仲裁。
 - 证据模块：`session_runtime_server.py`
-- 影响：前端/调度接入成本偏高，联调效率低。
-- 建议：新增 `session-runtime-api-contract-v1.md` 并冻结 v1 字段。
+- 影响：多进程启动时端口/状态竞争风险高。
+- 建议：引入 lockfile + 实例 ID + 端口冲突回退策略。
+
+3. 控制面审计字段缺口
+- 问题：鉴权已接入，但缺少操作者/来源审计字段沉淀。
+- 证据模块：`session_runtime_server.py`, `event_bus.py`
+- 影响：安全追溯和运维诊断能力不足。
+- 建议：为控制面写操作补充 `actor/source` 审计事件。
 
 ## P1（建议下一阶段并行）
 
@@ -85,17 +85,13 @@
 
 ## Iteration A（3-5 天）：控制面安全与契约冻结
 
-1. IPC 鉴权
-- 目标模块：`session_runtime_server.py`
-- 验收：未携带 token 的写操作返回 `401`。
-
-2. API 契约文档
-- 目标文档：`docs/guiagent-plan/02-phase-0/session-runtime-api-contract-v1.md`
-- 验收：前端可据此直接联调。
-
-3. 多实例冲突防护
+1. 多实例冲突防护
 - 目标模块：`session_runtime_server.py`
 - 验收：重复启动给出明确错误或自动协商端口。
+
+2. 控制面审计字段
+- 目标模块：`session_runtime_server.py`, `event_bus.py`
+- 验收：关键写操作有可追溯审计记录。
 
 ## Iteration B（4-6 天）：执行链增强
 
@@ -130,4 +126,4 @@
 
 ## 5. 结论
 
-当前路线已从“骨架期”进入“可运行治理期”：具备会话 IPC、索引恢复、事件 schema、策略化 watchdog。下一阶段应集中补齐 `安全 + 契约 + 多步执行` 三个核心缺口，避免过早扩展模块面，保持主链稳定与迭代速度平衡。
+当前路线已从“骨架期”进入“可运行治理期”：具备会话 IPC、索引恢复、token 鉴权、API 契约、事件 schema、策略化 watchdog。下一阶段应集中补齐 `多实例治理 + 多步执行 + 审计` 三个核心缺口，避免过早扩展模块面，保持主链稳定与迭代速度平衡。

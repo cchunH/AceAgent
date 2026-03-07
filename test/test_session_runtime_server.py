@@ -10,16 +10,24 @@ from guiagent_v2.runtime.session_runtime_server import SessionRuntimeAPIServer
 from guiagent_v2.runtime.status_api import get_global_status_store
 
 
-def _http_json(base_url: str, method: str, path: str, payload: dict | None = None) -> tuple[int, dict]:
+def _http_json(
+    base_url: str,
+    method: str,
+    path: str,
+    payload: dict | None = None,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, dict]:
     data = None
-    headers = {"Content-Type": "application/json; charset=utf-8"}
+    merged_headers = {"Content-Type": "application/json; charset=utf-8"}
+    if headers:
+        merged_headers.update(headers)
     if payload is not None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
         url=base_url + path,
         method=method,
         data=data,
-        headers=headers,
+        headers=merged_headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=5.0) as resp:
@@ -194,6 +202,67 @@ class TestSessionRuntimeServer(unittest.TestCase):
             finally:
                 server_b.stop()
                 runtime_b.shutdown(wait=True)
+
+    def test_auth_on_write_endpoints(self):
+        secure_server = SessionRuntimeAPIServer(
+            runtime=self.runtime,
+            host="127.0.0.1",
+            port=0,
+            api_token="secret-123",
+            require_auth_on_read=False,
+        )
+        secure_server.start()
+        secure_base = secure_server.base_url
+        try:
+            code, body = _http_json(
+                secure_base,
+                "POST",
+                "/sessions",
+                {"session_id": "s-auth"},
+            )
+            self.assertEqual(code, 401)
+            self.assertFalse(body["ok"])
+
+            code, body = _http_json(
+                secure_base,
+                "POST",
+                "/sessions",
+                {"session_id": "s-auth"},
+                headers={"X-API-Token": "secret-123"},
+            )
+            self.assertEqual(code, 201)
+            self.assertEqual(body["data"]["session_id"], "s-auth")
+        finally:
+            secure_server.stop()
+
+    def test_auth_on_read_when_enabled(self):
+        secure_server = SessionRuntimeAPIServer(
+            runtime=self.runtime,
+            host="127.0.0.1",
+            port=0,
+            api_token="secret-456",
+            require_auth_on_read=True,
+        )
+        secure_server.start()
+        secure_base = secure_server.base_url
+        try:
+            code, _ = _http_json(secure_base, "GET", "/health")
+            self.assertEqual(code, 200)
+
+            code, body = _http_json(secure_base, "GET", "/sessions")
+            self.assertEqual(code, 401)
+            self.assertFalse(body["ok"])
+
+            code, body = _http_json(
+                secure_base,
+                "GET",
+                "/sessions",
+                headers={"Authorization": "Bearer secret-456"},
+            )
+            self.assertEqual(code, 200)
+            self.assertTrue(body["ok"])
+        finally:
+            secure_server.stop()
 
 
 if __name__ == "__main__":

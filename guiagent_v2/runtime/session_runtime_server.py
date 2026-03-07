@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import secrets
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -35,10 +37,14 @@ class SessionRuntimeAPIServer:
         runtime: SessionRuntime | None = None,
         host: str = "127.0.0.1",
         port: int = 0,
+        api_token: str | None = None,
+        require_auth_on_read: bool = False,
     ):
         self.runtime = runtime or get_global_session_runtime()
         self.host = str(host).strip() or "127.0.0.1"
         self.port = int(port)
+        self.api_token = str(api_token).strip() if api_token else None
+        self.require_auth_on_read = bool(require_auth_on_read)
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -84,6 +90,8 @@ class SessionRuntimeAPIServer:
 
     def _build_handler(self):
         runtime = self.runtime
+        api_token = self.api_token
+        require_auth_on_read = self.require_auth_on_read
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, format, *args):  # noqa: A003
@@ -112,6 +120,29 @@ class SessionRuntimeAPIServer:
                     },
                 )
 
+            def _extract_api_token(self) -> str | None:
+                auth_header = str(self.headers.get("Authorization", "")).strip()
+                if auth_header.lower().startswith("bearer "):
+                    token = auth_header[7:].strip()
+                    return token or None
+
+                token_header = str(self.headers.get("X-API-Token", "")).strip()
+                if token_header:
+                    return token_header
+                return None
+
+            def _check_auth(self, write: bool) -> bool:
+                if not api_token:
+                    return True
+                if not write and not require_auth_on_read:
+                    return True
+
+                provided = self._extract_api_token()
+                if provided and secrets.compare_digest(str(provided), str(api_token)):
+                    return True
+                self._error("UNAUTHORIZED", "missing or invalid api token", status_code=401)
+                return False
+
             def _read_json_body(self) -> dict[str, Any]:
                 raw_length = self.headers.get("Content-Length", "0")
                 try:
@@ -138,6 +169,9 @@ class SessionRuntimeAPIServer:
 
                 if path == "/health":
                     self._ok({"status": "ok"})
+                    return
+
+                if not self._check_auth(write=False):
                     return
 
                 if path == "/sessions":
@@ -224,6 +258,8 @@ class SessionRuntimeAPIServer:
             def do_POST(self):  # noqa: N802
                 parsed = urlparse(self.path)
                 path = parsed.path or "/"
+                if not self._check_auth(write=True):
+                    return
                 try:
                     payload = self._read_json_body()
                 except ValueError as exc:
@@ -273,6 +309,8 @@ class SessionRuntimeAPIServer:
             def do_DELETE(self):  # noqa: N802
                 parsed = urlparse(self.path)
                 path = parsed.path or "/"
+                if not self._check_auth(write=True):
+                    return
                 if path.startswith("/sessions/"):
                     session_id = path.split("/", 2)[2].strip()
                     removed = runtime.shutdown_session(session_id=session_id, wait=True)
@@ -292,6 +330,8 @@ _GLOBAL_API_SERVER_LOCK = threading.Lock()
 
 def get_global_session_runtime_server(
     persistence_path: str | None = None,
+    api_token: str | None = None,
+    require_auth_on_read: bool = False,
 ) -> SessionRuntimeAPIServer:
     global _GLOBAL_API_SERVER
     if _GLOBAL_API_SERVER is not None:
@@ -300,6 +340,8 @@ def get_global_session_runtime_server(
         if _GLOBAL_API_SERVER is None:
             _GLOBAL_API_SERVER = SessionRuntimeAPIServer(
                 runtime=get_global_session_runtime(persistence_path=persistence_path),
+                api_token=api_token,
+                require_auth_on_read=require_auth_on_read,
             )
     return _GLOBAL_API_SERVER
 
@@ -308,8 +350,14 @@ def start_global_session_runtime_server(
     host: str = "127.0.0.1",
     port: int = 8787,
     persistence_path: str | None = None,
+    api_token: str | None = None,
+    require_auth_on_read: bool = False,
 ) -> tuple[str, int]:
-    server = get_global_session_runtime_server(persistence_path=persistence_path)
+    server = get_global_session_runtime_server(
+        persistence_path=persistence_path,
+        api_token=api_token,
+        require_auth_on_read=require_auth_on_read,
+    )
     server.host = host
     server.port = int(port)
     return server.start()
@@ -329,12 +377,18 @@ def _main() -> None:
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8787)
     parser.add_argument("--persistence_path", type=str, default=None)
+    parser.add_argument("--api_token", type=str, default=None)
+    parser.add_argument("--require_auth_on_read", action="store_true", default=False)
     args = parser.parse_args()
+
+    api_token = args.api_token or os.getenv("GUIAGENT_SESSION_RUNTIME_API_TOKEN")
 
     server = SessionRuntimeAPIServer(
         runtime=SessionRuntime(persistence_path=args.persistence_path),
         host=args.host,
         port=args.port,
+        api_token=api_token,
+        require_auth_on_read=args.require_auth_on_read,
     )
     host, port = server.start()
     print(f"SessionRuntime API server started at http://{host}:{port}")

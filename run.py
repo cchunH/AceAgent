@@ -118,6 +118,18 @@ def main():
         default=None,
         help="Optional state file path for SessionRuntime server persistence.",
     )
+    parser.add_argument(
+        "--session_runtime_api_token",
+        type=str,
+        default=None,
+        help="Optional API token for SessionRuntime server auth.",
+    )
+    parser.add_argument(
+        "--session_runtime_auth_read",
+        action="store_true",
+        default=False,
+        help="Require API token on read endpoints for SessionRuntime server.",
+    )
 
     args = parser.parse_args()
     torch.manual_seed(args.seed)
@@ -137,9 +149,13 @@ def main():
             host=args.session_runtime_server_host,
             port=args.session_runtime_server_port,
             persistence_path=session_state_path,
+            api_token=args.session_runtime_api_token,
+            require_auth_on_read=args.session_runtime_auth_read,
         )
         print(f"SessionRuntime API server started at http://{host}:{port}")
         print(f"SessionRuntime state path: {session_state_path}")
+        if args.session_runtime_api_token:
+            print("SessionRuntime API auth: enabled")
         try:
             while True:
                 time.sleep(3600)

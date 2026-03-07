@@ -243,6 +243,8 @@ while True:
 - `--session_runtime_server_host`
 - `--session_runtime_server_port`
 - `--session_runtime_state_path`
+- `--session_runtime_api_token`
+- `--session_runtime_auth_read`
 
 ## 工作流程详解
 

@@ -25,3 +25,5 @@
 7. [phase0-experiment-report-template.md](./phase0-experiment-report-template.md)  
    实验报告模板。
 
+8. [session-runtime-api-contract-v1.md](./session-runtime-api-contract-v1.md)  
+   SessionRuntime 本地 HTTP IPC 接口契约（路径、鉴权、错误码）。
