@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.3`
+- 版本：`v1.4`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -24,9 +24,11 @@
 10. `GuardPolicy` 已支持文件化策略加载与手动重载（`policy_loader`），入口新增 `--guard_policy_path/--guard_policy_reload_interval`。
 11. 提供策略样例文件：`guiagent_v2/runtime/policies/guard_policy.example.json`。
 12. `SessionRuntime` 已落地进程内会话隔离调度（`submit/list/wait/status/timeline`），并把 `session_id` 贯穿到 `v2_executor + orchestrator_v2 + status_api`。
+13. 新增 `event_schema`（`v1`）并接入 `JSONLEventBus`，事件写入时执行字段规范化与校验标记（`schema_valid/schema_error`）。
+14. 新增 `WatchdogManager` 与 `crash/security` 插件骨架，接入 `orchestrator_v2` 事件链并派生 `watchdog_alert` 事件。
 
 尚未落地：
-1. `watchdog` 主链接入与插件化。
+1. `watchdog` 生产化（插件配置化、节流去重、告警升级策略）。
 2. `SessionRuntime` 真正进程化/IPC 化（当前为进程内 v0，会话隔离已可用）。
 3. 真正的生产级 web 子任务执行闭环（当前是 probe + fallback 的可控最小实现）。
 

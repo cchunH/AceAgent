@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.1`
+- 版本：`v2.2`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 
@@ -69,6 +69,16 @@
 - 现状：已支持会话创建、会话级提交/查询/等待、跨会话任务隔离调度，并兼容旧任务服务。
 - 距离评估：`完成（v0，非进程化）`
 
+11. `Typed Event Schema`
+- 证据模块：`guiagent_v2/runtime/event_schema.py`, `guiagent_v2/runtime/event_bus.py`
+- 现状：事件入总线前完成标准化，写入 `event_schema_version/schema_valid/schema_error`，为后续控制面稳定消费打基础。
+- 距离评估：`完成（v0）`
+
+12. `Watchdog` 插件骨架
+- 证据模块：`guiagent_v2/runtime/watchdogs/*`, `guiagent_v2/runtime/orchestrator_v2.py`
+- 现状：已接入 `crash_watchdog/security_watchdog`，可从主事件派生 `watchdog_alert`。
+- 距离评估：`完成（v0）`
+
 ### 2.2 部分落地（需增强）
 
 1. `SessionRuntime`
@@ -79,9 +89,9 @@
 
 2. 事件治理
 - 证据模块：`guiagent_v2/runtime/event_bus.py`, `status_api.py`
-- 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合。
+- 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合，事件 schema 校验已接入。
 - 距离评估：`部分完成`
-- 关键差距：尚未类型化 schema 版本管理；缺少 watchdog 事件与统一校验层。
+- 关键差距：schema 仅 v0（未做严格 fail-fast 与向后兼容策略）；watchdog 尚无节流去重与策略配置中心。
 
 3. Web 子任务闭环
 - 证据模块：`v2_executor.py`, `agent_browser_skill.py`
@@ -133,6 +143,7 @@
 3. Watchdog 插件化
 - 落位：`guiagent_v2/runtime/watchdogs/*`
 - 初始插件：`crash_watchdog.py`, `security_watchdog.py`。
+- 当前状态：`已落地 v0`，后续进入生产化增强。
 
 ## P2（后置）
 
@@ -172,6 +183,16 @@
 退出条件：
 - 会话隔离可验证。
 - server 重启后新任务可正常提交。
+
+### 阶段 R4：事件与守护生产化（2-4 天）
+
+1. 已完成：`event_schema v1` 与 `watchdog_alert` 主链接入。
+2. 待继续：事件 schema 版本迁移策略（`v1 -> v2`）与兼容校验测试。
+3. 待继续：watchdog 告警去重、节流、升级策略与策略文件化。
+
+退出条件：
+- 关键事件字段稳定且可回溯，schema 升级不破坏已有消费方。
+- watchdog 告警可控，不出现告警风暴。
 
 ## 5. 风险与控制
 

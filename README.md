@@ -203,6 +203,7 @@ while True:
 当前已落地能力：
 - `orchestrator_v2.py`: `runtime_mode=legacy|guiagent_v2_shadow|guiagent_v2` 统一入口与事件翻译。
 - `event_bus.py` + `status_api.py`: `events.jsonl` 结构化事件与任务状态查询（支持 `session_id` 聚合与过滤）。
+- `event_schema.py`: Typed Event Schema（`v1`）与运行时事件字段校验。
 - `web_skill_router.py`: `mobile_native/web_skill` 路由决策（移动端系统动作优先走原生链路）。
 - `agent_browser_skill.py`: `agent-browser` 外部进程适配器与 `AgentBrowserSkill` 封装。
 - `action_registry.py`: 动作注册、参数校验、分发统一入口。
@@ -211,6 +212,7 @@ while True:
 - `v2_executor.py`: `guiagent_v2(_shadow)` probe 执行链（含 web fallback 到 mobile_native）。
 - `loop_detector.py` + `context_compaction.py`: 循环检测与上下文压缩治理能力。
 - `task_service.py` + `session_runtime.py`: 任务提交、状态查询、会话级隔离调度（进程内 v0）。
+- `watchdogs/*`: `crash_watchdog/security_watchdog` 插件骨架与 `watchdog_alert` 派生事件。
 
 当前路由可观测字段：
 - `channel`
@@ -225,6 +227,7 @@ while True:
 - `adapter_call`
 - `loop_warning`
 - `context_compaction`
+- `watchdog_alert`
 
 可选运行参数（v2）：
 - `--v2_skip_legacy`

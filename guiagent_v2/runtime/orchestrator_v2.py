@@ -18,6 +18,7 @@ from .reporting import write_runtime_summary
 from .status_api import get_global_status_store
 from .v2_executor import run_probe_step
 from .web_skill_router import WebSkillRouter
+from .watchdogs import WatchdogManager, build_default_watchdog_manager
 
 
 def _build_log_dir(log_root: str, run_name: str, task_id: str) -> str:
@@ -39,9 +40,15 @@ def _load_runtime_config():
 def _emit_and_track(
     bus: JSONLEventBus,
     event: dict[str, Any],
+    watchdog_manager: WatchdogManager | None = None,
 ) -> dict[str, Any]:
     emitted = bus.emit(event)
     get_global_status_store().update(emitted)
+
+    if watchdog_manager is not None:
+        for alert in watchdog_manager.process(emitted):
+            alert_emitted = bus.emit(alert)
+            get_global_status_store().update(alert_emitted)
     return emitted
 
 
@@ -360,6 +367,7 @@ def _emit_events_from_legacy_steps(
     chain_mode: str,
     log_dir: str,
     session_id: str | None = None,
+    watchdog_manager: WatchdogManager | None = None,
     blueprint_repo: BlueprintRepository | None = None,
     router: WebSkillRouter | None = None,
     loop_detector: LoopDetector | None = None,
@@ -396,7 +404,7 @@ def _emit_events_from_legacy_steps(
             event["chain_mode"] = chain_mode
             if session_id:
                 event["session_id"] = session_id
-            emitted = _emit_and_track(bus, event)
+            emitted = _emit_and_track(bus, event, watchdog_manager=watchdog_manager)
             runtime_context_events.append(emitted)
 
             if str(emitted.get("event_type")) == "context_compaction":
@@ -420,6 +428,7 @@ def _emit_events_from_legacy_steps(
                         "compaction_summary": compacted.get("summary"),
                         **({"session_id": session_id} if session_id else {}),
                     },
+                    watchdog_manager=watchdog_manager,
                 )
         if str(step.get("operation")) == "finish":
             final_status = _map_operation_status(step)
@@ -480,6 +489,7 @@ def run_single_task_with_runtime(
     web_skill = AgentBrowserSkill()
     loop_detector = LoopDetector()
     context_compactor = ContextCompactor()
+    watchdog_manager = build_default_watchdog_manager()
 
     _emit_and_track(
         bus,
@@ -492,6 +502,7 @@ def run_single_task_with_runtime(
             "intent_key": "global:TASK:START",
             **({"session_id": runtime_session_id} if runtime_session_id else {}),
         },
+        watchdog_manager=watchdog_manager,
     )
 
     probe_result = None
@@ -504,7 +515,7 @@ def run_single_task_with_runtime(
             session_id=runtime_session_id,
             step_id=1,
             chain_mode=chain_mode,
-            emit_event=lambda event: _emit_and_track(bus, event),
+            emit_event=lambda event: _emit_and_track(bus, event, watchdog_manager=watchdog_manager),
             hooks=hooks,
             router=router,
             guard_policy=guard_policy,
@@ -549,6 +560,7 @@ def run_single_task_with_runtime(
             chain_mode=chain_mode,
             log_dir=log_dir,
             session_id=runtime_session_id,
+            watchdog_manager=watchdog_manager,
             blueprint_repo=blueprint_repo,
             router=router,
             loop_detector=loop_detector,
@@ -568,6 +580,7 @@ def run_single_task_with_runtime(
             "intent_key": "global:TASK:END",
             **({"session_id": runtime_session_id} if runtime_session_id else {}),
         },
+        watchdog_manager=watchdog_manager,
     )
 
     summary_info = write_runtime_summary(

@@ -1,4 +1,5 @@
 from .event_bus import JSONLEventBus
+from .event_schema import EVENT_SCHEMA_VERSION, normalize_event, validate_event
 from .status_api import (
     TaskStatusStore,
     get_global_status_store,
@@ -37,9 +38,19 @@ from .guard_policy import GuardPolicy
 from .loop_detector import LoopDetector
 from .policy_loader import PolicyLoader
 from .v2_executor import V2ProbeResult, infer_probe_action, run_probe_step
+from .watchdogs import (
+    WatchdogPlugin,
+    CrashWatchdog,
+    SecurityWatchdog,
+    WatchdogManager,
+    build_default_watchdog_manager,
+)
 
 __all__ = [
     "JSONLEventBus",
+    "EVENT_SCHEMA_VERSION",
+    "normalize_event",
+    "validate_event",
     "TaskStatusStore",
     "get_global_status_store",
     "get_task_status",
@@ -73,4 +84,9 @@ __all__ = [
     "V2ProbeResult",
     "infer_probe_action",
     "run_probe_step",
+    "WatchdogPlugin",
+    "CrashWatchdog",
+    "SecurityWatchdog",
+    "WatchdogManager",
+    "build_default_watchdog_manager",
 ]
