@@ -187,6 +187,13 @@
 2. P1 作为结构升级：强化动作扩展与运行时治理。
 3. P2 仅在控制面与 Web 自动化主线成熟后推进。
 
+## 推荐推进节奏（移动端优先）
+
+1. 第 1 批：`P0-1/P0-2/P0-4`（循环检测、上下文压缩、策略门禁）。
+2. 第 2 批：`P0-3 + P1-5`（会话化任务服务 + 路由器）。
+3. 第 3 批：`P0-6 + P1-4`（AgentBrowserSkill + DomainFilter）。
+4. 第 4 批：其余 P1 与 P2（watchdog、snapshot ref、stream 接管）。
+
 ## 与接口草案映射
 
 - `WebAutomationAdapter`：承接 P1-4、P2-1、P2-2

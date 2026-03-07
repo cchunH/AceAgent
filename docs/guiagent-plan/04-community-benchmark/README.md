@@ -20,8 +20,12 @@
 5. [integration-blueprint-v1.md](./integration-blueprint-v1.md)
    - 从分析到改造实施的集成蓝图（接口草案、阶段计划、退出条件）。
 
+6. [skill-vs-modular-integration-decision.md](./skill-vs-modular-integration-decision.md)
+   - `skill` 引入 vs 模块拆解并入的定稿决策（移动端场景）。
+
 ## 推荐阅读顺序
 
 1. 先读 `agent-browser-deep-analysis` + `browser-use-deep-analysis`，建立事实层认知。
 2. 再读 `cross-project-tradeoff-and-patterns`，确定取舍原则。
-3. 最后读 `reusable-module-catalog-for-unimind` + `integration-blueprint-v1`，进入改造实施。
+3. 读 `skill-vs-modular-integration-decision`，锁定执行模式。
+4. 最后读 `reusable-module-catalog-for-unimind` + `integration-blueprint-v1`，进入改造实施。

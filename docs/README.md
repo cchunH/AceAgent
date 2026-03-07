@@ -60,6 +60,9 @@
 9. [community benchmark](./guiagent-plan/04-community-benchmark/README.md)  
    社区标杆项目深度对标（agent-browser + browser-use）与复用落地蓝图（移动端主链优先，Web skill 旁路增强）。
 
+10. [skill vs modular decision](./guiagent-plan/04-community-benchmark/skill-vs-modular-integration-decision.md)  
+    Skill 引入与模块并入的定稿决策（移动端约束版）。
+
 ## 推荐阅读顺序
 
 1. `deep-system-audit-report`（先建立全局认知）

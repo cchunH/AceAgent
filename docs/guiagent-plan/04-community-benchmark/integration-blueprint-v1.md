@@ -8,6 +8,13 @@
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：本蓝图只定义接口与阶段计划，不包含本轮代码改造
 
+## 0. 决策基线（先定方向）
+
+1. 推荐模式：`模块拆解并入（主线） + AgentBrowserSkill（辅线）`。
+2. 控制原则：`mobile_native` 是默认且唯一主链，`web_skill` 仅处理网页子任务。
+3. 健康标准：任何阶段都不得出现“移动端系统动作改走 web_skill”的回归。
+4. 决策依据：`skill-vs-modular-integration-decision.md`（本目录）。
+
 ## 1. 目标架构（从文档到代码）
 
 ## 1.1 目标分层
@@ -33,7 +40,15 @@
 4. Web Skill 失败必须可回退：失败后回到 `guiagent_v2` 主链并触发 `handover` 或重规划。
 5. 运行时必须记录执行通道：`channel=mobile_native|web_skill`，避免观测混淆。
 
-## 1.3 候选接口草案（冻结建议）
+## 1.3 路由规则 v0（执行时强约束）
+
+1. 默认路由：所有任务先进入 `mobile_native`。
+2. 命中条件：仅当 `intent_key` 命中 `web:*` 或任务被明确标记为网页子流程时，允许进入 `web_skill`。
+3. 禁止条件：`Open_App/Back/Home/Switch_App/Type/Enter/Swipe` 等设备系统动作禁止进入 `web_skill`。
+4. 回退条件：`web_skill` 任一步失败、超时或响应不合法，立即 `fallback=mobile_native`。
+5. 审计要求：每次路由决策必须产生日志事件 `skill_route`，回退必须产生日志事件 `skill_fallback`。
+
+## 1.4 候选接口草案（冻结建议）
 
 以下为文档冻结草案，不在本轮实现：
 
@@ -145,6 +160,13 @@ class AgentBrowserSkill:
 - `channel`
 - `skill_name`
 - `route_reason`
+
+## 3.1 关键健康指标（用于判断方案是否跑偏）
+
+1. `mobile_native_coverage`：移动端系统动作中走 `mobile_native` 的比例，目标 100%。
+2. `web_skill_route_precision`：进入 `web_skill` 的任务中真实网页子任务占比，目标 >= 95%。
+3. `web_skill_fallback_success_rate`：`web_skill` 失败后主链回退并完成任务比例，目标 >= 90%。
+4. `core_success_non_regression`：对比改造前基线，移动端核心场景成功率不下降。
 
 ## 4. 风险清单与应对
 

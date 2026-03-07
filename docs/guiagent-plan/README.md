@@ -87,6 +87,9 @@ docs/guiagent-plan/
 5. [integration-blueprint-v1.md](./04-community-benchmark/integration-blueprint-v1.md)  
    社区能力集成蓝图（接口草案 + 分阶段实施 + 退出条件，强调移动端主链优先）。
 
+6. [skill-vs-modular-integration-decision.md](./04-community-benchmark/skill-vs-modular-integration-decision.md)  
+   模式决策定稿：模块主线并入 + skill 旁路增强。
+
 ## 推荐阅读顺序
 
 1. 先读 `01-global-analysis/*` 建立全局判断。

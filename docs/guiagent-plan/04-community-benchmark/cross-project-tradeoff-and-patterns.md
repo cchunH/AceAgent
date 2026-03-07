@@ -87,10 +87,10 @@
 - 动作注册中心（Registry 思路）
 3. 通过 `WebAutomationAdapter` 外接 agent-browser：
 - 接入 `snapshot/diff/policy/domain/stream` 等执行能力。
- - 以 `AgentBrowserSkill` 形式挂到 skill 层，由路由器判定是否调用。
+- 以 `AgentBrowserSkill` 形式挂到 skill 层，由路由器判定是否调用。
 4. 统一事件总线：
 - 映射 `task_start/step_start/action_exec/assertion/post_check/handover/step_end/task_end`。
- - 额外记录 `channel=mobile_native|web_skill`。
+- 额外记录 `channel=mobile_native|web_skill`。
 
 ## 5. 风险与防护
 
@@ -109,3 +109,9 @@
 ## 6. 结论
 
 对 Uni-Mind 最优策略不是二选一，而是“Python 主线吸收 browser-use 的编排优势 + 外接 agent-browser 的执行治理能力”。这一路径最符合当前 `guiagent_v2` 已有结构，也最利于分阶段落地。
+
+## 7. 推荐落地次序（理顺版）
+
+1. 先做模块化主线：`ActionRegistry + GuardPolicy + SessionRuntime`。
+2. 再接 `WebSkillRouter`：明确 mobile/web 双通道路由。
+3. 最后接 `AgentBrowserSkill`：仅给 Web 子任务提速，不替代移动端主链。

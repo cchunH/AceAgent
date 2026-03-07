@@ -66,6 +66,7 @@
 - `mobile_native`：ADB 原生动作链（默认）
 - `web_skill`：通过 `AgentBrowserSkill` 外接 `agent-browser` 处理网页子任务
 3. 关键约束：`agent-browser` 不替代移动端系统动作，仅作为 Web 执行增强能力
+4. 决策定稿文档：`docs/guiagent-plan/04-community-benchmark/skill-vs-modular-integration-decision.md`
 
 ## 4. 前端控制面接入点（预留）
 
