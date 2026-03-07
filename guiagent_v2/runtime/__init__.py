@@ -17,6 +17,12 @@ from .task_service import (
     get_submitted_task,
     list_submitted_tasks,
 )
+from .web_skill_router import WebSkillRouter, RouteDecision
+from .agent_browser_skill import (
+    WebAutomationAdapter,
+    AgentBrowserCLIAdapter,
+    AgentBrowserSkill,
+)
 
 __all__ = [
     "JSONLEventBus",
@@ -34,4 +40,9 @@ __all__ = [
     "submit_task",
     "get_submitted_task",
     "list_submitted_tasks",
+    "WebSkillRouter",
+    "RouteDecision",
+    "WebAutomationAdapter",
+    "AgentBrowserCLIAdapter",
+    "AgentBrowserSkill",
 ]

@@ -13,6 +13,7 @@ from .hooks import HookManager
 from .pipeline import StepPipeline
 from .reporting import write_runtime_summary
 from .status_api import get_global_status_store
+from .web_skill_router import WebSkillRouter
 
 
 def _build_log_dir(log_root: str, run_name: str, task_id: str) -> str:
@@ -94,8 +95,27 @@ def _build_legacy_context_index(steps: list[dict[str, Any]]) -> dict[str, dict[i
     return {
         "perception_by_step": perception_by_step,
         "action_by_step": action_by_step,
+        "route_by_step": {},
         "screen_size": {"width": screen_width, "height": screen_height},
     }
+
+
+def _default_route_info() -> dict[str, Any]:
+    return {
+        "channel": "mobile_native",
+        "route_reason": "default_mobile_native",
+    }
+
+
+def _build_route_context(step: dict[str, Any]) -> dict[str, Any]:
+    context = {}
+    raw = step.get("route_context")
+    if isinstance(raw, dict):
+        context.update(raw)
+    for key in ("force_channel", "task_type", "is_web_subtask"):
+        if key in step:
+            context[key] = step.get(key)
+    return context
 
 
 def _translate_legacy_step_to_events(
@@ -103,6 +123,7 @@ def _translate_legacy_step_to_events(
     context_index: dict[str, dict[int, Any]],
     hooks: HookManager,
     blueprint_repo: BlueprintRepository | None = None,
+    router: WebSkillRouter | None = None,
 ) -> list[dict[str, Any]]:
     operation = str(step.get("operation", "unknown"))
     step_id = int(step.get("step", 0))
@@ -153,6 +174,22 @@ def _translate_legacy_step_to_events(
             "confidence": 1.0,
         }
         projected_action = project_action(request=request, topology_result=topology_result)
+        route_info = _default_route_info()
+        if router is not None:
+            decision = router.route(
+                request.intent_key,
+                action=request.action,
+                context=_build_route_context(step),
+            )
+            route_info = decision.to_dict()
+        context_index.setdefault("route_by_step", {})[step_id] = route_info
+        route_event = {
+            "step_id": step_id,
+            "event_type": "skill_route",
+            "status": "SUCCESS",
+            "intent_key": intent_key,
+            **route_info,
+        }
         event = {
             "step_id": step_id,
             "event_type": "action_exec",
@@ -161,12 +198,14 @@ def _translate_legacy_step_to_events(
             "action": projected_action,
             "timeout_ms": 3000,
             "retry_count": 0,
+            **route_info,
         }
         if blueprint:
             event["blueprint_version"] = blueprint.get("version", "v0.1.0")
         if latency_ms is not None:
             event["latency_ms"] = latency_ms
-        return [event]
+            route_event["latency_ms"] = latency_ms
+        return [route_event, event]
 
     if operation == "action_reflection":
         action_step = context_index.get("action_by_step", {}).get(step_id, {})
@@ -217,6 +256,10 @@ def _translate_legacy_step_to_events(
                 post_check_result=post_check_result,
             )
 
+        route_info = (
+            context_index.get("route_by_step", {}).get(step_id)
+            or _default_route_info()
+        )
         events = [
             {
                 "step_id": step_id,
@@ -226,6 +269,7 @@ def _translate_legacy_step_to_events(
                 "assertion_result": assertion_result,
                 "recovery_level": recovery,
                 "s2_takeover": not success or not assertion_result.get("passed", False),
+                **route_info,
             }
         ]
         events.append(
@@ -235,8 +279,21 @@ def _translate_legacy_step_to_events(
                 "status": "SUCCESS" if post_check_result.get("passed", False) else "FAILED",
                 "intent_key": intent_key,
                 "post_check": post_check_result,
+                **route_info,
             }
         )
+        if not success and route_info.get("channel") == "web_skill":
+            events.append(
+                {
+                    "step_id": step_id,
+                    "event_type": "skill_fallback",
+                    "status": "HANDOVER",
+                    "intent_key": intent_key,
+                    "fallback_to": "mobile_native",
+                    "reason_code": reason,
+                    **route_info,
+                }
+            )
         if not success:
             events.append(
                 {
@@ -245,6 +302,7 @@ def _translate_legacy_step_to_events(
                     "status": "HANDOVER",
                     "intent_key": intent_key,
                     "reason_code": reason,
+                    **route_info,
                 }
             )
         step_end_event = {
@@ -255,6 +313,7 @@ def _translate_legacy_step_to_events(
             "assertion_result": assertion_result,
             "post_check": post_check_result,
             "recovery_level": recovery,
+            **route_info,
         }
         if latency_ms is not None:
             step_end_event["latency_ms"] = latency_ms
@@ -279,6 +338,7 @@ def _emit_events_from_legacy_steps(
     chain_mode: str,
     log_dir: str,
     blueprint_repo: BlueprintRepository | None = None,
+    router: WebSkillRouter | None = None,
 ) -> str:
     steps_path = os.path.join(log_dir, "steps.json")
     if not os.path.exists(steps_path):
@@ -299,6 +359,7 @@ def _emit_events_from_legacy_steps(
             context_index,
             hooks,
             blueprint_repo=blueprint_repo,
+            router=router,
         )
         for event in translated_events:
             event["run_id"] = run_id
@@ -348,6 +409,7 @@ def run_single_task_with_runtime(
         default_chain_mode=chain_mode,
     )
     blueprint_repo = BlueprintRepository(os.path.join(log_dir, "blueprints.json"))
+    router = WebSkillRouter()
 
     _emit_and_track(
         bus,
@@ -458,6 +520,7 @@ def run_single_task_with_runtime(
         chain_mode=chain_mode,
         log_dir=log_dir,
         blueprint_repo=blueprint_repo,
+        router=router,
     )
 
     _emit_and_track(

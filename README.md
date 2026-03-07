@@ -196,6 +196,25 @@ while True:
 - 复合技能：预定义操作序列
 - 智能修复：JSON格式错误自动修复
 
+### 5. GUIAgent v2 运行时（进行中）
+
+**目录**: `guiagent_v2/runtime/`
+
+当前已落地能力：
+- `orchestrator_v2.py`: `runtime_mode=legacy|guiagent_v2_shadow|guiagent_v2` 统一入口与事件翻译。
+- `event_bus.py` + `status_api.py`: `events.jsonl` 结构化事件与任务状态查询。
+- `web_skill_router.py`: `mobile_native/web_skill` 路由决策（移动端系统动作优先走原生链路）。
+- `agent_browser_skill.py`: `agent-browser` 外部进程适配器与 `AgentBrowserSkill` 封装。
+
+当前路由可观测字段：
+- `channel`
+- `route_reason`
+- `skill_name`
+
+当前新增事件：
+- `skill_route`
+- `skill_fallback`
+
 ## 工作流程详解
 
 ### 1. 系统初始化流程

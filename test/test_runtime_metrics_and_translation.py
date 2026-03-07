@@ -8,9 +8,34 @@ from guiagent_v2.runtime.orchestrator_v2 import (
     _build_hook_manager,
     _translate_legacy_step_to_events,
 )
+from guiagent_v2.runtime.web_skill_router import WebSkillRouter
 
 
 class TestRuntimeMetricsAndTranslation(unittest.TestCase):
+    def test_translate_action_emits_route_event(self):
+        step = {
+            "step": 2,
+            "operation": "action",
+            "action_object": {"name": "Web_Open", "arguments": {"url": "https://example.com"}},
+        }
+        context_index = {
+            "action_by_step": {},
+            "perception_by_step": {},
+            "route_by_step": {},
+            "screen_size": {"width": 1080, "height": 2340},
+        }
+        events = _translate_legacy_step_to_events(
+            step,
+            context_index=context_index,
+            hooks=_build_hook_manager(),
+            blueprint_repo=None,
+            router=WebSkillRouter(),
+        )
+        self.assertEqual(events[0]["event_type"], "skill_route")
+        self.assertEqual(events[0]["channel"], "web_skill")
+        self.assertEqual(events[1]["event_type"], "action_exec")
+        self.assertEqual(events[1]["channel"], "web_skill")
+
     def test_translate_action_reflection_failure(self):
         step = {
             "step": 3,
@@ -30,6 +55,13 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
                 3: [{"text": "Home", "coordinates": (1, 1)}],
                 4: [{"text": "Error", "coordinates": (1, 1)}],
             },
+            "route_by_step": {
+                3: {
+                    "channel": "web_skill",
+                    "route_reason": "web_intent_prefix",
+                    "skill_name": "AgentBrowserSkill",
+                }
+            },
         }
         events = _translate_legacy_step_to_events(
             step,
@@ -40,6 +72,7 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
         event_types = [e["event_type"] for e in events]
         self.assertIn("assertion", event_types)
         self.assertIn("post_check", event_types)
+        self.assertIn("skill_fallback", event_types)
         self.assertIn("handover", event_types)
         self.assertIn("step_end", event_types)
 

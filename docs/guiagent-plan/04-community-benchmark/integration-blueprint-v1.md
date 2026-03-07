@@ -3,10 +3,23 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.0`
+- 版本：`v1.1`
 - 更新时间：`2026-03-07`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
-- 说明：本蓝图只定义接口与阶段计划，不包含本轮代码改造
+- 说明：当前文档同时包含“目标蓝图 + 已落地进展”
+
+## 实施进展（2026-03-07）
+
+已在代码中落地：
+1. `WebSkillRouter` 已实现并接入 `orchestrator_v2` 的 legacy 事件翻译链路。
+2. 新增路由审计事件：`skill_route`；web 通道失败时新增 `skill_fallback`。
+3. `action_exec/assertion/post_check/handover/step_end` 事件已透传 `channel/route_reason/skill_name`。
+4. `AgentBrowserCLIAdapter + AgentBrowserSkill` 已落地为外部进程适配层（`agent-browser --json` 调用模式）。
+
+尚未落地：
+1. `ActionRegistry`、`GuardPolicy`、`watchdog` 与 compaction 主链接入。
+2. `SessionRuntime` 进程化（当前仍是进程内 `RuntimeTaskService`）。
+3. 真正的 web 子任务执行闭环（当前以路由与适配器能力预埋为主）。
 
 ## 0. 决策基线（先定方向）
 
