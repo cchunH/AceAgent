@@ -20,6 +20,8 @@ def _run_with_mode(runtime_mode: str, **kwargs):
         kwargs.pop("v2_skip_legacy", None)
         kwargs.pop("guard_policy_path", None)
         kwargs.pop("guard_policy_reload_interval", None)
+        kwargs.pop("watchdog_policy_path", None)
+        kwargs.pop("watchdog_policy_reload_interval", None)
         kwargs.pop("session_id", None)
         return run_single_task(**kwargs)
     kwargs["runtime_mode"] = runtime_mode
@@ -75,6 +77,18 @@ def main():
         default=None,
         help="Optional logical session id for guiagent_v2 task tracking.",
     )
+    parser.add_argument(
+        "--watchdog_policy_path",
+        type=str,
+        default=None,
+        help="Optional JSON path for guiagent_v2 watchdog policy.",
+    )
+    parser.add_argument(
+        "--watchdog_policy_reload_interval",
+        type=float,
+        default=1.0,
+        help="Reload interval (seconds) for watchdog policy file checks.",
+    )
 
     args = parser.parse_args()
     torch.manual_seed(args.seed)
@@ -129,6 +143,8 @@ def main():
                 v2_skip_legacy=args.v2_skip_legacy,
                 guard_policy_path=args.guard_policy_path,
                 guard_policy_reload_interval=args.guard_policy_reload_interval,
+                watchdog_policy_path=args.watchdog_policy_path,
+                watchdog_policy_reload_interval=args.watchdog_policy_reload_interval,
                 session_id=args.session_id,
             )
         except Exception as e:
@@ -202,6 +218,8 @@ def main():
                 v2_skip_legacy=args.v2_skip_legacy,
                 guard_policy_path=args.guard_policy_path,
                 guard_policy_reload_interval=args.guard_policy_reload_interval,
+                watchdog_policy_path=args.watchdog_policy_path,
+                watchdog_policy_reload_interval=args.watchdog_policy_reload_interval,
                 session_id=args.session_id,
             )
             print("\n\nDONE:", task["instruction"])

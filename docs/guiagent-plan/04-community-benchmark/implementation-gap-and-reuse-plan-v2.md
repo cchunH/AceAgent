@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.2`
+- 版本：`v2.3`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 
@@ -79,6 +79,11 @@
 - 现状：已接入 `crash_watchdog/security_watchdog`，可从主事件派生 `watchdog_alert`。
 - 距离评估：`完成（v0）`
 
+13. `WatchdogPolicy`（守护治理 v1）
+- 证据模块：`guiagent_v2/runtime/watchdog_policy.py`, `guiagent_v2/runtime/watchdogs/manager.py`, `run.py`
+- 现状：支持 watchdog 插件启停、最小严重级过滤、去重窗口、节流窗口与热重载参数。
+- 距离评估：`完成（v1）`
+
 ### 2.2 部分落地（需增强）
 
 1. `SessionRuntime`
@@ -91,7 +96,7 @@
 - 证据模块：`guiagent_v2/runtime/event_bus.py`, `status_api.py`
 - 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合，事件 schema 校验已接入。
 - 距离评估：`部分完成`
-- 关键差距：schema 仅 v0（未做严格 fail-fast 与向后兼容策略）；watchdog 尚无节流去重与策略配置中心。
+- 关键差距：schema 仅 v0（未做严格 fail-fast 与向后兼容策略）；watchdog 仍缺跨任务聚合与告警升级策略。
 
 3. Web 子任务闭环
 - 证据模块：`v2_executor.py`, `agent_browser_skill.py`
@@ -103,7 +108,7 @@
 
 1. `Watchdog` 体系
 - 目标来源：`browser-use`（watchdog 基座）
-- 差距：无 crash/security/download 守护插件。
+- 差距：`crash/security` 已具备，仍缺 `download` 等扩展插件及跨任务治理策略。
 
 2. Domain Filter 与高级 Action Policy 治理
 - 目标来源：`agent-browser`
@@ -143,7 +148,7 @@
 3. Watchdog 插件化
 - 落位：`guiagent_v2/runtime/watchdogs/*`
 - 初始插件：`crash_watchdog.py`, `security_watchdog.py`。
-- 当前状态：`已落地 v0`，后续进入生产化增强。
+- 当前状态：`已落地 v1`（含策略文件、去重节流），后续进入告警升级增强。
 
 ## P2（后置）
 
@@ -187,8 +192,9 @@
 ### 阶段 R4：事件与守护生产化（2-4 天）
 
 1. 已完成：`event_schema v1` 与 `watchdog_alert` 主链接入。
-2. 待继续：事件 schema 版本迁移策略（`v1 -> v2`）与兼容校验测试。
-3. 待继续：watchdog 告警去重、节流、升级策略与策略文件化。
+2. 已完成：watchdog 策略文件化与去重/节流接入（`watchdog_policy`）。
+3. 待继续：事件 schema 版本迁移策略（`v1 -> v2`）与兼容校验测试。
+4. 待继续：watchdog 告警升级策略与跨任务聚合。
 
 退出条件：
 - 关键事件字段稳定且可回溯，schema 升级不破坏已有消费方。

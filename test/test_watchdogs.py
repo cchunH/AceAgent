@@ -1,6 +1,7 @@
 import unittest
 
 from guiagent_v2.runtime.watchdogs import WatchdogManager, build_default_watchdog_manager
+from guiagent_v2.runtime.watchdogs.security_watchdog import SecurityWatchdog
 
 
 class _BadWatchdog:
@@ -8,6 +9,18 @@ class _BadWatchdog:
 
     def on_event(self, event):
         raise RuntimeError("boom")
+
+
+class _PolicyLoader:
+    def __init__(self, policy):
+        self._policy = dict(policy)
+
+    def load(self, force=False):
+        del force
+        return dict(self._policy)
+
+    def source(self):
+        return "test-policy"
 
 
 class TestWatchdogs(unittest.TestCase):
@@ -62,7 +75,20 @@ class TestWatchdogs(unittest.TestCase):
         self.assertEqual(alerts, [])
 
     def test_watchdog_plugin_error_is_wrapped_as_alert(self):
-        manager = WatchdogManager(plugins=[_BadWatchdog()])
+        manager = WatchdogManager(
+            plugins=[_BadWatchdog()],
+            policy_loader=_PolicyLoader(
+                {
+                    "version": "v1",
+                    "enabled_watchdogs": ["bad_watchdog"],
+                    "min_severity": "LOW",
+                    "dedup_window_sec": 0.0,
+                    "max_alerts_per_key": 3,
+                    "throttle_window_sec": 60.0,
+                    "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
+                }
+            ),
+        )
         alerts = manager.process(
             {
                 "run_id": "r4",
@@ -77,6 +103,85 @@ class TestWatchdogs(unittest.TestCase):
         self.assertEqual(len(alerts), 1)
         self.assertEqual(alerts[0]["reason_code"], "WATCHDOG_PLUGIN_ERROR")
         self.assertEqual(alerts[0]["watchdog_name"], "bad_watchdog")
+
+    def test_policy_can_disable_specific_watchdog(self):
+        manager = WatchdogManager(
+            plugins=[
+                _BadWatchdog(),
+            ],
+            policy_loader=_PolicyLoader(
+                {
+                    "version": "v1",
+                    "enabled_watchdogs": ["security_watchdog"],
+                    "min_severity": "LOW",
+                    "dedup_window_sec": 0.0,
+                    "max_alerts_per_key": 3,
+                    "throttle_window_sec": 60.0,
+                    "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
+                }
+            ),
+        )
+        alerts = manager.process(
+            {
+                "run_id": "r5",
+                "task_id": "t5",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "step_start",
+                "status": "RUNNING",
+                "intent_key": "global:TAP:SEARCH",
+            }
+        )
+        self.assertEqual(alerts, [])
+
+    def test_dedup_window_suppresses_duplicate_alert(self):
+        manager = build_default_watchdog_manager()
+        event = {
+            "run_id": "r6",
+            "task_id": "t6",
+            "step_id": 1,
+            "chain_mode": "guiagent_v2",
+            "event_type": "guard_decision",
+            "status": "HANDOVER",
+            "intent_key": "global:TAP:SUBMIT",
+            "policy_decision": "deny",
+            "policy_reason": "ACTION_DENIED_BY_POLICY",
+        }
+        first = manager.process(event)
+        second = manager.process(event)
+        self.assertGreaterEqual(len(first), 1)
+        self.assertEqual(second, [])
+
+    def test_throttle_window_limits_alert_rate(self):
+        manager = WatchdogManager(
+            plugins=[SecurityWatchdog()],
+            policy_loader=_PolicyLoader(
+                {
+                    "version": "v1",
+                    "enabled_watchdogs": ["security_watchdog"],
+                    "min_severity": "LOW",
+                    "dedup_window_sec": 0.0,
+                    "max_alerts_per_key": 1,
+                    "throttle_window_sec": 60.0,
+                    "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"],
+                }
+            ),
+        )
+        event = {
+            "run_id": "r7",
+            "task_id": "t7",
+            "step_id": 1,
+            "chain_mode": "guiagent_v2",
+            "event_type": "guard_decision",
+            "status": "HANDOVER",
+            "intent_key": "global:TAP:SUBMIT",
+            "policy_decision": "deny",
+            "policy_reason": "ACTION_DENIED_BY_POLICY",
+        }
+        first = manager.process(event)
+        second = manager.process(event)
+        self.assertGreaterEqual(len(first), 1)
+        self.assertEqual(second, [])
 
 
 if __name__ == "__main__":

@@ -460,6 +460,8 @@ def run_single_task_with_runtime(
     v2_skip_legacy=False,
     guard_policy_path=None,
     guard_policy_reload_interval=1.0,
+    watchdog_policy_path=None,
+    watchdog_policy_reload_interval=1.0,
     session_id=None,
 ):
     future_tasks = future_tasks or []
@@ -489,7 +491,10 @@ def run_single_task_with_runtime(
     web_skill = AgentBrowserSkill()
     loop_detector = LoopDetector()
     context_compactor = ContextCompactor()
-    watchdog_manager = build_default_watchdog_manager()
+    watchdog_manager = build_default_watchdog_manager(
+        policy_path=str(watchdog_policy_path) if watchdog_policy_path else None,
+        reload_interval_sec=float(watchdog_policy_reload_interval),
+    )
 
     _emit_and_track(
         bus,

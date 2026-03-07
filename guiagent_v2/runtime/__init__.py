@@ -37,6 +37,7 @@ from .context_compaction import ContextCompactor
 from .guard_policy import GuardPolicy
 from .loop_detector import LoopDetector
 from .policy_loader import PolicyLoader
+from .watchdog_policy import WatchdogPolicyLoader, normalize_watchdog_policy
 from .v2_executor import V2ProbeResult, infer_probe_action, run_probe_step
 from .watchdogs import (
     WatchdogPlugin,
@@ -81,6 +82,8 @@ __all__ = [
     "GuardPolicy",
     "LoopDetector",
     "PolicyLoader",
+    "WatchdogPolicyLoader",
+    "normalize_watchdog_policy",
     "V2ProbeResult",
     "infer_probe_action",
     "run_probe_step",

@@ -1,0 +1,9 @@
+{
+  "version": "v1",
+  "enabled_watchdogs": ["crash_watchdog", "security_watchdog"],
+  "min_severity": "LOW",
+  "dedup_window_sec": 30.0,
+  "max_alerts_per_key": 3,
+  "throttle_window_sec": 60.0,
+  "dedup_key_fields": ["watchdog_name", "task_id", "reason_code"]
+}

@@ -213,6 +213,7 @@ while True:
 - `loop_detector.py` + `context_compaction.py`: 循环检测与上下文压缩治理能力。
 - `task_service.py` + `session_runtime.py`: 任务提交、状态查询、会话级隔离调度（进程内 v0）。
 - `watchdogs/*`: `crash_watchdog/security_watchdog` 插件骨架与 `watchdog_alert` 派生事件。
+- `watchdog_policy.py`: Watchdog 策略加载与热更新（启停、最小严重级、去重节流参数）。
 
 当前路由可观测字段：
 - `channel`
@@ -233,6 +234,8 @@ while True:
 - `--v2_skip_legacy`
 - `--guard_policy_path`
 - `--guard_policy_reload_interval`
+- `--watchdog_policy_path`
+- `--watchdog_policy_reload_interval`
 - `--session_id`
 
 ## 工作流程详解
