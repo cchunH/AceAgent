@@ -9,12 +9,14 @@ import tempfile
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .event_bus import JSONLEventBus
 from .session_runtime import SessionRuntime, get_global_session_runtime
+from .status_api import get_global_status_store
 
 
 def _as_float(value: Any, default: float | None = None) -> float | None:
@@ -32,6 +34,10 @@ def _first_query(params: dict[str, list[str]], name: str) -> str | None:
         return None
     value = str(values[0]).strip()
     return value or None
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
 def _sanitize_for_filename(value: str) -> str:
@@ -242,16 +248,20 @@ class SessionRuntimeAPIServer:
         source: str | None,
         session_id: str | None = None,
         request_id: str | None = None,
+        run_id: str | None = None,
+        task_id: str | None = None,
         trace_id: str | None = None,
         detail: dict[str, Any] | None = None,
     ) -> None:
-        if self._audit_bus is None:
-            return
         resolved_request_id = str(request_id or "").strip()
         resolved_session_id = str(session_id or "").strip() or None
+        resolved_run_id = str(run_id or "").strip() or "session-runtime-control-plane"
+        resolved_task_id = str(task_id or "").strip()
+        if not resolved_task_id:
+            resolved_task_id = resolved_request_id or "control"
         payload: dict[str, Any] = {
-            "run_id": "session-runtime-control-plane",
-            "task_id": resolved_request_id or "control",
+            "run_id": resolved_run_id,
+            "task_id": resolved_task_id,
             "step_id": 0,
             "chain_mode": "guiagent_v2",
             "event_type": "control_plane_audit",
@@ -273,7 +283,12 @@ class SessionRuntimeAPIServer:
             for key, value in detail.items():
                 if key not in payload:
                     payload[key] = value
-        self._audit_bus.emit(payload)
+        if self._audit_bus is not None:
+            emitted = self._audit_bus.emit(payload)
+        else:
+            emitted = dict(payload)
+            emitted["ts"] = _utc_now_iso()
+        get_global_status_store().update(emitted)
 
     def start(self) -> tuple[str, int]:
         with self._lock:
@@ -413,6 +428,8 @@ class SessionRuntimeAPIServer:
                 payload: dict[str, Any] | None = None,
                 session_id: str | None = None,
                 request_id: str | None = None,
+                run_id: str | None = None,
+                task_id: str | None = None,
                 detail: dict[str, Any] | None = None,
             ) -> None:
                 server_instance._emit_control_plane_audit(
@@ -424,6 +441,8 @@ class SessionRuntimeAPIServer:
                     source=self._source(payload),
                     session_id=session_id,
                     request_id=request_id,
+                    run_id=run_id,
+                    task_id=task_id,
                     trace_id=self._trace_id(payload),
                     detail=detail,
                 )
@@ -589,7 +608,6 @@ class SessionRuntimeAPIServer:
                         session_id=payload.get("session_id"),
                         metadata=payload.get("metadata"),
                     )
-                    self._ok(session, status_code=201)
                     self._audit_write(
                         action="ensure_session",
                         method="POST",
@@ -598,6 +616,7 @@ class SessionRuntimeAPIServer:
                         payload=payload,
                         session_id=session.get("session_id"),
                     )
+                    self._ok(session, status_code=201)
                     return
 
                 if path == "/tasks":
@@ -635,7 +654,6 @@ class SessionRuntimeAPIServer:
                             detail={"reason_code": "TASK_SUBMIT_FAILED"},
                         )
                         return
-                    self._ok(item, status_code=201)
                     self._audit_write(
                         action="submit_task",
                         method="POST",
@@ -644,7 +662,10 @@ class SessionRuntimeAPIServer:
                         payload=payload,
                         session_id=item.get("session_id"),
                         request_id=item.get("request_id"),
+                        run_id=item.get("run_id"),
+                        task_id=item.get("task_id"),
                     )
+                    self._ok(item, status_code=201)
                     return
 
                 if path.startswith("/tasks/") and path.endswith("/wait"):
@@ -663,7 +684,6 @@ class SessionRuntimeAPIServer:
                             detail={"reason_code": "TASK_NOT_FOUND"},
                         )
                         return
-                    self._ok(item)
                     self._audit_write(
                         action="wait_task",
                         method="POST",
@@ -672,7 +692,10 @@ class SessionRuntimeAPIServer:
                         payload=payload,
                         session_id=item.get("session_id"),
                         request_id=request_id,
+                        run_id=item.get("run_id"),
+                        task_id=item.get("task_id"),
                     )
+                    self._ok(item)
                     return
 
                 self._error("NOT_FOUND", f"path not found: {path}", status_code=404)
@@ -704,7 +727,6 @@ class SessionRuntimeAPIServer:
                             detail={"reason_code": "SESSION_NOT_FOUND"},
                         )
                         return
-                    self._ok({"session_id": session_id, "removed": True})
                     self._audit_write(
                         action="delete_session",
                         method="DELETE",
@@ -712,6 +734,7 @@ class SessionRuntimeAPIServer:
                         status="SUCCESS",
                         session_id=session_id,
                     )
+                    self._ok({"session_id": session_id, "removed": True})
                     return
                 self._error("NOT_FOUND", f"path not found: {path}", status_code=404)
                 self._audit_write(

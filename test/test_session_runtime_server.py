@@ -153,6 +153,37 @@ class TestSessionRuntimeServer(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(len(body["data"]["timeline"]), 2)
 
+    def test_control_plane_audit_updates_timeline_without_audit_file(self):
+        code, submit_body = _http_json(
+            self.base_url,
+            "POST",
+            "/tasks",
+            {
+                "instruction": "status-audit-task",
+                "session_id": "sess-status-audit",
+                "runtime_mode": "guiagent_v2",
+                "run_name": "api-status-audit",
+            },
+        )
+        self.assertEqual(code, 201)
+        run_id = submit_body["data"]["run_id"]
+        task_id = submit_body["data"]["task_id"]
+        request_id = submit_body["data"]["request_id"]
+
+        code, _ = _http_json(self.base_url, "POST", f"/tasks/{request_id}/wait", {"timeout": 1.0})
+        self.assertEqual(code, 200)
+
+        code, timeline_body = _http_json(self.base_url, "GET", f"/runtime/timeline/{run_id}/{task_id}")
+        self.assertEqual(code, 200)
+        timeline = timeline_body["data"]["timeline"]
+        self.assertTrue(
+            any(
+                evt.get("event_type") == "control_plane_audit"
+                and evt.get("control_action") in {"submit_task", "wait_task"}
+                for evt in timeline
+            )
+        )
+
     def test_submit_invalid_instruction(self):
         code, body = _http_json(
             self.base_url,
@@ -360,6 +391,55 @@ class TestSessionRuntimeServer(unittest.TestCase):
                 )
                 self.assertEqual(code, 201)
 
+                code, submit_body = _http_json(
+                    audit_base,
+                    "POST",
+                    "/tasks",
+                    {
+                        "instruction": "audit-task",
+                        "session_id": "sess-audit",
+                        "runtime_mode": "guiagent_v2",
+                        "run_name": "api-audit",
+                    },
+                    headers={
+                        "X-Actor": "qa-user",
+                        "X-Source": "unit-test",
+                        "X-Trace-Id": "trace-audit-3",
+                    },
+                )
+                self.assertEqual(code, 201)
+                request_id = submit_body["data"]["request_id"]
+                run_id = submit_body["data"]["run_id"]
+                task_id = submit_body["data"]["task_id"]
+
+                code, _wait_body = _http_json(
+                    audit_base,
+                    "POST",
+                    f"/tasks/{request_id}/wait",
+                    {"timeout": 1.0},
+                    headers={
+                        "X-Actor": "qa-user",
+                        "X-Source": "unit-test",
+                        "X-Trace-Id": "trace-audit-4",
+                    },
+                )
+                self.assertEqual(code, 200)
+
+                code, timeline_body = _http_json(
+                    audit_base,
+                    "GET",
+                    f"/runtime/timeline/{run_id}/{task_id}",
+                )
+                self.assertEqual(code, 200)
+                timeline = timeline_body["data"]["timeline"]
+                self.assertTrue(
+                    any(
+                        evt.get("event_type") == "control_plane_audit"
+                        and evt.get("control_action") in {"submit_task", "wait_task"}
+                        for evt in timeline
+                    )
+                )
+
                 code, _ = _http_json(
                     audit_base,
                     "POST",
@@ -398,6 +478,14 @@ class TestSessionRuntimeServer(unittest.TestCase):
             self.assertEqual(
                 submit_failed_events[0].get("reason_code"),
                 "INVALID_INSTRUCTION",
+            )
+            self.assertTrue(
+                any(
+                    item.get("control_action") == "submit_task"
+                    and item.get("status") == "SUCCESS"
+                    and item.get("run_id", "").startswith("api-audit:")
+                    for item in lines
+                )
             )
 
 

@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.8`
+- 版本：`v2.9`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 
@@ -106,7 +106,7 @@
 
 18. 控制面写操作审计
 - 证据模块：`guiagent_v2/runtime/session_runtime_server.py`, `guiagent_v2/runtime/event_bus.py`, `run.py`
-- 现状：写接口产出 `control_plane_audit` 事件并支持审计 JSONL（含 `actor/source/trace_id/control_action`）。
+- 现状：写接口产出 `control_plane_audit` 事件并支持审计 JSONL（含 `actor/source/trace_id/control_action`），任务相关事件并入 `status_api` 时间线。
 - 距离评估：`完成（v1）`
 
 ### 2.2 部分落地（需增强）
@@ -119,7 +119,7 @@
 
 2. 事件治理
 - 证据模块：`guiagent_v2/runtime/event_bus.py`, `status_api.py`
-- 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合，事件 schema 校验已接入，并新增控制面审计事件。
+- 现状：核心事件完整，状态查询可用，已支持 `session_id` 维度聚合，事件 schema 校验已接入，并新增控制面审计事件与任务级聚合。
 - 距离评估：`部分完成`
 - 关键差距：schema 严格模式尚未开启（未做 fail-fast）；watchdog 仍缺跨任务聚合与告警升级策略。
 

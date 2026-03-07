@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.10`
+- 版本：`v1.11`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -34,6 +34,7 @@
 20. `v2_executor` 的 web 通道从单步 probe 升级为多步执行 v1：`web_plan -> web_step_start/adapter_call/web_step_end`，失败时统一 `skill_fallback` 回退移动端主链。
 21. `SessionRuntimeServer` 新增 lockfile 多实例治理（实例 ID、僵尸锁清理、可选端口冲突回退）与实例标识响应头。
 22. 控制面写操作新增审计事件 `control_plane_audit`（`actor/source/trace_id/control_action`），并支持独立审计 JSONL 文件输出。
+23. 任务相关控制面审计事件已并入 `status_api`（按 `run_id/task_id` 关联），可通过 `/runtime/timeline/{run_id}/{task_id}` 与执行链事件联合查看。
 
 尚未落地：
 1. `watchdog` 深化生产化（告警升级策略、跨任务聚合、下载/安全扩展插件）。

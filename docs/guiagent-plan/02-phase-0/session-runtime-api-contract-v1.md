@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.1`
+- 版本：`v1.2`
 - 更新时间：`2026-03-08`
 - 适用范围：`guiagent_v2/runtime/session_runtime_server.py`
 
@@ -112,6 +112,7 @@
 
 3. `GET /runtime/timeline/{run_id}/{task_id}`
 - 说明：查询事件时间线。
+- 说明补充：对 `POST /tasks`、`POST /tasks/{request_id}/wait` 等任务相关写操作，会产生 `control_plane_audit` 事件并按对应 `run_id/task_id` 进入同一时间线。
 
 ## 4. 错误码
 
