@@ -20,11 +20,13 @@
 6. 新增 `v2_executor`：可按指令推断 web/mobile probe，执行 `guard_decision -> dispatch -> fallback`。
 7. 新增事件：`guard_decision`、`adapter_call`（在 web 分支触发），用于后续控制面与治理指标。
 8. 新增启动参数：`--v2_skip_legacy`（仅 `runtime_mode=guiagent_v2` 生效）可跳过 legacy 代理链做纯 v2 探针执行。
+9. 新增 `LoopDetector` 与 `ContextCompactor` 基础实现，并在 `v2_executor` 与 legacy 翻译链路产出 `loop_warning/context_compaction` 事件。
 
 尚未落地：
-1. `watchdog` 与 compaction 主链接入。
+1. `watchdog` 主链接入与插件化。
 2. `SessionRuntime` 进程化（当前仍是进程内 `RuntimeTaskService`）。
-3. 真正的生产级 web 子任务执行闭环（当前是 probe + fallback 的可控最小实现）。
+3. `GuardPolicy` 文件化热加载（当前是代码常量策略）。
+4. 真正的生产级 web 子任务执行闭环（当前是 probe + fallback 的可控最小实现）。
 
 ## 0. 决策基线（先定方向）
 

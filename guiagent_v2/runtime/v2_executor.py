@@ -8,8 +8,10 @@ from typing import Any, Callable
 from guiagent_v2.intent_contract import map_legacy_action_to_request
 from .action_registry import ActionRegistry
 from .agent_browser_skill import AgentBrowserSkill
+from .context_compaction import ContextCompactor
 from .guard_policy import GuardPolicy
 from .hooks import HookManager
+from .loop_detector import LoopDetector
 from .pipeline import StepPipeline
 from .web_skill_router import WebSkillRouter
 
@@ -168,9 +170,39 @@ def run_probe_step(
     router: WebSkillRouter,
     guard_policy: GuardPolicy,
     web_skill: AgentBrowserSkill,
+    loop_detector: LoopDetector | None = None,
+    context_compactor: ContextCompactor | None = None,
     screen_width: int = 1080,
     screen_height: int = 2340,
 ) -> V2ProbeResult:
+    loop_detector = loop_detector or LoopDetector()
+    context_compactor = context_compactor or ContextCompactor()
+    runtime_context_events: list[dict[str, Any]] = []
+
+    def _emit(event: dict[str, Any]) -> None:
+        emit_event(event)
+        runtime_context_events.append(dict(event))
+        if str(event.get("event_type")) == "context_compaction":
+            return
+        compacted = context_compactor.compact(runtime_context_events)
+        if compacted.get("applied", False):
+            runtime_context_events[:] = list(compacted.get("events", []))
+            emit_event(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": int(event.get("step_id", step_id)),
+                    "chain_mode": chain_mode,
+                    "event_type": "context_compaction",
+                    "status": "SUCCESS",
+                    "intent_key": str(event.get("intent_key", "global:UNKNOWN:UNSPECIFIED_TARGET")),
+                    "before_count": compacted.get("before_count"),
+                    "after_count": compacted.get("after_count"),
+                    "truncated_count": compacted.get("truncated_count", 0),
+                    "compaction_summary": compacted.get("summary"),
+                }
+            )
+
     action_obj, route_context = infer_probe_action(instruction)
     step_context = {
         # Probe context uses synthetic anchor diffs to avoid false NO_STATE_CHANGE
@@ -194,8 +226,10 @@ def run_probe_step(
         context=route_context,
     )
     route_info = decision.to_dict()
+    page_fp = loop_detector.build_page_fingerprint(step_context.get("perception_infos_pre", []))
+    loop_state = loop_detector.observe(request.action, page_fingerprint=page_fp)
 
-    emit_event(
+    _emit(
         {
             "run_id": run_id,
             "task_id": task_id,
@@ -208,7 +242,7 @@ def run_probe_step(
             **route_info,
         }
     )
-    emit_event(
+    _emit(
         {
             "run_id": run_id,
             "task_id": task_id,
@@ -220,6 +254,22 @@ def run_probe_step(
             **route_info,
         }
     )
+    if loop_state.get("should_warn", False):
+        _emit(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": step_id,
+                "chain_mode": chain_mode,
+                "event_type": "loop_warning",
+                "status": "RUNNING",
+                "intent_key": request.intent_key,
+                "loop_score": loop_state.get("loop_score", 0.0),
+                "stagnation_steps": loop_state.get("stagnation_steps", 0),
+                "repeated_action_count": loop_state.get("repeated_action_count", 0),
+                **route_info,
+            }
+        )
 
     guard = guard_policy.decide(
         request.intent_key,
@@ -227,7 +277,7 @@ def run_probe_step(
         {**route_context, **route_info},
     )
     guard_decision = str(guard.get("decision", "allow")).lower()
-    emit_event(
+    _emit(
         {
             "run_id": run_id,
             "task_id": task_id,
@@ -245,7 +295,7 @@ def run_probe_step(
 
     if guard_decision != "allow":
         reason_code = "GUARD_CONFIRM_REQUIRED" if guard_decision == "confirm" else "GUARD_DENIED"
-        emit_event(
+        _emit(
             {
                 "run_id": run_id,
                 "task_id": task_id,
@@ -258,7 +308,7 @@ def run_probe_step(
                 **route_info,
             }
         )
-        emit_event(
+        _emit(
             {
                 "run_id": run_id,
                 "task_id": task_id,
@@ -315,7 +365,7 @@ def run_probe_step(
     if route_info.get("channel") == "web_skill":
         adapter_call = exec_result.get("adapter_call", {})
         adapter_success = bool(adapter_call.get("success", False))
-        emit_event(
+        _emit(
             {
                 "run_id": run_id,
                 "task_id": task_id,
@@ -332,7 +382,7 @@ def run_probe_step(
         )
 
         if not adapter_success:
-            emit_event(
+            _emit(
                 {
                     "run_id": run_id,
                     "task_id": task_id,
@@ -367,7 +417,7 @@ def run_probe_step(
     recovery_level = str(exec_result.get("recovery_level", "L3"))
     latency_ms = int(exec_result.get("latency_ms", 0) or 0)
 
-    emit_event(
+    _emit(
         {
             "run_id": run_id,
             "task_id": task_id,
@@ -382,7 +432,7 @@ def run_probe_step(
             **final_route_info,
         }
     )
-    emit_event(
+    _emit(
         {
             "run_id": run_id,
             "task_id": task_id,
@@ -403,7 +453,7 @@ def run_probe_step(
             or post_check.get("reason_code")
             or "UNKNOWN_ERROR"
         )
-        emit_event(
+        _emit(
             {
                 "run_id": run_id,
                 "task_id": task_id,
@@ -417,7 +467,7 @@ def run_probe_step(
             }
         )
 
-    emit_event(
+    _emit(
         {
             "run_id": run_id,
             "task_id": task_id,

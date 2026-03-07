@@ -6,8 +6,12 @@ import unittest
 from guiagent_v2.runtime.metrics import compute_metrics_from_jsonl
 from guiagent_v2.runtime.orchestrator_v2 import (
     _build_hook_manager,
+    _emit_events_from_legacy_steps,
     _translate_legacy_step_to_events,
 )
+from guiagent_v2.runtime.context_compaction import ContextCompactor
+from guiagent_v2.runtime.event_bus import JSONLEventBus
+from guiagent_v2.runtime.loop_detector import LoopDetector
 from guiagent_v2.runtime.web_skill_router import WebSkillRouter
 
 
@@ -75,6 +79,61 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
         self.assertIn("skill_fallback", event_types)
         self.assertIn("handover", event_types)
         self.assertIn("step_end", event_types)
+
+    def test_translate_action_emits_loop_warning_when_repeated(self):
+        step = {
+            "step": 2,
+            "operation": "action",
+            "action_object": {"name": "Tap", "arguments": {"x": 1, "y": 2}},
+        }
+        context_index = {
+            "action_by_step": {},
+            "perception_by_step": {
+                2: [{"text": "Home", "coordinates": (1, 1)}],
+            },
+            "route_by_step": {},
+            "screen_size": {"width": 1080, "height": 2340},
+        }
+        detector = LoopDetector(repeat_threshold=2, stagnation_threshold=99)
+        detector.observe({"name": "Tap", "arguments": {"x": 1, "y": 2}}, page_fingerprint="same-page")
+
+        events = _translate_legacy_step_to_events(
+            step,
+            context_index=context_index,
+            hooks=_build_hook_manager(),
+            blueprint_repo=None,
+            router=WebSkillRouter(),
+            loop_detector=detector,
+        )
+        self.assertEqual(events[0]["event_type"], "loop_warning")
+        self.assertIn("loop_score", events[0])
+
+    def test_emit_legacy_steps_emits_context_compaction(self):
+        with tempfile.TemporaryDirectory() as td:
+            steps_path = os.path.join(td, "steps.json")
+            steps = [
+                {"step": i, "operation": "noop"} for i in range(1, 12)
+            ]
+            with open(steps_path, "w", encoding="utf-8") as f:
+                json.dump(steps, f, ensure_ascii=False)
+
+            event_path = os.path.join(td, "events.jsonl")
+            bus = JSONLEventBus(event_path, default_chain_mode="legacy")
+            _emit_events_from_legacy_steps(
+                bus=bus,
+                run_id="run-ut",
+                task_id="task-ut",
+                chain_mode="legacy",
+                log_dir=td,
+                router=WebSkillRouter(),
+                loop_detector=LoopDetector(),
+                context_compactor=ContextCompactor(max_events=4, keep_recent=2),
+            )
+
+            with open(event_path, "r", encoding="utf-8") as f:
+                rows = [json.loads(line) for line in f if line.strip()]
+            event_types = [row.get("event_type") for row in rows]
+            self.assertIn("context_compaction", event_types)
 
     def test_compute_metrics_from_jsonl(self):
         with tempfile.TemporaryDirectory() as td:

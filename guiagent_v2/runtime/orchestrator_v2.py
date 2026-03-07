@@ -8,10 +8,12 @@ from guiagent_v2.blueprint_hub import Blueprint, BlueprintRepository
 from guiagent_v2.intent_contract import map_legacy_action_to_request
 from .blueprint_sync import upsert_blueprint_from_observation
 from .agent_browser_skill import AgentBrowserSkill
+from .context_compaction import ContextCompactor
 from .default_hooks import post_state_check_hook, semantic_pre_assertion_hook
 from .event_bus import JSONLEventBus
 from .guard_policy import GuardPolicy
 from .hooks import HookManager
+from .loop_detector import LoopDetector
 from .reporting import write_runtime_summary
 from .status_api import get_global_status_store
 from .v2_executor import run_probe_step
@@ -126,6 +128,7 @@ def _translate_legacy_step_to_events(
     hooks: HookManager,
     blueprint_repo: BlueprintRepository | None = None,
     router: WebSkillRouter | None = None,
+    loop_detector: LoopDetector | None = None,
 ) -> list[dict[str, Any]]:
     operation = str(step.get("operation", "unknown"))
     step_id = int(step.get("step", 0))
@@ -176,6 +179,23 @@ def _translate_legacy_step_to_events(
             "confidence": 1.0,
         }
         projected_action = project_action(request=request, topology_result=topology_result)
+        loop_events: list[dict[str, Any]] = []
+        if loop_detector is not None:
+            perception_infos = context_index.get("perception_by_step", {}).get(step_id, [])
+            page_fp = loop_detector.build_page_fingerprint(perception_infos)
+            loop_state = loop_detector.observe(request.action, page_fingerprint=page_fp)
+            if loop_state.get("should_warn", False):
+                loop_events.append(
+                    {
+                        "step_id": step_id,
+                        "event_type": "loop_warning",
+                        "status": "RUNNING",
+                        "intent_key": intent_key,
+                        "loop_score": loop_state.get("loop_score", 0.0),
+                        "stagnation_steps": loop_state.get("stagnation_steps", 0),
+                        "repeated_action_count": loop_state.get("repeated_action_count", 0),
+                    }
+                )
         route_info = _default_route_info()
         if router is not None:
             decision = router.route(
@@ -207,7 +227,7 @@ def _translate_legacy_step_to_events(
         if latency_ms is not None:
             event["latency_ms"] = latency_ms
             route_event["latency_ms"] = latency_ms
-        return [route_event, event]
+        return [*loop_events, route_event, event]
 
     if operation == "action_reflection":
         action_step = context_index.get("action_by_step", {}).get(step_id, {})
@@ -341,6 +361,8 @@ def _emit_events_from_legacy_steps(
     log_dir: str,
     blueprint_repo: BlueprintRepository | None = None,
     router: WebSkillRouter | None = None,
+    loop_detector: LoopDetector | None = None,
+    context_compactor: ContextCompactor | None = None,
 ) -> str:
     steps_path = os.path.join(log_dir, "steps.json")
     if not os.path.exists(steps_path):
@@ -354,6 +376,9 @@ def _emit_events_from_legacy_steps(
     final_status = "FAILED"
     context_index = _build_legacy_context_index(steps)
     hooks = _build_hook_manager()
+    loop_detector = loop_detector or LoopDetector()
+    context_compactor = context_compactor or ContextCompactor()
+    runtime_context_events: list[dict[str, Any]] = []
 
     for step in steps:
         translated_events = _translate_legacy_step_to_events(
@@ -362,12 +387,36 @@ def _emit_events_from_legacy_steps(
             hooks,
             blueprint_repo=blueprint_repo,
             router=router,
+            loop_detector=loop_detector,
         )
         for event in translated_events:
             event["run_id"] = run_id
             event["task_id"] = task_id
             event["chain_mode"] = chain_mode
-            _emit_and_track(bus, event)
+            emitted = _emit_and_track(bus, event)
+            runtime_context_events.append(emitted)
+
+            if str(emitted.get("event_type")) == "context_compaction":
+                continue
+            compacted = context_compactor.compact(runtime_context_events)
+            if compacted.get("applied", False):
+                runtime_context_events = list(compacted.get("events", []))
+                _emit_and_track(
+                    bus,
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": int(event.get("step_id", 0)),
+                        "chain_mode": chain_mode,
+                        "event_type": "context_compaction",
+                        "status": "SUCCESS",
+                        "intent_key": str(event.get("intent_key", "global:UNKNOWN:UNSPECIFIED_TARGET")),
+                        "before_count": compacted.get("before_count"),
+                        "after_count": compacted.get("after_count"),
+                        "truncated_count": compacted.get("truncated_count", 0),
+                        "compaction_summary": compacted.get("summary"),
+                    },
+                )
         if str(step.get("operation")) == "finish":
             final_status = _map_operation_status(step)
 
@@ -415,6 +464,8 @@ def run_single_task_with_runtime(
     router = WebSkillRouter()
     guard_policy = GuardPolicy()
     web_skill = AgentBrowserSkill()
+    loop_detector = LoopDetector()
+    context_compactor = ContextCompactor()
 
     _emit_and_track(
         bus,
@@ -442,6 +493,8 @@ def run_single_task_with_runtime(
             router=router,
             guard_policy=guard_policy,
             web_skill=web_skill,
+            loop_detector=loop_detector,
+            context_compactor=context_compactor,
             screen_width=1080,
             screen_height=2340,
         )
@@ -481,6 +534,8 @@ def run_single_task_with_runtime(
             log_dir=log_dir,
             blueprint_repo=blueprint_repo,
             router=router,
+            loop_detector=loop_detector,
+            context_compactor=context_compactor,
         )
     else:
         final_status = probe_result.status if probe_result is not None else "SUCCESS"

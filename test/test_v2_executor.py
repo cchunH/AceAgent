@@ -1,8 +1,10 @@
 import unittest
 
+from guiagent_v2.runtime.context_compaction import ContextCompactor
 from guiagent_v2.runtime.default_hooks import post_state_check_hook, semantic_pre_assertion_hook
 from guiagent_v2.runtime.guard_policy import GuardPolicy
 from guiagent_v2.runtime.hooks import HookManager
+from guiagent_v2.runtime.loop_detector import LoopDetector
 from guiagent_v2.runtime.v2_executor import infer_probe_action, run_probe_step
 from guiagent_v2.runtime.web_skill_router import WebSkillRouter
 
@@ -114,6 +116,49 @@ class TestV2Executor(unittest.TestCase):
         self.assertIn("adapter_call", event_types)
         self.assertIn("skill_fallback", event_types)
         self.assertIn("step_end", event_types)
+
+    def test_run_probe_emits_loop_warning_when_repeated(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+        detector = LoopDetector(repeat_threshold=2, stagnation_threshold=99)
+        fp = detector.build_page_fingerprint([{"text": "__probe_pre__", "coordinates": (1, 1)}])
+        detector.observe({"name": "Wait", "arguments": {}}, page_fingerprint=fp)
+
+        run_probe_step(
+            instruction="在手机里等待一下",
+            run_id="r4",
+            task_id="t4",
+            step_id=1,
+            chain_mode="guiagent_v2_shadow",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+            loop_detector=detector,
+        )
+        event_types = [e["event_type"] for e in events]
+        self.assertIn("loop_warning", event_types)
+
+    def test_run_probe_emits_context_compaction(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+
+        run_probe_step(
+            instruction="open https://example.com",
+            run_id="r5",
+            task_id="t5",
+            step_id=1,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+            context_compactor=ContextCompactor(max_events=3, keep_recent=1),
+        )
+        event_types = [e["event_type"] for e in events]
+        self.assertIn("context_compaction", event_types)
 
 
 if __name__ == "__main__":

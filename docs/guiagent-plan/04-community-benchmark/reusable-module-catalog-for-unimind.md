@@ -22,9 +22,9 @@
 
 ## 当前落地状态（2026-03-08）
 
-1. 已落地：`P0-4 GuardPolicy`（v0）、`P0-6 AgentBrowserSkill`（v0）、`P1-1 ActionRegistry`（v0）、`P1-5 WebSkillRouter`（v0）。
+1. 已落地：`P0-1 LoopDetector`（v0）、`P0-2 ContextCompaction`（v0）、`P0-4 GuardPolicy`（v0）、`P0-6 AgentBrowserSkill`（v0）、`P1-1 ActionRegistry`（v0）、`P1-5 WebSkillRouter`（v0）。
 2. 部分落地：`P0-3 会话化任务服务`（当前为进程内 `RuntimeTaskService`，未进程化）。
-3. 未落地：`P0-1/P0-2/P0-5` 与 `P1-2/P1-3/P1-4` 及全部 P2。
+3. 未落地：`P0-5` 与 `P1-2/P1-3/P1-4` 及全部 P2。
 4. 详细差距与推进顺序请参考：`implementation-gap-and-reuse-plan-v2.md`。
 
 ## P0 清单

@@ -49,6 +49,16 @@
 - 现状：`runtime_mode=guiagent_v2` 支持 `--v2_skip_legacy` 仅运行 v2 探针路径。
 - 距离评估：`完成（v0）`
 
+7. `LoopDetector`
+- 证据模块：`guiagent_v2/runtime/loop_detector.py`
+- 现状：已支持重复动作/页面停滞检测，输出 `loop_score` 与告警判断。
+- 距离评估：`完成（v0）`
+
+8. `ContextCompactor`
+- 证据模块：`guiagent_v2/runtime/context_compaction.py`
+- 现状：已支持事件窗口压缩，并在 runtime 输出 `context_compaction` 事件。
+- 距离评估：`完成（v0）`
+
 ### 2.2 部分落地（需增强）
 
 1. `SessionRuntime`
@@ -71,19 +81,11 @@
 
 ### 2.3 未落地（待实施）
 
-1. `LoopDetector`
-- 目标来源：`browser-use`（ActionLoopDetector 思路）
-- 差距：无 `loop_warning`、无停滞评分。
-
-2. `ContextCompaction`
-- 目标来源：`browser-use`（MessageManager 压缩机制）
-- 差距：无长链上下文收缩，无 token 预算治理。
-
-3. `Watchdog` 体系
+1. `Watchdog` 体系
 - 目标来源：`browser-use`（watchdog 基座）
 - 差距：无 crash/security/download 守护插件。
 
-4. Domain Filter / Action Policy 热配置
+2. Domain Filter / Action Policy 热配置
 - 目标来源：`agent-browser`
 - 差距：GuardPolicy 仍是代码常量，未形成文件化策略与热加载。
 
@@ -94,12 +96,14 @@
 1. `LoopDetector`（来自 browser-use）
 - 落位：`guiagent_v2/runtime/loop_detector.py`
 - 事件：`loop_warning`
-- 验收：重复动作与页面停滞可触发告警并建议接管。
+- 状态：`已落地 v0`
+- 后续增强：引入分场景阈值与连续任务级统计。
 
 2. `ContextCompaction`（来自 browser-use）
 - 落位：`guiagent_v2/runtime/context_compaction.py`
 - 事件：`context_compaction`
-- 验收：长任务上下文长度被控制且成功率不显著下降。
+- 状态：`已落地 v0`
+- 后续增强：增加 token 预算策略与摘要质量评估。
 
 3. `GuardPolicy` 文件化 + 热加载（来自 agent-browser policy 思路）
 - 落位：`guiagent_v2/runtime/policy_loader.py`
@@ -127,11 +131,12 @@
 
 ## 4. 建议实施序列（代码可直接开工）
 
-### 阶段 R1：治理补齐（3-5 天）
+### 阶段 R1：治理补齐（已完成第一步）
 
-1. 引入 `LoopDetector` 与 `ContextCompaction`。
-2. 在 `run_probe_step` 与 legacy 翻译链路统一产出 `loop_warning/context_compaction`。
-3. 新增回归测试：重复动作场景、长任务场景。
+1. 已完成：引入 `LoopDetector` 与 `ContextCompaction`。
+2. 已完成：在 `run_probe_step` 与 legacy 翻译链路统一产出 `loop_warning/context_compaction`。
+3. 已完成：新增回归测试（重复动作、长事件链压缩）。
+4. 待继续：将压缩策略与 prompt/token 预算真正联动到长任务主链。
 
 退出条件：
 - 新事件稳定输出。
