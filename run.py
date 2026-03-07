@@ -1,14 +1,30 @@
-
 from orchestrator import run_single_task
-from orchestrator import Perceptor, DEFAULT_PERCEPTION_ARGS, ADB_PATH, INIT_HEURISTICS, INIT_SKILLS, DEFAULT_MODEL
+from orchestrator import (
+    Perceptor,
+    DEFAULT_PERCEPTION_ARGS,
+    ADB_PATH,
+    INIT_HEURISTICS,
+    INIT_SKILLS,
+    DEFAULT_MODEL,
+)
+from guiagent_v2.runtime.orchestrator_v2 import run_single_task_with_runtime
+
 import torch
 import os
 import json
 import shutil
-import time
+
+
+def _run_with_mode(runtime_mode: str, **kwargs):
+    if runtime_mode == "legacy":
+        return run_single_task(**kwargs)
+    kwargs["runtime_mode"] = runtime_mode
+    return run_single_task_with_runtime(**kwargs)
+
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--instruction", type=str, default=None)
@@ -25,7 +41,12 @@ def main():
     parser.add_argument("--specified_skills_path", type=str, default=None)
     parser.add_argument("--screenrecord", action="store_true", default=False)
     parser.add_argument("--setting", type=str, default="evolution", choices=["individual", "evolution"])
-    
+    parser.add_argument(
+        "--runtime_mode",
+        type=str,
+        default="legacy",
+        choices=["legacy", "guiagent_v2_shadow", "guiagent_v2"],
+    )
 
     args = parser.parse_args()
     torch.manual_seed(args.seed)
@@ -37,31 +58,30 @@ def main():
         raise ValueError("You must provide either instruction or tasks_json.")
     if args.instruction is not None and args.tasks_json is not None:
         raise ValueError("You cannot provide both instruction and tasks_json.")
-    
-    
+
     default_perceptor_args = DEFAULT_PERCEPTION_ARGS
+
     if args.instruction is not None:
-        # 为单任务执行添加evolution模式支持
         if args.setting == "evolution":
             run_log_dir = f"{args.log_root}/{args.run_name}"
             os.makedirs(run_log_dir, exist_ok=True)
             persistent_heuristics_path = os.path.join(run_log_dir, "persistent_heuristics.txt")
             persistent_skills_path = os.path.join(run_log_dir, "persistent_skills.json")
-            
-            # 初始化持久化文件（如果不存在）
+
             if not os.path.exists(persistent_heuristics_path):
-                with open(persistent_heuristics_path, "w") as f:
+                with open(persistent_heuristics_path, "w", encoding="utf-8") as f:
                     f.write(INIT_HEURISTICS)
             if not os.path.exists(persistent_skills_path):
-                with open(persistent_skills_path, "w") as f:
+                with open(persistent_skills_path, "w", encoding="utf-8") as f:
                     json.dump(INIT_SKILLS, f, indent=4)
         else:
             persistent_heuristics_path = None
             persistent_skills_path = None
-            
+
         try:
-            run_single_task(
-                args.instruction,
+            _run_with_mode(
+                args.runtime_mode,
+                instruction=args.instruction,
                 run_name=args.run_name,
                 log_root=args.log_root,
                 heuristics_path=args.specified_heuristics_path,
@@ -74,98 +94,92 @@ def main():
                 max_consecutive_failures=args.max_consecutive_failures,
                 max_repetitive_actions=args.max_repetitive_actions,
                 overwrite_log_dir=args.overwrite_task_log_dir,
+                err_to_planner_thresh=2,
                 enable_experience_retriever=args.enable_experience_retriever,
                 temperature=args.temperature,
-                screenrecord=args.screenrecord
+                screenrecord=args.screenrecord,
             )
         except Exception as e:
             print(f"Failed when doing task: {args.instruction}")
             print("ERROR:", e)
+        return
+
+    task_json = json.load(open(args.tasks_json, "r", encoding="utf-8"))
+    tasks = task_json["tasks"] if "tasks" in task_json else task_json
+
+    perceptor = Perceptor(ADB_PATH, perception_args=default_perceptor_args)
+    run_log_dir = f"{args.log_root}/{args.run_name}"
+    os.makedirs(run_log_dir, exist_ok=True)
+
+    if args.setting == "individual":
+        persistent_heuristics_path = None
+        persistent_skills_path = None
+    elif args.setting == "evolution":
+        persistent_heuristics_path = os.path.join(run_log_dir, "persistent_heuristics.txt")
+        persistent_skills_path = os.path.join(run_log_dir, "persistent_skills.json")
+
+        if args.specified_heuristics_path is not None:
+            shutil.copy(args.specified_heuristics_path, persistent_heuristics_path)
+        elif not os.path.exists(persistent_heuristics_path):
+            with open(persistent_heuristics_path, "w", encoding="utf-8") as f:
+                f.write(INIT_HEURISTICS)
+
+        if args.specified_skills_path is not None:
+            shutil.copy(args.specified_skills_path, persistent_skills_path)
+        elif not os.path.exists(persistent_skills_path):
+            with open(persistent_skills_path, "w", encoding="utf-8") as f:
+                json.dump(INIT_SKILLS, f, indent=4)
     else:
-        # multi task inference
-        task_json = json.load(open(args.tasks_json, "r"))
-        if "tasks" in task_json:
-            tasks = task_json["tasks"]
+        raise ValueError("Invalid setting:", args.setting)
+
+    error_tasks = []
+    print(f"INFO: Running tasks from {args.tasks_json} using {args.setting} setting ...")
+    for i, task in enumerate(tasks):
+        future_tasks = [t["instruction"] for t in tasks[i + 1 :]]
+        print("\n\n### Running on task:", task["instruction"])
+        print("\n\n")
+
+        instruction = task["instruction"]
+        if "task_id" in task:
+            task_id = task["task_id"]
         else:
-            tasks = task_json
+            task_id = args.tasks_json.split("/")[-1].split(".")[0] + f"_{args.setting}_{i}"
 
-        perceptor = Perceptor(ADB_PATH, perception_args=default_perceptor_args)
-        
-        run_log_dir = f"{args.log_root}/{args.run_name}"
-        os.makedirs(run_log_dir, exist_ok=True)
-        
-        if args.setting == "individual":
-            persistent_heuristics_path = None
-            persistent_skills_path = None
+        try:
+            _run_with_mode(
+                args.runtime_mode,
+                instruction=instruction,
+                future_tasks=future_tasks,
+                log_root=args.log_root,
+                run_name=args.run_name,
+                task_id=task_id,
+                heuristics_path=args.specified_heuristics_path,
+                skills_path=args.specified_skills_path,
+                persistent_heuristics_path=persistent_heuristics_path,
+                persistent_skills_path=persistent_skills_path,
+                perceptor=perceptor,
+                perception_args=default_perceptor_args,
+                max_itr=args.max_itr,
+                max_consecutive_failures=args.max_consecutive_failures,
+                max_repetitive_actions=args.max_repetitive_actions,
+                overwrite_log_dir=args.overwrite_task_log_dir,
+                err_to_planner_thresh=2,
+                enable_experience_retriever=args.enable_experience_retriever,
+                temperature=args.temperature,
+                screenrecord=args.screenrecord,
+            )
+            print("\n\nDONE:", task["instruction"])
+            print("IMPORTANT: Please reset the device as needed before running the next task!")
+            input("Press Enter to continue to next task ...")
+        except Exception as e:
+            print(f"Failed when doing task: {instruction}")
+            print("ERROR:", e)
+            error_tasks.append(task_id)
 
-        elif args.setting == "evolution":
-            persistent_heuristics_path = os.path.join(run_log_dir, "persistent_heuristics.txt")
-            persistent_skills_path = os.path.join(run_log_dir, "persistent_skills.json")
+    error_task_output_path = f"{run_log_dir}/error_tasks.json"
+    with open(error_task_output_path, "w", encoding="utf-8") as f:
+        json.dump(error_tasks, f, indent=4)
 
-            if args.specified_heuristics_path is not None:
-                shutil.copy(args.specified_heuristics_path, persistent_heuristics_path)
-            elif os.path.exists(persistent_heuristics_path):
-                pass
-            else:
-                with open(persistent_heuristics_path, "w") as f:
-                    init_knowledge = INIT_HEURISTICS
-                    f.write(init_knowledge)
-            
-            if args.specified_skills_path is not None:
-                shutil.copy(args.specified_skills_path, persistent_skills_path)
-            elif os.path.exists(persistent_skills_path):
-                pass
-            else:
-                with open(persistent_skills_path, "w") as f:
-                    json.dump(INIT_SKILLS, f, indent=4)
-        else:
-            raise ValueError("Invalid setting:", args.setting)
-        
-        error_tasks = []
-        print(f"INFO: Running tasks from {args.tasks_json} using {args.setting} setting ...")
-        for i, task in enumerate(tasks):
-            future_tasks = [t['instruction'] for t in tasks[i+1:]]
-
-            print("\n\n### Running on task:", task["instruction"])
-            print("\n\n")
-            instruction = task["instruction"]
-            if "task_id" in task:
-                task_id = task["task_id"]
-            else:
-                task_id = args.tasks_json.split("/")[-1].split(".")[0] + f"_{args.setting}" + f"_{i}"
-            try:
-                run_single_task(
-                    instruction,
-                    future_tasks=future_tasks,
-                    log_root=args.log_root,
-                    run_name=args.run_name,
-                    task_id=task_id,
-                    heuristics_path=args.specified_heuristics_path,
-                    skills_path=args.specified_skills_path,
-                    persistent_heuristics_path=persistent_heuristics_path,
-                    persistent_skills_path=persistent_skills_path,
-                    perceptor=perceptor,
-                    perception_args=default_perceptor_args,
-                    max_itr=args.max_itr,
-                    max_consecutive_failures=args.max_consecutive_failures,
-                    max_repetitive_actions=args.max_repetitive_actions,
-                    overwrite_log_dir=args.overwrite_task_log_dir,
-                    enable_experience_retriever=args.enable_experience_retriever,
-                    temperature=args.temperature,
-                    screenrecord=args.screenrecord
-                )
-                print("\n\nDONE:", task["instruction"])
-                print("IMPORTANT: Please reset the device as needed before running the next task!")
-                input("Press Enter to continue to next task ...")
-            except Exception as e:
-                print(f"Failed when doing task: {instruction}")
-                print("ERROR:", e)
-                error_tasks.append(task_id)
-        
-        error_task_output_path = f"{run_log_dir}/error_tasks.json"
-        with open(error_task_output_path, "w") as f:
-            json.dump(error_tasks, f, indent=4)
 
 if __name__ == "__main__":
     main()
-
