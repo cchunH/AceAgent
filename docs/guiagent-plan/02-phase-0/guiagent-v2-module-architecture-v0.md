@@ -133,7 +133,7 @@ guiagent_v2/
 - `state_engine`：`anchor_extractor + topology_matcher`（规则型 MVP）
 - `action_engine`：`assertion_guard + post_check + affine_runtime(占位投射)`
 - `brain_adapter`：`planner_bridge + executor_bridge`（复用 Uni-Mind 既有 Agent）
+- `blueprint_hub`：`repository + patch_model`（本地蓝图库 MVP，支持 patch）
 
 待落地：
-- `blueprint_hub`（版本化蓝图库与 patch 应用）
 - `state_engine/action_engine` 从规则型升级为拓扑+语义联合判定

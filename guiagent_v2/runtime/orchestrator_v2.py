@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 from guiagent_v2.action_engine.affine_runtime import project_action
+from guiagent_v2.blueprint_hub import Blueprint, BlueprintRepository
 from guiagent_v2.intent_contract import map_legacy_action_to_request
 from .default_hooks import post_state_check_hook, semantic_pre_assertion_hook
 from .event_bus import JSONLEventBus
@@ -99,6 +100,7 @@ def _translate_legacy_step_to_events(
     step: dict[str, Any],
     context_index: dict[str, dict[int, Any]],
     hooks: HookManager,
+    blueprint_repo: BlueprintRepository | None = None,
 ) -> list[dict[str, Any]]:
     operation = str(step.get("operation", "unknown"))
     step_id = int(step.get("step", 0))
@@ -118,8 +120,37 @@ def _translate_legacy_step_to_events(
 
     if operation == "action":
         action_obj = step.get("action_object")
-        request = map_legacy_action_to_request(action_obj)
-        projected_action = project_action(request=request)
+        screen_size = context_index.get("screen_size", {"width": 1080, "height": 2340})
+        screen_width = int(screen_size.get("width", 1080))
+        screen_height = int(screen_size.get("height", 2340))
+        request_context = {"screen_width": screen_width, "screen_height": screen_height}
+        request = map_legacy_action_to_request(action_obj, context=request_context)
+
+        blueprint = None
+        if blueprint_repo is not None:
+            blueprint = blueprint_repo.get_blueprint(request.intent_key, app_state="global:DEFAULT")
+            if blueprint is None:
+                blueprint_repo.save_blueprint(
+                    Blueprint(
+                        intent_key=request.intent_key,
+                        app_state="global:DEFAULT",
+                        reference_screen={"width": screen_width, "height": screen_height},
+                    )
+                )
+            else:
+                request_context["post_expectations"] = blueprint.get("post_expectations", [])
+
+        reference_screen = (
+            blueprint.get("reference_screen", {"width": screen_width, "height": screen_height})
+            if blueprint
+            else {"width": screen_width, "height": screen_height}
+        )
+        topology_result = {
+            "reference_screen": reference_screen,
+            "target_screen": {"width": screen_width, "height": screen_height},
+            "confidence": 1.0,
+        }
+        projected_action = project_action(request=request, topology_result=topology_result)
         event = {
             "step_id": step_id,
             "event_type": "action_exec",
@@ -129,6 +160,8 @@ def _translate_legacy_step_to_events(
             "timeout_ms": 3000,
             "retry_count": 0,
         }
+        if blueprint:
+            event["blueprint_version"] = blueprint.get("version", "v0.1.0")
         if latency_ms is not None:
             event["latency_ms"] = latency_ms
         return [event]
@@ -231,6 +264,7 @@ def _emit_events_from_legacy_steps(
     task_id: str,
     chain_mode: str,
     log_dir: str,
+    blueprint_repo: BlueprintRepository | None = None,
 ) -> str:
     steps_path = os.path.join(log_dir, "steps.json")
     if not os.path.exists(steps_path):
@@ -246,7 +280,12 @@ def _emit_events_from_legacy_steps(
     hooks = _build_hook_manager()
 
     for step in steps:
-        translated_events = _translate_legacy_step_to_events(step, context_index, hooks)
+        translated_events = _translate_legacy_step_to_events(
+            step,
+            context_index,
+            hooks,
+            blueprint_repo=blueprint_repo,
+        )
         for event in translated_events:
             event["run_id"] = run_id
             event["task_id"] = task_id
@@ -294,6 +333,7 @@ def run_single_task_with_runtime(
         file_path=os.path.join(log_dir, "events.jsonl"),
         default_chain_mode=chain_mode,
     )
+    blueprint_repo = BlueprintRepository(os.path.join(log_dir, "blueprints.json"))
 
     _emit_and_track(
         bus,
@@ -403,6 +443,7 @@ def run_single_task_with_runtime(
         task_id=task_id,
         chain_mode=chain_mode,
         log_dir=log_dir,
+        blueprint_repo=blueprint_repo,
     )
 
     _emit_and_track(

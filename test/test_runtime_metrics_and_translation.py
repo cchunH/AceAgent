@@ -35,6 +35,7 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
             step,
             context_index=context_index,
             hooks=_build_hook_manager(),
+            blueprint_repo=None,
         )
         event_types = [e["event_type"] for e in events]
         self.assertIn("assertion", event_types)
