@@ -54,6 +54,9 @@
 7. [code-doc-practice-assessment-v1.md](./guiagent-plan/01-global-analysis/code-doc-practice-assessment-v1.md)  
    代码与文档实践细节评估（推荐前质量审计）。
 
+8. [guiagent-refactor-recommendation-final-v1.md](./guiagent-plan/01-global-analysis/guiagent-refactor-recommendation-final-v1.md)  
+   GUIAgent 改造正式推荐与迁移说明。
+
 ## 推荐阅读顺序
 
 1. `deep-system-audit-report`（先建立全局认知）

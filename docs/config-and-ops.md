@@ -28,7 +28,8 @@
 python run.py \
   --instruction "打开地图并搜索最近的咖啡店" \
   --run_name demo_single \
-  --setting evolution
+  --setting evolution \
+  --runtime_mode legacy
 ```
 
 ### 2.2 多任务
@@ -38,6 +39,7 @@ python run.py \
   --tasks_json ./tasks.json \
   --run_name demo_batch \
   --setting evolution \
+  --runtime_mode guiagent_v2_shadow \
   --enable_experience_retriever
 ```
 
@@ -56,6 +58,16 @@ python run.py \
   - `persistent_skills.json`
 - 每个任务完成后增量更新，后续任务直接继承。
 
+`--runtime_mode legacy`：
+- 原有执行主链。
+
+`--runtime_mode guiagent_v2_shadow`：
+- 启用 GUIAgent v2 运行时骨架（shadow），同时委托 legacy 执行。
+- 会额外输出 `events.jsonl` 结构化事件。
+
+`--runtime_mode guiagent_v2`：
+- 与 `guiagent_v2_shadow` 共用当前骨架，预留后续真实 v2 执行逻辑接管。
+
 ## 4. 日志与文件产物
 
 单任务目录结构（典型）：
@@ -63,6 +75,7 @@ python run.py \
 ```text
 logs/<model>/unimind_agent/<run_name>/<task_id>/
   steps.json
+  events.jsonl
   heuristics.txt
   skills.json
   screenshots/

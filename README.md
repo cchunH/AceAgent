@@ -25,7 +25,6 @@ Mobile-Agent-E/
 │   │   ├── base.py      # 基础智能体类和数据结构
 │   │   ├── expert_track_agents.py  # 专家级智能体
 │   │   ├── evolution_agents.py     # 进化学习智能体
-│   │   └── fast_track_agents.py    # 快速执行智能体
 │   ├── perception/      # 感知模块
 │   │   ├── perceptor.py # 主感知器
 │   │   ├── text_localization.py    # 文字定位
@@ -35,6 +34,7 @@ Mobile-Agent-E/
 │   │   ├── controller.py # 设备控制器
 │   │   └── action_executor.py      # 动作执行器
 │   └── utils/           # 工具函数
+├── guiagent_v2/         # GUIAgent v2 运行时骨架（契约、事件、状态API）
 ├── logs/                # 日志输出目录
 ├── screenshot/          # 截图存储目录
 └── temp/               # 临时文件目录

@@ -21,3 +21,6 @@
 
 6. [code-doc-practice-assessment-v1.md](./code-doc-practice-assessment-v1.md)  
    代码与文档实践细节评估（推荐前执行质量审计）。
+
+7. [guiagent-refactor-recommendation-final-v1.md](./guiagent-refactor-recommendation-final-v1.md)  
+   正式改造推荐与迁移说明（运行模式、日志、控制面接入点）。

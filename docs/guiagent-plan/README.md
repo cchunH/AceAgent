@@ -37,6 +37,9 @@ docs/guiagent-plan/
 6. [code-doc-practice-assessment-v1.md](./01-global-analysis/code-doc-practice-assessment-v1.md)  
    代码与文档实践细节评估（代码实现与文档规范一致性检查）。
 
+7. [guiagent-refactor-recommendation-final-v1.md](./01-global-analysis/guiagent-refactor-recommendation-final-v1.md)  
+   改造正式推荐与迁移说明（运行模式、快轨下线、控制面接入点）。
+
 ## 2) 分阶段实施（02-phase-0）
 
 1. [phase0-execution-checklist.md](./02-phase-0/phase0-execution-checklist.md)  
