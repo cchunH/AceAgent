@@ -1,5 +1,6 @@
 from typing import Any
 
+from .anchor_transform import estimate_anchor_affine
 from .types import AnchorNode, TopologyMatchResult
 
 
@@ -164,6 +165,7 @@ def match_topology(
     matched_aux = 0
     total_core = 0
     total_aux = 0
+    matched_pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
 
     for weight, exp in expected_weighted:
         role = str(exp.get("role", "")).strip().upper()
@@ -205,6 +207,7 @@ def match_topology(
             matched_ids.append(obs_id)
             if obs_id:
                 used_observed_ids.add(obs_id)
+            matched_pairs.append((dict(exp), dict(best[1])))
 
     confidence = weighted_sum / total_weight
     if core_weight_total > 0:
@@ -218,6 +221,7 @@ def match_topology(
     geometry_confidence = (
         geometry_weight_sum / geometry_weight_total if geometry_weight_total > 0 else confidence
     )
+    transform = estimate_anchor_affine(matched_pairs)
     reason_code = "TOPOLOGY_MATCH_OK" if confidence >= 0.6 else "TOPOLOGY_MISMATCH"
     return TopologyMatchResult(
         matched=matched,
@@ -232,6 +236,10 @@ def match_topology(
         matched_aux=matched_aux,
         total_core=total_core,
         total_aux=total_aux,
+        transform_mode=str(transform.get("transform_mode", "identity")),
+        affine_norm=dict(transform.get("affine_norm", {})),
+        transform_fit_error=float(transform.get("transform_fit_error", 0.0)),
+        transform_pair_count=int(transform.get("transform_pair_count", 0)),
     )
 
 

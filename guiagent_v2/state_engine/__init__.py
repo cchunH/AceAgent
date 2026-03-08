@@ -1,5 +1,6 @@
 from .types import AnchorNode, SkeletonMatchResult, StaticSkeleton, TopologyMatchResult
 from .anchor_extractor import extract_anchors
+from .anchor_transform import estimate_anchor_affine
 from .topology_matcher import match_topology, compare_anchor_sets
 from .scene_denoise import denoise_perception_frames
 from .static_skeleton import build_static_skeleton, extract_skeleton_node_keys, match_static_skeleton
@@ -11,6 +12,7 @@ __all__ = [
     "SkeletonMatchResult",
     "TopologyMatchResult",
     "extract_anchors",
+    "estimate_anchor_affine",
     "match_topology",
     "compare_anchor_sets",
     "denoise_perception_frames",

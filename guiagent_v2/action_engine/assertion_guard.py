@@ -65,6 +65,10 @@ def run_pre_assertion(
                 "matched": topo.matched,
                 "total_expected": topo.total_expected,
                 "denoise_stable_ratio": denoise.get("stable_ratio"),
+                "transform_mode": topo.transform_mode,
+                "affine_norm": topo.affine_norm,
+                "transform_fit_error": topo.transform_fit_error,
+                "transform_pair_count": topo.transform_pair_count,
             }
 
     expected_skeleton = context.get("expected_skeleton")
@@ -103,6 +107,10 @@ def run_pre_assertion(
         "matched_aux": topo.matched_aux if topo is not None else 0,
         "total_core": topo.total_core if topo is not None else 0,
         "total_aux": topo.total_aux if topo is not None else 0,
+        "transform_mode": topo.transform_mode if topo is not None else "identity",
+        "affine_norm": topo.affine_norm if topo is not None else {},
+        "transform_fit_error": topo.transform_fit_error if topo is not None else 0.0,
+        "transform_pair_count": topo.transform_pair_count if topo is not None else 0,
         "denoise_stable_ratio": denoise.get("stable_ratio"),
         "skeleton_signature": observed_skeleton.signature,
     }

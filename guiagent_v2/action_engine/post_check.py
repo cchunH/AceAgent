@@ -79,6 +79,10 @@ def run_post_check(
                     "aux_anchor_confidence": topo.aux_confidence,
                     "geometry_confidence": topo.geometry_confidence,
                     "skeleton_confidence": skeleton_topo.confidence,
+                    "transform_mode": topo.transform_mode,
+                    "affine_norm": topo.affine_norm,
+                    "transform_fit_error": topo.transform_fit_error,
+                    "transform_pair_count": topo.transform_pair_count,
                 }
 
     effective_no_change = max(
@@ -94,6 +98,10 @@ def run_post_check(
             "aux_anchor_confidence": topo.aux_confidence,
             "geometry_confidence": topo.geometry_confidence,
             "skeleton_confidence": skeleton_topo.confidence,
+            "transform_mode": topo.transform_mode,
+            "affine_norm": topo.affine_norm,
+            "transform_fit_error": topo.transform_fit_error,
+            "transform_pair_count": topo.transform_pair_count,
             "denoise_stable_ratio": denoise.get("stable_ratio"),
         }
 
@@ -105,5 +113,9 @@ def run_post_check(
         "aux_anchor_confidence": topo.aux_confidence,
         "geometry_confidence": topo.geometry_confidence,
         "skeleton_confidence": skeleton_topo.confidence,
+        "transform_mode": topo.transform_mode,
+        "affine_norm": topo.affine_norm,
+        "transform_fit_error": topo.transform_fit_error,
+        "transform_pair_count": topo.transform_pair_count,
         "denoise_stable_ratio": denoise.get("stable_ratio"),
     }

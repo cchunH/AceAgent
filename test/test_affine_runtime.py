@@ -32,7 +32,22 @@ class TestAffineRuntime(unittest.TestCase):
         self.assertEqual(projected["arguments"]["x2"], 60)
         self.assertEqual(projected["arguments"]["y2"], 20)
 
+    def test_tap_projection_with_affine_norm(self):
+        req = map_legacy_action_to_request({"name": "Tap", "arguments": {"x": 100, "y": 200}})
+        projected = project_action(
+            req,
+            topology_result={
+                "reference_screen": {"width": 1000, "height": 2000},
+                "target_screen": {"width": 500, "height": 1000},
+                "affine_norm": {"a": 1.0, "b": 0.0, "tx": 0.1, "c": 0.0, "d": 1.0, "ty": 0.2},
+                "confidence": 0.91,
+            },
+        )
+        # normalized(100,200)->(0.1,0.1), plus (0.1,0.2) => (0.2,0.3) on 500x1000
+        self.assertEqual(projected["arguments"]["x"], 100)
+        self.assertEqual(projected["arguments"]["y"], 300)
+        self.assertEqual(projected.get("projection", {}).get("mode"), "affine_norm")
+
 
 if __name__ == "__main__":
     unittest.main()
-

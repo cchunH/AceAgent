@@ -30,6 +30,10 @@ class TopologyMatchResult:
     matched_aux: int = 0
     total_core: int = 0
     total_aux: int = 0
+    transform_mode: str = "identity"
+    affine_norm: dict[str, float] = field(default_factory=dict)
+    transform_fit_error: float = 0.0
+    transform_pair_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -1,6 +1,7 @@
 import time
 from typing import Any, Callable
 
+from guiagent_v2.action_engine.affine_runtime import project_action
 from guiagent_v2.intent_contract import (
     ExecutionResult,
     map_legacy_action_to_request,
@@ -40,6 +41,16 @@ class StepPipeline:
                 "latency_ms": 0,
                 "context": dict(context),
             }
+
+        topology_result = context.get("topology_result")
+        if isinstance(topology_result, dict) and topology_result:
+            projected = project_action(request, topology_result=topology_result)
+            request.action = {
+                "name": projected.get("name"),
+                "arguments": dict(projected.get("arguments", {}) or {}),
+            }
+            context["projected_action"] = request.action
+            context["projection"] = projected.get("projection")
 
         exec_detail = {
             "success": True,

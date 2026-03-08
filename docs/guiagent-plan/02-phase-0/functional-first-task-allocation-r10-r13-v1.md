@@ -133,3 +133,4 @@
 11. D1 指标增强已推进：`runtime metrics/runtime_summary` 增加 `anchor_gate_*` 与 `anchor_micro_retry_*` 统计，用于量化主辅锚点策略收益。
 12. A3 已推进 v0：`v2_executor` 移动端链路接入 `MobileDeviceExecutor`（`auto|shadow|device`），有 ADB 时执行真实动作，无 ADB 自动回退 shadow。
 13. A1/A3 衔接推进：`orchestrator_v2` 在 `v2_skip_legacy` 场景已支持多步任务骨架（指令拆步、`v2_max_steps`、handover 早停），并补回归测试。
+14. A2/S2 已推进：新增锚点约束仿射估计与执行投影接线（`anchor_transform + topology_matcher + pipeline`），并新增 `topology_projection` 事件与回归测试，开始替代“仅缩放”坐标迁移路径。

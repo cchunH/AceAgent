@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from guiagent_v2.intent_contract import map_legacy_action_to_request
-from guiagent_v2.state_engine import build_static_skeleton
+from guiagent_v2.state_engine import (
+    build_static_skeleton,
+    denoise_perception_frames,
+    extract_anchors,
+    match_topology,
+)
 from .action_registry import ActionRegistry
 from .agent_browser_skill import AgentBrowserSkill
 from .blueprint_sync import upsert_blueprint_from_observation
@@ -420,7 +425,54 @@ def _resolve_blueprint_context(
         step_context["expected_anchors"] = list(selected_blueprint.get("anchors", []))
         step_context["expected_skeleton"] = selected_blueprint.get("static_skeleton")
         step_context["post_expectations"] = list(selected_blueprint.get("post_expectations", []))
+        step_context["reference_screen"] = dict(selected_blueprint.get("reference_screen", {}) or {})
     return fast_match_hint
+
+
+def _build_runtime_topology_result(step_context: dict[str, Any]) -> dict[str, Any] | None:
+    expected_anchors = list(step_context.get("expected_anchors", []))
+    if not expected_anchors:
+        return None
+
+    width = int(step_context.get("screen_width", 1080))
+    height = int(step_context.get("screen_height", 2340))
+    pre_infos = list(step_context.get("perception_infos_pre", []))
+    denoise = denoise_perception_frames(
+        frames=[pre_infos],
+        screen_size=(width, height),
+        min_presence_ratio=1.0,
+        max_items=24,
+    )
+    observed_infos = list(denoise.get("stable_infos", [])) or pre_infos
+    observed_anchors = extract_anchors(
+        observed_infos,
+        (width, height),
+        max_anchors=max(8, len(expected_anchors) + 2),
+    )
+    topo = match_topology(observed_anchors, expected_anchors)
+
+    reference_screen = dict(step_context.get("reference_screen", {}) or {})
+    if not reference_screen:
+        reference_screen = {
+            "width": int(width),
+            "height": int(height),
+        }
+    target_screen = {
+        "width": int(width),
+        "height": int(height),
+    }
+    return {
+        "reference_screen": reference_screen,
+        "target_screen": target_screen,
+        "confidence": float(topo.confidence),
+        "core_confidence": float(topo.core_confidence),
+        "aux_confidence": float(topo.aux_confidence),
+        "geometry_confidence": float(topo.geometry_confidence),
+        "transform_mode": str(topo.transform_mode),
+        "affine_norm": dict(topo.affine_norm or {}),
+        "transform_fit_error": float(topo.transform_fit_error),
+        "transform_pair_count": int(topo.transform_pair_count),
+    }
 
 
 def run_probe_step(
@@ -557,6 +609,9 @@ def run_probe_step(
             )
         except Exception:
             fast_match_hint = None
+    topology_result = _build_runtime_topology_result(step_context)
+    if topology_result is not None:
+        step_context["topology_result"] = topology_result
     state_machine = ProbeStateMachine()
 
     def _transition_state(
@@ -606,6 +661,26 @@ def run_probe_step(
             **route_info,
         }
     )
+    if topology_result is not None:
+        _emit(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": step_id,
+                "chain_mode": chain_mode,
+                "event_type": "topology_projection",
+                "status": "SUCCESS",
+                "intent_key": request.intent_key,
+                "topology_confidence": topology_result.get("confidence"),
+                "core_anchor_confidence": topology_result.get("core_confidence"),
+                "aux_anchor_confidence": topology_result.get("aux_confidence"),
+                "geometry_confidence": topology_result.get("geometry_confidence"),
+                "transform_mode": topology_result.get("transform_mode"),
+                "transform_fit_error": topology_result.get("transform_fit_error"),
+                "transform_pair_count": topology_result.get("transform_pair_count"),
+                **route_info,
+            }
+        )
     _transition_state(
         ProbeState.ROUTED,
         "route_decision",

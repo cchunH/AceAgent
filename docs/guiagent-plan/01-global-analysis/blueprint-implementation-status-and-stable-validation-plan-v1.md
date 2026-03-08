@@ -6,7 +6,7 @@
 - 版本：`v1.0`
 - 更新时间：`2026-03-08`
 - 对齐基线：`R10-R13`（功能优先主线）
-- 代码基线：`main@c964eb9` 及之前增量
+- 代码基线：`main@cb7c57a` 及之后增量
 
 ## 1. 结论摘要
 
@@ -39,6 +39,11 @@
 - 状态：`部分完成（推进中）`  
 - 证据：`VectorIndexAdapter`、`match_by_vector`、骨架+向量融合匹配、可插拔向量后端、运行时配置链已完成。  
 - 缺口：真实向量后端接入实测、召回质量 A/B 评估与阈值固化。
+
+5. `S2`（几何执行强化）  
+- 状态：`已启动并完成第一批落地`  
+- 证据：`topology_matcher` 已输出 `affine_norm/transform_mode/transform_fit_error`；`StepPipeline` 已接入 `topology_result` 坐标投影；`v2_executor` 已输出 `topology_projection` 事件。  
+- 缺口：真实设备多分辨率场景压测、仿射异常样本回滚策略、阈值固化。
 
 ## 3. 蓝图能力落地比例（评估）
 
@@ -150,6 +155,11 @@
 2. 并行推进 S2 设计：  
 - 增强锚点约束仿射估计。  
 - 补多帧时序去噪与回归样本。
+
+3. S2 当前增量（2026-03-08）
+- 已新增锚点约束仿射估计器（`state_engine/anchor_transform.py`）并接入拓扑匹配结果。  
+- 已将执行坐标投影从“仅屏幕缩放”升级为“优先 affine_norm，回退 scale”。  
+- 已新增回归：`test_pipeline_projection.py`、`test_topology_matcher_weighted.py` 仿射断言、`test_v2_executor.py` 拓扑投影事件断言。
 
 3. 完成 S1 后立即打第一个 checkpoint tag，作为“可运行实测起点”。
 
