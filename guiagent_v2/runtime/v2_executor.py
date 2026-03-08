@@ -14,6 +14,7 @@ from .guard_policy import GuardPolicy
 from .hooks import HookManager
 from .loop_detector import LoopDetector
 from .pipeline import StepPipeline
+from .executor_state_machine import ProbeState, ProbeStateMachine
 from .web_skill_router import WebSkillRouter
 from .web_planner import WebPlanStep, build_initial_web_plan, build_replan_after_failure
 from .web_replan_policy import WebReplanPolicy
@@ -263,6 +264,32 @@ def run_probe_step(
         "task_type": route_context.get("task_type"),
     }
     request = map_legacy_action_to_request(action_obj, context=request_context)
+    state_machine = ProbeStateMachine()
+
+    def _transition_state(
+        next_state: ProbeState,
+        reason: str,
+        *,
+        status: str = "RUNNING",
+        route_payload: dict[str, Any] | None = None,
+    ) -> None:
+        transition = state_machine.transition(next_state, reason)
+        payload = {
+            "run_id": run_id,
+            "task_id": task_id,
+            "step_id": step_id,
+            "chain_mode": chain_mode,
+            "event_type": "executor_state",
+            "status": status if transition.ok else "FAILED",
+            "intent_key": request.intent_key,
+            "executor_prev_state": transition.prev_state.value,
+            "executor_state": transition.next_state.value,
+            "executor_reason": transition.reason,
+            "executor_transition_ok": transition.ok,
+        }
+        if route_payload:
+            payload.update(route_payload)
+        _emit(payload)
 
     decision = router.route(
         request.intent_key,
@@ -285,6 +312,11 @@ def run_probe_step(
             "request_id": request.request_id,
             **route_info,
         }
+    )
+    _transition_state(
+        ProbeState.ROUTED,
+        "route_decision",
+        route_payload=route_info,
     )
     _emit(
         {
@@ -338,9 +370,20 @@ def run_probe_step(
             **route_info,
         }
     )
+    _transition_state(
+        ProbeState.GUARDED,
+        f"guard_{guard_decision}",
+        route_payload=route_info,
+    )
 
     if guard_decision != "allow":
         if guard_decision == "confirm":
+            _transition_state(
+                ProbeState.CONFIRM_PENDING,
+                "guard_confirm_pending",
+                status="BLOCKED",
+                route_payload=route_info,
+            )
             confirm_id = f"{run_id}:{task_id}:{step_id}"
             pending_payload = {
                 "confirm_id": confirm_id,
@@ -406,6 +449,12 @@ def run_probe_step(
                         }
                     )
                 else:
+                    _transition_state(
+                        ProbeState.HANDOVER,
+                        "guard_confirm_rejected",
+                        status="HANDOVER",
+                        route_payload=route_info,
+                    )
                     _emit(
                         {
                             "run_id": run_id,
@@ -451,6 +500,12 @@ def run_probe_step(
                             **route_info,
                         }
                     )
+                    _transition_state(
+                        ProbeState.COMPLETED,
+                        "handover_return",
+                        status="HANDOVER",
+                        route_payload=route_info,
+                    )
                     return V2ProbeResult(
                         status="HANDOVER",
                         intent_key=request.intent_key,
@@ -473,6 +528,12 @@ def run_probe_step(
                             **route_info,
                         }
                     )
+                _transition_state(
+                    ProbeState.HANDOVER,
+                    reason_code.lower(),
+                    status="HANDOVER",
+                    route_payload=route_info,
+                )
                 _emit(
                     {
                         "run_id": run_id,
@@ -501,6 +562,12 @@ def run_probe_step(
                         **route_info,
                     }
                 )
+                _transition_state(
+                    ProbeState.COMPLETED,
+                    "handover_return",
+                    status="HANDOVER",
+                    route_payload=route_info,
+                )
                 return V2ProbeResult(
                     status="HANDOVER",
                     intent_key=request.intent_key,
@@ -509,6 +576,12 @@ def run_probe_step(
                 )
         else:
             reason_code = "GUARD_DENIED"
+            _transition_state(
+                ProbeState.HANDOVER,
+                "guard_denied",
+                status="HANDOVER",
+                route_payload=route_info,
+            )
             _emit(
                 {
                     "run_id": run_id,
@@ -537,6 +610,12 @@ def run_probe_step(
                     **route_info,
                 }
             )
+            _transition_state(
+                ProbeState.COMPLETED,
+                "handover_return",
+                status="HANDOVER",
+                route_payload=route_info,
+            )
             return V2ProbeResult(
                 status="HANDOVER",
                 intent_key=request.intent_key,
@@ -550,6 +629,11 @@ def run_probe_step(
     dispatch_name = "web_skill_agent_browser" if route_info.get("channel") == "web_skill" else "mobile_native_shadow"
     final_route_info = dict(route_info)
     if route_info.get("channel") == "web_skill":
+        _transition_state(
+            ProbeState.EXECUTING_WEB,
+            "dispatch_web_skill",
+            route_payload=route_info,
+        )
         web_plan = build_initial_web_plan(
             instruction=instruction,
             route_context=route_context,
@@ -818,6 +902,11 @@ def run_probe_step(
             exec_result["latency_ms"] = total_latency_ms
 
         if str(exec_result.get("status", "")).upper() != "SUCCESS":
+            _transition_state(
+                ProbeState.FALLBACK,
+                "web_skill_failed_fallback",
+                route_payload=route_info,
+            )
             _emit(
                 {
                     "run_id": run_id,
@@ -857,6 +946,15 @@ def run_probe_step(
                 },
                 context={},
             )
+            _transition_state(
+                ProbeState.EXECUTING_MOBILE,
+                "dispatch_mobile_fallback",
+                route_payload={
+                    "channel": "mobile_native",
+                    "route_reason": "skill_fallback_to_mobile_native",
+                    "skill_name": route_info.get("skill_name"),
+                },
+            )
             exec_result = fallback_result
             final_route_info = {
                 "channel": "mobile_native",
@@ -864,6 +962,11 @@ def run_probe_step(
                 "skill_name": route_info.get("skill_name"),
             }
     else:
+        _transition_state(
+            ProbeState.EXECUTING_MOBILE,
+            "dispatch_mobile_native",
+            route_payload=route_info,
+        )
         try:
             exec_result = registry.dispatch(
                 dispatch_name,
@@ -891,6 +994,11 @@ def run_probe_step(
     post_check = dict(exec_result.get("post_check", {}))
     recovery_level = str(exec_result.get("recovery_level", "L3"))
     latency_ms = int(exec_result.get("latency_ms", 0) or 0)
+    _transition_state(
+        ProbeState.VERIFYING,
+        "enter_assertion_post_check",
+        route_payload=final_route_info,
+    )
 
     _emit(
         {
@@ -923,6 +1031,12 @@ def run_probe_step(
 
     final_status = "SUCCESS" if status == "SUCCESS" else "HANDOVER"
     if final_status != "SUCCESS":
+        _transition_state(
+            ProbeState.HANDOVER,
+            "verification_failed",
+            status="HANDOVER",
+            route_payload=final_route_info,
+        )
         reason_code = str(
             assertion_result.get("reason_code")
             or post_check.get("reason_code")
@@ -940,6 +1054,19 @@ def run_probe_step(
                 "reason_code": reason_code,
                 **final_route_info,
             }
+        )
+        _transition_state(
+            ProbeState.COMPLETED,
+            "handover_complete",
+            status="HANDOVER",
+            route_payload=final_route_info,
+        )
+    else:
+        _transition_state(
+            ProbeState.COMPLETED,
+            "verification_passed",
+            status="SUCCESS",
+            route_payload=final_route_info,
         )
 
     _emit(

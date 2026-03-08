@@ -49,6 +49,7 @@ from .guard_policy import GuardPolicy
 from .loop_detector import LoopDetector
 from .policy_loader import PolicyLoader
 from .watchdog_policy import WatchdogPolicyLoader, normalize_watchdog_policy
+from .executor_state_machine import ProbeState, ProbeStateMachine, StateTransition
 from .v2_executor import V2ProbeResult, infer_probe_action, run_probe_step
 from .watchdogs import (
     WatchdogPlugin,
@@ -105,6 +106,9 @@ __all__ = [
     "PolicyLoader",
     "WatchdogPolicyLoader",
     "normalize_watchdog_policy",
+    "ProbeState",
+    "ProbeStateMachine",
+    "StateTransition",
     "V2ProbeResult",
     "infer_probe_action",
     "run_probe_step",

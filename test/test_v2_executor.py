@@ -89,6 +89,7 @@ class TestV2Executor(unittest.TestCase):
         self.assertEqual(result.status, "SUCCESS")
         event_types = [e["event_type"] for e in events]
         self.assertIn("guard_decision", event_types)
+        self.assertIn("executor_state", event_types)
         self.assertNotIn("adapter_call", event_types)
         self.assertEqual(len(web_skill.calls), 0)
 

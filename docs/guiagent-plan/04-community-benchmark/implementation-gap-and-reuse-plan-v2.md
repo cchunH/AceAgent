@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.20`
+- 版本：`v2.21`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -135,6 +135,11 @@
 23. 离线复盘评分器（Replay Quality）
 - 证据模块：`guiagent_v2/runtime/replay_quality.py`, `guiagent_v2/runtime/offline_replay.py`
 - 现状：离线回灌前已支持质量打分与低质量样本过滤（`min_quality_score`）。
+- 距离评估：`完成（v0）`
+
+24. 执行状态机显式化（Executor State Machine）
+- 证据模块：`guiagent_v2/runtime/executor_state_machine.py`, `guiagent_v2/runtime/v2_executor.py`
+- 现状：执行链状态迁移已显式建模并输出 `executor_state` 事件，便于流程审查与问题定位。
 - 距离评估：`完成（v0）`
 
 ### 2.2 部分落地（需增强）

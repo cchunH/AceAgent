@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.1`
+- 版本：`v1.2`
 - 更新时间：`2026-03-08`
 - 关联主文档：`../01-global-analysis/guiagent-blueprint-fidelity-review-v1.md`
 
@@ -118,3 +118,6 @@
 2. 完成 B1：离线复盘评分器最小版本。
 3. 完成 C1：`VectorIndexAdapter` 设计稿与 mock。
 4. 完成 D1：新增回灌指标到 `/runtime/metrics`。
+
+执行进展（截至 2026-03-08）：
+1. A1 已落地 v0：`v2_executor` 接入 `executor_state_machine`，并输出 `executor_state` 迁移事件。
