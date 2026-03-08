@@ -270,6 +270,17 @@ class TaskStatusStore:
                     "event_count": 0,
                     "timeline": [],
                     "timeline_dropped": 0,
+                    "runtime_stats": {
+                        "fast_match_hits": 0,
+                        "fast_match_source_counts": {
+                            "skeleton": 0,
+                            "vector": 0,
+                            "fused": 0,
+                            "unknown": 0,
+                        },
+                        "blueprint_sync_success": 0,
+                        "blueprint_sync_failed": 0,
+                    },
                 },
             )
             item["event_count"] += 1
@@ -281,6 +292,27 @@ class TaskStatusStore:
             status = str(event.get("status", "")).upper()
             if status:
                 item["status"] = status
+
+            stats = item.setdefault("runtime_stats", {})
+            fast_match = event.get("fast_match_hint")
+            if isinstance(fast_match, dict):
+                matched_intent = str(fast_match.get("matched_intent_key", "")).strip()
+                if matched_intent:
+                    stats["fast_match_hits"] = int(stats.get("fast_match_hits", 0)) + 1
+                    source_counts = stats.setdefault(
+                        "fast_match_source_counts",
+                        {"skeleton": 0, "vector": 0, "fused": 0, "unknown": 0},
+                    )
+                    source = str(fast_match.get("match_source", "")).strip().lower() or "unknown"
+                    if source not in {"skeleton", "vector", "fused", "unknown"}:
+                        source = "unknown"
+                    source_counts[source] = int(source_counts.get(source, 0)) + 1
+
+            if str(event.get("event_type", "")).strip() == "blueprint_sync":
+                if status == "SUCCESS":
+                    stats["blueprint_sync_success"] = int(stats.get("blueprint_sync_success", 0)) + 1
+                elif status:
+                    stats["blueprint_sync_failed"] = int(stats.get("blueprint_sync_failed", 0)) + 1
 
             item["timeline"].append(event)
             max_events = self._max_timeline_events_per_task
@@ -304,6 +336,7 @@ class TaskStatusStore:
                 "updated_at": item["updated_at"],
                 "event_count": item["event_count"],
                 "timeline_dropped": int(item.get("timeline_dropped", 0)),
+                "runtime_stats": dict(item.get("runtime_stats", {})),
             }
 
     def get_task_timeline(self, run_id: str, task_id: str) -> list[dict[str, Any]]:
@@ -343,6 +376,7 @@ class TaskStatusStore:
                         "updated_at": item["updated_at"],
                         "event_count": item["event_count"],
                         "timeline_dropped": int(item.get("timeline_dropped", 0)),
+                        "runtime_stats": dict(item.get("runtime_stats", {})),
                     }
                 )
         items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)

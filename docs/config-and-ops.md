@@ -123,6 +123,12 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 - `guiagent_v2.runtime.get_submitted_task(request_id)`
 - `guiagent_v2.runtime.list_submitted_tasks(status=None)`
 
+`get_task_status` / `list_tasks` 现包含 `runtime_stats` 聚合字段：
+- `fast_match_hits`
+- `fast_match_source_counts`（`skeleton|vector|fused|unknown`）
+- `blueprint_sync_success`
+- `blueprint_sync_failed`
+
 指标计算工具：
 - `guiagent_v2.runtime.compute_metrics_from_jsonl(jsonl_path)`
 - `guiagent_v2.runtime.write_runtime_summary(log_dir, event_log_path, blueprint_repo)`

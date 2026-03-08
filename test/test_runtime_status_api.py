@@ -187,6 +187,49 @@ class TestRuntimeStatusApi(unittest.TestCase):
         self.assertEqual(metrics["series"][0]["event_count"], 1)
         self.assertEqual(metrics["series"][1]["event_count"], 1)
 
+    def test_status_runtime_stats_fast_match_and_blueprint_sync(self):
+        store = TaskStatusStore()
+        store.update(
+            {
+                "run_id": "run-stats",
+                "task_id": "task-stats",
+                "event_type": "assertion",
+                "status": "SUCCESS",
+                "ts": "2026-03-08T12:20:00Z",
+                "fast_match_hint": {
+                    "matched_intent_key": "global:CHECKOUT:CTA",
+                    "match_source": "vector",
+                },
+            }
+        )
+        store.update(
+            {
+                "run_id": "run-stats",
+                "task_id": "task-stats",
+                "event_type": "blueprint_sync",
+                "status": "SUCCESS",
+                "ts": "2026-03-08T12:20:01Z",
+            }
+        )
+        store.update(
+            {
+                "run_id": "run-stats",
+                "task_id": "task-stats",
+                "event_type": "blueprint_sync",
+                "status": "FAILED",
+                "ts": "2026-03-08T12:20:02Z",
+            }
+        )
+
+        status = store.get_task_status("run-stats", "task-stats")
+        self.assertIsNotNone(status)
+        runtime_stats = status.get("runtime_stats", {})
+        self.assertEqual(runtime_stats.get("fast_match_hits"), 1)
+        self.assertEqual(runtime_stats.get("blueprint_sync_success"), 1)
+        self.assertEqual(runtime_stats.get("blueprint_sync_failed"), 1)
+        source_counts = runtime_stats.get("fast_match_source_counts", {})
+        self.assertEqual(source_counts.get("vector"), 1)
+
     def test_confirmation_store_register_resolve_and_wait(self):
         store = RuntimeConfirmationStore()
         pending = store.register_pending(
