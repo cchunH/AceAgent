@@ -14,7 +14,7 @@
 1. 当前系统已达到“框架可运行 + 可观测 + 可扩展”的阶段。
 2. 当前系统尚未达到“GUIAgent v2 独立功能完整可用”的阶段。
 3. 最大阻断不在文档或控制面，而在执行主链：
-- `guiagent_v2` 的移动端执行仍是 shadow（未落地真实设备动作）。
+- 移动端真实执行桥接已落地 v0（`auto|shadow|device`），但真实感知与多步循环仍未闭环。
 - `guiagent_v2` 在 `--v2_skip_legacy` 下仍是单步 probe，不是完整任务循环。
 
 ## 2. 代码与文档对齐评估
@@ -39,9 +39,9 @@
 
 ## 2.2 偏差项（文档方向正确，但“可用定义”需下修）
 
-1. “v2 可独立执行”在文档中被高估
-- 证据：`guiagent_v2/runtime/pipeline.py:32`
-- 现状：`run_shadow_step` 明确是 no-op 执行，不触发真实设备动作。
+1. “v2 可独立执行”在文档中仍需谨慎表述
+- 证据：`guiagent_v2/runtime/mobile_device_executor.py`, `guiagent_v2/runtime/v2_executor.py`
+- 现状：移动端已支持真实执行桥接，但真实任务仍受单步 probe 与合成感知输入限制。
 
 2. “v2 主流程”在 `--v2_skip_legacy` 下仍是单步
 - 证据：`guiagent_v2/runtime/orchestrator_v2.py:571-595`
@@ -71,11 +71,11 @@
 
 ## P0（阻断项，必须先做）
 
-1. 移动端真实执行桥接（替换 shadow no-op）
-- 问题：v2 移动端路径不执行真实动作。
-- 证据模块：`pipeline.py`, `v2_executor.py`, `UniMind/device/action_executor.py`
-- 影响：`guiagent_v2` 独立模式不可用于真实任务。
-- 建议优先级：`P0-1`
+1. 移动端真实执行桥接（已完成 v0，需增强）
+- 当前：已接入 `MobileDeviceExecutor`，支持 `auto|shadow|device` 与 ADB 不可用自动回退。
+- 证据模块：`mobile_device_executor.py`, `pipeline.py`, `v2_executor.py`, `run.py`
+- 剩余影响：仍缺真实感知输入联动与多步任务循环。
+- 建议优先级：`P0-1`（剩余增强）
 
 2. v2 多步任务主循环（非单步 probe）
 - 问题：`v2_skip_legacy` 下仅一步推断。
@@ -120,7 +120,7 @@
 
 ## 5. 建议实施顺序（可直接开工）
 
-1. R14（P0）：真实执行桥接 + 多步循环骨架
+1. R14（P0）：多步循环骨架（真实执行桥接已完成 v0）
 - DoD：`runtime_mode=guiagent_v2 --v2_skip_legacy` 可完成至少 2 条真实设备任务。
 
 2. R15（P0）：真实感知接入 + 在线回灌

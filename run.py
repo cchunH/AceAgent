@@ -34,6 +34,8 @@ def _run_with_mode(runtime_mode: str, **kwargs):
         kwargs.pop("web_replan_max_attempts", None)
         kwargs.pop("confirm_wait_timeout", None)
         kwargs.pop("confirm_poll_interval", None)
+        kwargs.pop("mobile_execution_mode", None)
+        kwargs.pop("mobile_wait_ms", None)
         return run_single_task(**kwargs)
     kwargs["runtime_mode"] = runtime_mode
     return run_single_task_with_runtime(**kwargs)
@@ -123,6 +125,19 @@ def main():
         type=float,
         default=0.5,
         help="Polling interval in seconds for guard confirm decision checks.",
+    )
+    parser.add_argument(
+        "--mobile_execution_mode",
+        type=str,
+        default="auto",
+        choices=["auto", "shadow", "device"],
+        help="Mobile-native execution mode for guiagent_v2: auto (fallback), shadow, or device.",
+    )
+    parser.add_argument(
+        "--mobile_wait_ms",
+        type=int,
+        default=1000,
+        help="Default wait duration for mobile Wait action in guiagent_v2.",
     )
     parser.add_argument(
         "--watchdog_policy_path",
@@ -292,6 +307,8 @@ def main():
                 web_replan_max_attempts=args.web_replan_max_attempts,
                 confirm_wait_timeout=args.confirm_wait_timeout,
                 confirm_poll_interval=args.confirm_poll_interval,
+                mobile_execution_mode=args.mobile_execution_mode,
+                mobile_wait_ms=args.mobile_wait_ms,
             )
         except Exception as e:
             print(f"Failed when doing task: {args.instruction}")
@@ -373,6 +390,8 @@ def main():
                 web_replan_max_attempts=args.web_replan_max_attempts,
                 confirm_wait_timeout=args.confirm_wait_timeout,
                 confirm_poll_interval=args.confirm_poll_interval,
+                mobile_execution_mode=args.mobile_execution_mode,
+                mobile_wait_ms=args.mobile_wait_ms,
             )
             print("\n\nDONE:", task["instruction"])
             print("IMPORTANT: Please reset the device as needed before running the next task!")

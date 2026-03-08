@@ -210,6 +210,7 @@ while True:
 - `guard_policy.py`: 执行前 allow/deny/confirm 门禁决策。
 - `policy_loader.py`: GuardPolicy 文件化配置加载与缓存重载。
 - `v2_executor.py`: `guiagent_v2(_shadow)` 执行链，支持 Web 多步执行 v1（`web_plan/web_step_*`）与失败回退到 `mobile_native`。
+- `mobile_device_executor.py`: 移动端真实执行桥接（`auto|shadow|device`，ADB 不可用可自动回退）。
 - `loop_detector.py` + `context_compaction.py`: 循环检测与上下文压缩治理能力。
 - `task_service.py` + `session_runtime.py`: 任务提交、状态查询、会话级隔离调度（进程内 v0）。
 - `session_runtime_server.py`: SessionRuntime 本地 HTTP IPC 控制面（session/task/status/timeline/audit），支持 lockfile 多实例治理、写操作审计日志，以及任务级审计事件并入 `status_api` 时间线（含 cursor + 时间窗口查询）。
@@ -240,6 +241,8 @@ while True:
 - `--v2_skip_legacy`
 - `--guard_policy_path`
 - `--guard_policy_reload_interval`
+- `--mobile_execution_mode`
+- `--mobile_wait_ms`
 - `--watchdog_policy_path`
 - `--watchdog_policy_reload_interval`
 - `--session_id`

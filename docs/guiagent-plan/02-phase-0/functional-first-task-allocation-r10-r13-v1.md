@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.12`
+- 版本：`v1.13`
 - 更新时间：`2026-03-08`
 - 关联主文档：`../01-global-analysis/guiagent-blueprint-fidelity-review-v1.md`
 
@@ -131,3 +131,4 @@
 9. 审查链增强：`flow_audit` 对低 `core_anchor_confidence/geometry_confidence` 的“伪成功步骤”输出 `WARN`。
 10. 执行分流增强：`v2_executor` 增加锚点门控（低主锚点阻断；低辅锚点触发微重试），并修复 `pipeline` 透传 `pre_assertion` 置信度以避免误拦截。
 11. D1 指标增强已推进：`runtime metrics/runtime_summary` 增加 `anchor_gate_*` 与 `anchor_micro_retry_*` 统计，用于量化主辅锚点策略收益。
+12. A3 已推进 v0：`v2_executor` 移动端链路接入 `MobileDeviceExecutor`（`auto|shadow|device`），有 ADB 时执行真实动作，无 ADB 自动回退 shadow。

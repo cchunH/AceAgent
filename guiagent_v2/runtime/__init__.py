@@ -48,6 +48,7 @@ from .action_registry import ActionRegistry
 from .context_compaction import ContextCompactor
 from .guard_policy import GuardPolicy
 from .loop_detector import LoopDetector
+from .mobile_device_executor import MobileDeviceExecutor
 from .policy_loader import PolicyLoader
 from .watchdog_policy import WatchdogPolicyLoader, normalize_watchdog_policy
 from .executor_state_machine import ProbeState, ProbeStateMachine, StateTransition
@@ -107,6 +108,7 @@ __all__ = [
     "ContextCompactor",
     "GuardPolicy",
     "LoopDetector",
+    "MobileDeviceExecutor",
     "PolicyLoader",
     "WatchdogPolicyLoader",
     "normalize_watchdog_policy",

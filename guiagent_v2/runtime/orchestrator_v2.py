@@ -515,6 +515,8 @@ def run_single_task_with_runtime(
     web_replan_max_attempts=1,
     confirm_wait_timeout=0.0,
     confirm_poll_interval=0.5,
+    mobile_execution_mode="auto",
+    mobile_wait_ms=1000,
 ):
     future_tasks = future_tasks or []
     runtime_config = _load_runtime_config()
@@ -592,6 +594,9 @@ def run_single_task_with_runtime(
             confirm_poll_interval=float(confirm_poll_interval),
             register_confirmation=register_pending_confirmation,
             wait_confirmation=wait_confirmation_decision,
+            mobile_execution_mode=str(mobile_execution_mode or "auto"),
+            adb_path=str(getattr(runtime_config.paths, "ADB_PATH", "adb")),
+            mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
         )
 
     should_delegate_legacy = not (runtime_mode == "guiagent_v2" and bool(v2_skip_legacy))

@@ -53,6 +53,19 @@ class _ConfirmGuardPolicy:
         }
 
 
+class _FailingMobileExecutor:
+    def execute_action(self, action, context=None):  # noqa: ANN001
+        del action, context
+        return {
+            "success": False,
+            "execution_mode": "device",
+            "device_executed": False,
+            "error": "DEVICE_EXEC_ERROR_UT",
+            "action_name": "Wait",
+            "latency_ms": 0,
+        }
+
+
 def _build_hooks():
     hooks = HookManager()
     hooks.register_pre_assertion_hook(semantic_pre_assertion_hook)
@@ -407,6 +420,30 @@ class TestV2Executor(unittest.TestCase):
         handovers = [e for e in events if e.get("event_type") == "handover"]
         self.assertTrue(handovers)
         self.assertEqual(handovers[-1].get("reason_code"), "CORE_ANCHOR_CONFIDENCE_LOW")
+
+    def test_run_probe_handover_when_mobile_device_exec_fails(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+
+        result = run_probe_step(
+            instruction="在手机里等待一下",
+            run_id="r-mobile-fail",
+            task_id="t-mobile-fail",
+            session_id="sess-mobile-fail",
+            step_id=5,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+            mobile_executor=_FailingMobileExecutor(),
+        )
+
+        self.assertEqual(result.status, "HANDOVER")
+        handovers = [e for e in events if e.get("event_type") == "handover"]
+        self.assertTrue(handovers)
+        self.assertEqual(handovers[-1].get("reason_code"), "DEVICE_EXEC_ERROR_UT")
 
 
 if __name__ == "__main__":

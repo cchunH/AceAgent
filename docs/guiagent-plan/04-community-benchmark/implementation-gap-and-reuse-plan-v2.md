@@ -187,6 +187,11 @@
 - 现状：已支持低主锚点阻断与低辅锚点微重试；并修复 `pre_assertion` 置信度透传，避免以 `post_check` 误判门控。
 - 距离评估：`完成（v0）`
 
+34. 移动端真实执行桥接（Mobile Device Bridge）
+- 证据模块：`guiagent_v2/runtime/mobile_device_executor.py`, `guiagent_v2/runtime/pipeline.py`, `guiagent_v2/runtime/v2_executor.py`, `run.py`
+- 现状：移动端分支支持 `auto|shadow|device` 执行模式；有 ADB 时执行真实动作，无 ADB 自动回退 shadow；入口新增 `--mobile_execution_mode/--mobile_wait_ms`。
+- 距离评估：`完成（v0）`
+
 ### 2.2 部分落地（需增强）
 
 1. `SessionRuntime`

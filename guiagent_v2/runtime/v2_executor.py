@@ -13,6 +13,7 @@ from .context_compaction import ContextCompactor
 from .guard_policy import GuardPolicy
 from .hooks import HookManager
 from .loop_detector import LoopDetector
+from .mobile_device_executor import MobileDeviceExecutor
 from .pipeline import StepPipeline
 from .executor_state_machine import ProbeState, ProbeStateMachine
 from .web_skill_router import WebSkillRouter
@@ -94,11 +95,11 @@ def build_default_action_registry(
 ) -> ActionRegistry:
     registry = ActionRegistry()
 
-    def mobile_native_shadow_handler(payload: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    def mobile_native_handler(payload: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
         del context
         legacy_action = payload.get("legacy_action")
         step_context = payload.get("step_context")
-        request, result = pipeline.run_shadow_step(legacy_action, context=step_context)
+        request, result, exec_detail = pipeline.run_step(legacy_action, context=step_context)
         return {
             "status": result.status,
             "request_id": request.get("request_id"),
@@ -107,6 +108,7 @@ def build_default_action_registry(
             "post_check": result.post_check,
             "recovery_level": result.recovery_level,
             "latency_ms": result.latency_ms,
+            "adapter_call": exec_detail,
         }
 
     def web_skill_agent_browser_handler(payload: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
@@ -143,12 +145,12 @@ def build_default_action_registry(
         }
 
     registry.register(
-        "mobile_native_shadow",
+        "mobile_native",
         schema={
             "required": ["legacy_action", "step_context"],
             "field_types": {"legacy_action": "dict", "step_context": "dict"},
         },
-        handler=mobile_native_shadow_handler,
+        handler=mobile_native_handler,
     )
     registry.register(
         "web_skill_agent_browser",
@@ -255,6 +257,10 @@ def run_probe_step(
     confirm_poll_interval: float = 0.5,
     register_confirmation: ConfirmationRegistrar | None = None,
     wait_confirmation: ConfirmationWaiter | None = None,
+    mobile_executor: MobileDeviceExecutor | None = None,
+    mobile_execution_mode: str = "auto",
+    adb_path: str = "adb",
+    mobile_wait_ms: int = 1000,
 ) -> V2ProbeResult:
     loop_detector = loop_detector or LoopDetector()
     context_compactor = context_compactor or ContextCompactor()
@@ -665,10 +671,15 @@ def run_probe_step(
                 route_reason=route_info.get("route_reason", "unknown"),
             )
 
-    pipeline = StepPipeline(hooks=hooks)
+    mobile_executor = mobile_executor or MobileDeviceExecutor(
+        adb_path=str(adb_path or "adb"),
+        execution_mode=str(mobile_execution_mode or "auto"),
+        default_wait_ms=int(max(0, mobile_wait_ms)),
+    )
+    pipeline = StepPipeline(hooks=hooks, mobile_executor=mobile_executor)
     registry = build_default_action_registry(pipeline=pipeline, web_skill=web_skill)
 
-    dispatch_name = "web_skill_agent_browser" if route_info.get("channel") == "web_skill" else "mobile_native_shadow"
+    dispatch_name = "web_skill_agent_browser" if route_info.get("channel") == "web_skill" else "mobile_native"
     final_route_info = dict(route_info)
     if route_info.get("channel") == "web_skill":
         _transition_state(
@@ -981,7 +992,7 @@ def run_probe_step(
                 }
             )
             fallback_result = registry.dispatch(
-                "mobile_native_shadow",
+                "mobile_native",
                 {
                     "legacy_action": fallback_action,
                     "step_context": step_context,
@@ -1085,7 +1096,7 @@ def run_probe_step(
                 )
                 try:
                     retry_result = registry.dispatch(
-                        "mobile_native_shadow",
+                        "mobile_native",
                         {
                             "legacy_action": action_obj,
                             "step_context": step_context,
