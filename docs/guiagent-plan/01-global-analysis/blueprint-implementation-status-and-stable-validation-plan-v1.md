@@ -168,6 +168,7 @@
 - 已补完整截图留痕：`v2` 移动动作截图、live pre/post 快照事件（`snapshot_captured`）与 `runtime_summary.screenshot_trace` 统计。
 - 已新增回放门禁回灌：`upsert_blueprint_from_observation_with_gate`，并将 `replay_gate_passed/reason`、`blueprint_sync_mode`、`metadata_only` 路径落入事件与 summary 指标。
 - 已支持策略化回放门禁配置：`guard_policy.replay_gate`（`enabled/min_score/min_stable_ratio/min_skeleton_nodes`）。
+- 已将回放门禁接入稳定验证门禁：`validation_gate` 新增 `replay_gate_block_rate` 与 `blueprint_sync_failed_rate` 阈值检查，阈值模板已同步到 `stable-validation-thresholds-v1.json`。
 
 3. 完成 S1 后立即打第一个 checkpoint tag，作为“可运行实测起点”。
 
