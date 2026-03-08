@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.4`
+- 版本：`v1.6`
 - 更新时间：`2026-03-08`
 - 适用范围：`guiagent_v2/runtime/session_runtime_server.py`
 
@@ -123,6 +123,24 @@
   - `next_cursor`: 下一页偏移（无更多数据时为 `null`）。
   - `has_more`: 是否存在下一页。
   - `total`: 过滤后总事件数。
+
+5. `GET /runtime/metrics?run_id=&task_id=&session_id=&since_ts=&until_ts=`
+- 说明：查询运行时聚合指标（来自内存事件视图）。
+- 响应示例字段：
+  - `task_success_rate/step_latency_p50_ms/step_latency_p95_ms`
+  - `web_plan_count/web_replan_count/web_replan_recovery_rate/web_fallback_rate/web_step_success_rate`
+  - `scope`（本次查询过滤条件与事件总数）
+
+6. `GET /runtime/metrics/timeseries?run_id=&task_id=&session_id=&since_ts=&until_ts=&bucket_sec=&max_buckets=`
+- 说明：查询运行时时序指标（按时间桶聚合，来自内存事件视图）。
+- 参数说明：
+  - `bucket_sec`：时间桶大小（秒），默认 `60`，最大 `3600`。
+  - `max_buckets`：最多返回桶数量，默认 `240`，最大 `1440`。
+- 响应示例字段：
+  - `bucket_sec/max_buckets`
+  - `series`（每个桶包含 `bucket_start/bucket_end/event_count/metrics`）
+  - `meta`（源事件统计，如 `source_event_count/events_without_ts`）
+  - `scope`（本次查询过滤条件与事件总数）
 
 ## 4. 错误码
 

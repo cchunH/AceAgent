@@ -153,6 +153,123 @@ class TestSessionRuntimeServer(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(len(body["data"]["timeline"]), 2)
 
+    def test_runtime_metrics_endpoint(self):
+        store = get_global_status_store()
+        run_id = "run-metrics-http"
+        task_id = "task-metrics-http"
+        session_id = "sess-metrics-http"
+        store.update(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "session_id": session_id,
+                "event_type": "web_plan",
+                "status": "SUCCESS",
+                "intent_key": "web:OPEN:URL",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "ts": "2026-03-08T12:00:00Z",
+            }
+        )
+        store.update(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "session_id": session_id,
+                "event_type": "web_replan",
+                "status": "RUNNING",
+                "intent_key": "web:OPEN:URL",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "ts": "2026-03-08T12:00:01Z",
+            }
+        )
+        store.update(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "session_id": session_id,
+                "event_type": "web_step_end",
+                "status": "SUCCESS",
+                "intent_key": "web:OPEN:URL",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "latency_ms": 120,
+                "ts": "2026-03-08T12:00:02Z",
+            }
+        )
+        store.update(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "session_id": session_id,
+                "event_type": "task_end",
+                "status": "SUCCESS",
+                "intent_key": "global:TASK:END",
+                "step_id": 999999,
+                "chain_mode": "guiagent_v2",
+                "ts": "2026-03-08T12:00:03Z",
+            }
+        )
+
+        code, body = _http_json(
+            self.base_url,
+            "GET",
+            f"/runtime/metrics?run_id={run_id}&task_id={task_id}",
+        )
+        self.assertEqual(code, 200)
+        metrics = body["data"]
+        self.assertEqual(metrics["web_plan_count"], 1)
+        self.assertEqual(metrics["web_replan_count"], 1)
+        self.assertAlmostEqual(metrics["web_step_success_rate"], 1.0)
+        self.assertEqual(metrics["scope"]["run_id"], run_id)
+
+    def test_runtime_metrics_timeseries_endpoint(self):
+        store = get_global_status_store()
+        run_id = "run-metrics-ts-http"
+        task_id = "task-metrics-ts-http"
+        session_id = "sess-metrics-ts-http"
+        store.update(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "session_id": session_id,
+                "event_type": "task_end",
+                "status": "SUCCESS",
+                "intent_key": "global:TASK:END",
+                "step_id": 999999,
+                "chain_mode": "guiagent_v2",
+                "ts": "2026-03-08T12:20:00Z",
+            }
+        )
+        store.update(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "session_id": session_id,
+                "event_type": "task_end",
+                "status": "FAILED",
+                "intent_key": "global:TASK:END",
+                "step_id": 999999,
+                "chain_mode": "guiagent_v2",
+                "ts": "2026-03-08T12:21:05Z",
+            }
+        )
+
+        code, body = _http_json(
+            self.base_url,
+            "GET",
+            (
+                "/runtime/metrics/timeseries"
+                f"?run_id={run_id}&session_id={session_id}&bucket_sec=60&max_buckets=10"
+            ),
+        )
+        self.assertEqual(code, 200)
+        payload = body["data"]
+        self.assertEqual(payload["scope"]["run_id"], run_id)
+        self.assertEqual(payload["scope"]["session_id"], session_id)
+        self.assertGreaterEqual(len(payload["series"]), 2)
+
     def test_control_plane_audit_updates_timeline_without_audit_file(self):
         code, submit_body = _http_json(
             self.base_url,

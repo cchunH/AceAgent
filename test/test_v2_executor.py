@@ -145,6 +145,8 @@ class TestV2Executor(unittest.TestCase):
         self.assertIn("web_replan_skipped", event_types)
         self.assertNotIn("web_replan", event_types)
         self.assertEqual(len(web_skill.calls), 2)
+        skipped_events = [item for item in events if item.get("event_type") == "web_replan_skipped"]
+        self.assertEqual(skipped_events[-1].get("web_replan_strategy"), "backend_unavailable")
         fallback_events = [item for item in events if item.get("event_type") == "fallback_action_selected"]
         self.assertEqual(fallback_events[-1].get("fallback_action", {}).get("name"), "Back")
 

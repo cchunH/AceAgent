@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.15`
+- 版本：`v1.17`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -47,6 +47,10 @@
 33. `web_skill` 失败后的移动端回退从固定 `Wait` 升级为“上下文感知 fallback action”并产出 `fallback_action_selected` 事件。
 34. `run.py` 新增 `--web_max_steps/--web_replan_max_attempts`；`v2_executor` 已支持按错误码分流重规划策略与多次重规划（可配置）。
 35. `runtime metrics` 已补齐 web 执行链指标：`web_plan_count/web_replan_count/web_replan_recovery_rate/web_fallback_rate/web_step_success_rate`。
+36. 新增 `WebReplanPolicy`（任务内反馈回灌）：根据失败/恢复历史动态调整同类错误的重规划预算，并输出策略决策事件。
+37. `SessionRuntimeServer` 新增 `GET /runtime/metrics`，控制面可直接查询运行聚合指标（支持 `run_id/task_id/session_id/time-range` 过滤）。
+38. `SessionRuntimeServer` 新增 `GET /runtime/metrics/timeseries`，支持按时间桶查询跨 run/session 的时序指标（`bucket_sec/max_buckets`）。
+39. `GuardPolicy` 新增 web 域名门禁（`web_domain_allowlist/web_domain_denylist`），web_skill 执行前可按域名做 allow/deny/confirm 决策。
 
 尚未落地：
 1. `watchdog` 深化生产化（下载/安全扩展插件、聚合统计导出）。
@@ -197,6 +201,8 @@ class AgentBrowserSkill:
 - `web_replan`
 - `web_replan_skipped`
 - `fallback_action_selected`
+- `web_replan_policy_decision`
+- `web_replan_policy_update`
 - `control_plane_audit`
 
 建议新增关键字段：

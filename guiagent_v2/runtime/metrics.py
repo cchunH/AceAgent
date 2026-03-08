@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 from statistics import median
 from typing import Any
 
@@ -18,15 +19,64 @@ def _task_key(event: dict[str, Any]) -> tuple[str, str]:
     return str(event.get("run_id", "")), str(event.get("task_id", ""))
 
 
-def compute_metrics_from_jsonl(jsonl_path: str) -> dict[str, Any]:
-    events: list[dict[str, Any]] = []
-    with open(jsonl_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            events.append(json.loads(line))
+def _parse_ts(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        except Exception:
+            return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
+
+def _to_utc_z(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _normalize_bucket_sec(bucket_sec: int | None) -> int:
+    if bucket_sec is None:
+        return 60
+    try:
+        value = int(bucket_sec)
+    except Exception:
+        return 60
+    if value <= 0:
+        return 60
+    return min(value, 3600)
+
+
+def _normalize_max_buckets(max_buckets: int | None) -> int:
+    if max_buckets is None:
+        return 240
+    try:
+        value = int(max_buckets)
+    except Exception:
+        return 240
+    if value <= 0:
+        return 1
+    return min(value, 1440)
+
+
+def _bucket_start(dt: datetime, bucket_sec: int) -> datetime:
+    ts = int(dt.timestamp())
+    floored = ts - (ts % bucket_sec)
+    return datetime.fromtimestamp(floored, tz=timezone.utc)
+
+
+def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
+    events = [dict(item) for item in list(events or []) if isinstance(item, dict)]
     task_end_events = [e for e in events if e.get("event_type") == "task_end"]
     step_end_events = [e for e in events if e.get("event_type") == "step_end"]
     handover_events = [e for e in events if e.get("event_type") == "handover"]
@@ -95,3 +145,63 @@ def compute_metrics_from_jsonl(jsonl_path: str) -> dict[str, Any]:
             "fallback_action_selected": len(fallback_action_events),
         },
     }
+
+
+def compute_timeseries_from_events(
+    events: list[dict[str, Any]],
+    *,
+    bucket_sec: int | None = None,
+    max_buckets: int | None = None,
+) -> dict[str, Any]:
+    normalized_bucket_sec = _normalize_bucket_sec(bucket_sec)
+    normalized_max_buckets = _normalize_max_buckets(max_buckets)
+    rows = [dict(item) for item in list(events or []) if isinstance(item, dict)]
+
+    buckets: dict[datetime, list[dict[str, Any]]] = {}
+    no_ts_events: list[dict[str, Any]] = []
+    for event in rows:
+        event_dt = _parse_ts(event.get("ts"))
+        if event_dt is None:
+            no_ts_events.append(event)
+            continue
+        start_dt = _bucket_start(event_dt, normalized_bucket_sec)
+        buckets.setdefault(start_dt, []).append(event)
+
+    ordered_starts = sorted(buckets.keys())
+    if len(ordered_starts) > normalized_max_buckets:
+        ordered_starts = ordered_starts[-normalized_max_buckets:]
+
+    series: list[dict[str, Any]] = []
+    for start_dt in ordered_starts:
+        end_dt = start_dt + timedelta(seconds=normalized_bucket_sec)
+        bucket_events = buckets.get(start_dt, [])
+        series.append(
+            {
+                "bucket_start": _to_utc_z(start_dt),
+                "bucket_end": _to_utc_z(end_dt),
+                "event_count": len(bucket_events),
+                "metrics": compute_metrics_from_events(bucket_events),
+            }
+        )
+
+    return {
+        "bucket_sec": normalized_bucket_sec,
+        "max_buckets": normalized_max_buckets,
+        "series": series,
+        "meta": {
+            "source_event_count": len(rows),
+            "bucketed_event_count": sum(item["event_count"] for item in series),
+            "events_without_ts": len(no_ts_events),
+        },
+    }
+
+
+def compute_metrics_from_jsonl(jsonl_path: str) -> dict[str, Any]:
+    events: list[dict[str, Any]] = []
+    with open(jsonl_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            events.append(json.loads(line))
+    return compute_metrics_from_events(events)

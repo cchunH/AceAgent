@@ -84,6 +84,53 @@ class TestGuardPolicy(unittest.TestCase):
             self.assertEqual(deny["reason"], "INTENT_PREFIX_DENIED")
             self.assertEqual(deny["policy_version"], "v2")
 
+    def test_policy_file_web_domain_allowlist_blocks_unknown_domain(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "version": "v-domain",
+                    "web_domain_allowlist": ["example.com", "*.trusted.site"],
+                },
+                f,
+                ensure_ascii=False,
+            )
+            f.flush()
+            policy = GuardPolicy.from_policy_file(f.name, reload_interval_sec=0.0)
+            denied = policy.decide(
+                "web:OPEN:URL",
+                {"name": "web_open", "arguments": {"url": "https://evil.site/page"}},
+                {"channel": "web_skill", "web_task": {"url": "https://evil.site/page"}},
+            )
+            self.assertEqual(denied["decision"], "deny")
+            self.assertEqual(denied["reason"], "WEB_DOMAIN_NOT_ALLOWED")
+
+            allowed = policy.decide(
+                "web:OPEN:URL",
+                {"name": "web_open", "arguments": {"url": "https://sub.trusted.site/path"}},
+                {"channel": "web_skill", "web_task": {"url": "https://sub.trusted.site/path"}},
+            )
+            self.assertEqual(allowed["decision"], "allow")
+
+    def test_policy_file_web_domain_denylist_blocks_matched_domain(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "version": "v-domain-deny",
+                    "web_domain_denylist": ["*.blocked.site"],
+                },
+                f,
+                ensure_ascii=False,
+            )
+            f.flush()
+            policy = GuardPolicy.from_policy_file(f.name, reload_interval_sec=0.0)
+            denied = policy.decide(
+                "web:OPEN:URL",
+                {"name": "web_open", "arguments": {"url": "https://foo.blocked.site/home"}},
+                {"channel": "web_skill", "web_task": {"url": "https://foo.blocked.site/home"}},
+            )
+            self.assertEqual(denied["decision"], "deny")
+            self.assertEqual(denied["reason"], "WEB_DOMAIN_DENIED")
+
 
 if __name__ == "__main__":
     unittest.main()

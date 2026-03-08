@@ -10,6 +10,8 @@ from threading import Lock
 from typing import Any
 
 from .status_api import (
+    compute_runtime_metrics as compute_runtime_metrics_api,
+    compute_runtime_metrics_timeseries as compute_runtime_metrics_timeseries_api,
     get_task_status,
     get_task_timeline,
     list_events as list_runtime_events_api,
@@ -468,6 +470,42 @@ class SessionRuntime:
             cursor=cursor,
             since_ts=since_ts,
             until_ts=until_ts,
+        )
+
+    def query_runtime_metrics(
+        self,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        session_id: str | None = None,
+        since_ts: str | None = None,
+        until_ts: str | None = None,
+    ) -> dict[str, Any]:
+        return compute_runtime_metrics_api(
+            run_id=run_id,
+            task_id=task_id,
+            session_id=session_id,
+            since_ts=since_ts,
+            until_ts=until_ts,
+        )
+
+    def query_runtime_metrics_timeseries(
+        self,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        session_id: str | None = None,
+        since_ts: str | None = None,
+        until_ts: str | None = None,
+        bucket_sec: int | None = None,
+        max_buckets: int | None = None,
+    ) -> dict[str, Any]:
+        return compute_runtime_metrics_timeseries_api(
+            run_id=run_id,
+            task_id=task_id,
+            session_id=session_id,
+            since_ts=since_ts,
+            until_ts=until_ts,
+            bucket_sec=bucket_sec,
+            max_buckets=max_buckets,
         )
 
     def shutdown_session(self, session_id: str, wait: bool = True) -> bool:

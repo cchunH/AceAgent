@@ -3,7 +3,11 @@ import os
 import tempfile
 import unittest
 
-from guiagent_v2.runtime.metrics import compute_metrics_from_jsonl
+from guiagent_v2.runtime.metrics import (
+    compute_metrics_from_events,
+    compute_metrics_from_jsonl,
+    compute_timeseries_from_events,
+)
 from guiagent_v2.runtime.orchestrator_v2 import (
     _build_hook_manager,
     _emit_events_from_legacy_steps,
@@ -237,6 +241,65 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
             self.assertEqual(metrics["web_replan_count"], 1)
             self.assertEqual(metrics["fallback_action_selected_count"], 1)
             self.assertAlmostEqual(metrics["web_step_success_rate"], 1.0)
+
+    def test_compute_metrics_from_events(self):
+        rows = [
+            {
+                "run_id": "r2",
+                "task_id": "t2",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "web_plan",
+                "status": "SUCCESS",
+                "intent_key": "web:OPEN:URL",
+            },
+            {
+                "run_id": "r2",
+                "task_id": "t2",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "task_end",
+                "status": "FAILED",
+                "intent_key": "global:TASK:END",
+            },
+        ]
+        metrics = compute_metrics_from_events(rows)
+        self.assertEqual(metrics["web_plan_count"], 1)
+        self.assertAlmostEqual(metrics["task_success_rate"], 0.0)
+
+    def test_compute_timeseries_from_events(self):
+        rows = [
+            {
+                "run_id": "r3",
+                "task_id": "t3",
+                "event_type": "web_plan",
+                "status": "SUCCESS",
+                "intent_key": "web:OPEN:URL",
+                "ts": "2026-03-08T12:00:01Z",
+            },
+            {
+                "run_id": "r3",
+                "task_id": "t3",
+                "event_type": "task_end",
+                "status": "SUCCESS",
+                "intent_key": "global:TASK:END",
+                "ts": "2026-03-08T12:00:35Z",
+            },
+            {
+                "run_id": "r3",
+                "task_id": "t4",
+                "event_type": "task_end",
+                "status": "FAILED",
+                "intent_key": "global:TASK:END",
+                "ts": "2026-03-08T12:01:05Z",
+            },
+        ]
+        payload = compute_timeseries_from_events(rows, bucket_sec=60, max_buckets=10)
+        self.assertEqual(payload["bucket_sec"], 60)
+        self.assertEqual(len(payload["series"]), 2)
+        self.assertEqual(payload["series"][0]["event_count"], 2)
+        self.assertEqual(payload["series"][1]["event_count"], 1)
+        self.assertAlmostEqual(payload["series"][0]["metrics"]["task_success_rate"], 1.0)
 
 
 if __name__ == "__main__":

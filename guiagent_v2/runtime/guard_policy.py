@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 from .policy_loader import PolicyLoader
 from .web_skill_router import SYSTEM_MOBILE_ACTIONS
@@ -15,6 +16,60 @@ HIGH_RISK_TOKENS = {
     "SEND",
     "SUBMIT",
 }
+
+
+def _extract_candidate_url(action: dict[str, Any], context: dict[str, Any]) -> str | None:
+    candidates: list[str] = []
+    for key in ("target_url", "url"):
+        value = context.get(key)
+        if isinstance(value, str) and value.strip():
+            candidates.append(value.strip())
+    web_task = context.get("web_task")
+    if isinstance(web_task, dict):
+        value = web_task.get("url")
+        if isinstance(value, str) and value.strip():
+            candidates.append(value.strip())
+    action_args = action.get("arguments")
+    if isinstance(action_args, dict):
+        for key in ("url", "target_url", "href"):
+            value = action_args.get(key)
+            if isinstance(value, str) and value.strip():
+                candidates.append(value.strip())
+    for candidate in candidates:
+        if candidate:
+            return candidate
+    return None
+
+
+def _extract_domain(url: str | None) -> str | None:
+    raw = str(url or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = urlparse(raw)
+    except Exception:
+        return None
+    hostname = parsed.hostname
+    if not hostname:
+        return None
+    return hostname.lower()
+
+
+def _domain_match(domain: str, rule: str) -> bool:
+    normalized_domain = domain.strip().lower()
+    normalized_rule = rule.strip().lower()
+    if not normalized_domain or not normalized_rule:
+        return False
+    if normalized_rule.startswith("*."):
+        suffix = normalized_rule[2:]
+        if not suffix:
+            return False
+        return normalized_domain == suffix or normalized_domain.endswith("." + suffix)
+    return normalized_domain == normalized_rule
+
+
+def _match_any_domain_rule(domain: str, rules: list[str]) -> bool:
+    return any(_domain_match(domain, rule) for rule in rules)
 
 
 @dataclass
@@ -131,6 +186,47 @@ class GuardPolicy:
                 "policy_source": source,
                 "policy_version": policy.get("version", "v1"),
             }
+
+        if channel == "web_skill":
+            domain = _extract_domain(_extract_candidate_url(action, context))
+            denylist = [
+                str(item).strip().lower()
+                for item in policy.get("web_domain_denylist", [])
+                if str(item).strip()
+            ]
+            if domain and denylist and _match_any_domain_rule(domain, denylist):
+                return {
+                    "decision": "deny",
+                    "reason": "WEB_DOMAIN_DENIED",
+                    "category": "policy_rules",
+                    "policy_source": source,
+                    "policy_version": policy.get("version", "v1"),
+                    "policy_domain": domain,
+                }
+
+            allowlist = [
+                str(item).strip().lower()
+                for item in policy.get("web_domain_allowlist", [])
+                if str(item).strip()
+            ]
+            if allowlist:
+                if not domain:
+                    return {
+                        "decision": "confirm",
+                        "reason": "WEB_DOMAIN_UNKNOWN_NEEDS_CONFIRM",
+                        "category": "policy_rules",
+                        "policy_source": source,
+                        "policy_version": policy.get("version", "v1"),
+                    }
+                if not _match_any_domain_rule(domain, allowlist):
+                    return {
+                        "decision": "deny",
+                        "reason": "WEB_DOMAIN_NOT_ALLOWED",
+                        "category": "policy_rules",
+                        "policy_source": source,
+                        "policy_version": policy.get("version", "v1"),
+                        "policy_domain": domain,
+                    }
 
         confirm_prefixes = [
             str(prefix).upper()

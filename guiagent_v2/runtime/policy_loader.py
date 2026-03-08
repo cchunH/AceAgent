@@ -14,6 +14,8 @@ DEFAULT_GUARD_POLICY: dict[str, Any] = {
     "confirm_intent_prefixes": [],
     "deny_actions_by_channel": {},
     "allow_actions_by_channel": {},
+    "web_domain_allowlist": [],
+    "web_domain_denylist": [],
     "blocked_mobile_actions_on_web_skill": True,
 }
 
@@ -41,6 +43,16 @@ def _normalize_channel_actions(value: Any) -> dict[str, list[str]]:
     return normalized
 
 
+def _normalize_domain_rules(value: Any) -> list[str]:
+    rules = _normalize_str_list(value)
+    normalized: list[str] = []
+    for item in rules:
+        text = item.strip().lower()
+        if text:
+            normalized.append(text)
+    return normalized
+
+
 def normalize_guard_policy(raw: dict[str, Any] | None) -> dict[str, Any]:
     policy = deepcopy(DEFAULT_GUARD_POLICY)
     if not isinstance(raw, dict):
@@ -54,6 +66,8 @@ def normalize_guard_policy(raw: dict[str, Any] | None) -> dict[str, Any]:
     policy["confirm_intent_prefixes"] = _normalize_str_list(raw.get("confirm_intent_prefixes"))
     policy["deny_actions_by_channel"] = _normalize_channel_actions(raw.get("deny_actions_by_channel"))
     policy["allow_actions_by_channel"] = _normalize_channel_actions(raw.get("allow_actions_by_channel"))
+    policy["web_domain_allowlist"] = _normalize_domain_rules(raw.get("web_domain_allowlist"))
+    policy["web_domain_denylist"] = _normalize_domain_rules(raw.get("web_domain_denylist"))
     policy["blocked_mobile_actions_on_web_skill"] = bool(
         raw.get("blocked_mobile_actions_on_web_skill", policy["blocked_mobile_actions_on_web_skill"])
     )

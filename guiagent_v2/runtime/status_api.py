@@ -304,6 +304,72 @@ class TaskStatusStore:
                 "total": total,
             }
 
+    def compute_metrics(
+        self,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        session_id: str | None = None,
+        since_ts: str | None = None,
+        until_ts: str | None = None,
+    ) -> dict[str, Any]:
+        from .metrics import compute_metrics_from_events
+
+        page = self.query_events(
+            run_id=run_id,
+            task_id=task_id,
+            session_id=session_id,
+            limit=None,
+            since_ts=since_ts,
+            until_ts=until_ts,
+        )
+        events = page["events"]
+        metrics = compute_metrics_from_events(events)
+        metrics["scope"] = {
+            "run_id": str(run_id).strip() if run_id is not None else None,
+            "task_id": str(task_id).strip() if task_id is not None else None,
+            "session_id": str(session_id).strip() if session_id is not None else None,
+            "since_ts": str(since_ts).strip() if since_ts is not None else None,
+            "until_ts": str(until_ts).strip() if until_ts is not None else None,
+            "event_count": int(page.get("total", len(events))),
+        }
+        return metrics
+
+    def compute_metrics_timeseries(
+        self,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        session_id: str | None = None,
+        since_ts: str | None = None,
+        until_ts: str | None = None,
+        bucket_sec: int | None = None,
+        max_buckets: int | None = None,
+    ) -> dict[str, Any]:
+        from .metrics import compute_timeseries_from_events
+
+        page = self.query_events(
+            run_id=run_id,
+            task_id=task_id,
+            session_id=session_id,
+            limit=None,
+            since_ts=since_ts,
+            until_ts=until_ts,
+        )
+        events = page["events"]
+        payload = compute_timeseries_from_events(
+            events,
+            bucket_sec=bucket_sec,
+            max_buckets=max_buckets,
+        )
+        payload["scope"] = {
+            "run_id": str(run_id).strip() if run_id is not None else None,
+            "task_id": str(task_id).strip() if task_id is not None else None,
+            "session_id": str(session_id).strip() if session_id is not None else None,
+            "since_ts": str(since_ts).strip() if since_ts is not None else None,
+            "until_ts": str(until_ts).strip() if until_ts is not None else None,
+            "event_count": int(page.get("total", len(events))),
+        }
+        return payload
+
 
 _GLOBAL_STATUS_STORE = TaskStatusStore()
 
@@ -393,4 +459,40 @@ def query_events(
         cursor=cursor,
         since_ts=since_ts,
         until_ts=until_ts,
+    )
+
+
+def compute_runtime_metrics(
+    run_id: str | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
+    since_ts: str | None = None,
+    until_ts: str | None = None,
+) -> dict[str, Any]:
+    return _GLOBAL_STATUS_STORE.compute_metrics(
+        run_id=run_id,
+        task_id=task_id,
+        session_id=session_id,
+        since_ts=since_ts,
+        until_ts=until_ts,
+    )
+
+
+def compute_runtime_metrics_timeseries(
+    run_id: str | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
+    since_ts: str | None = None,
+    until_ts: str | None = None,
+    bucket_sec: int | None = None,
+    max_buckets: int | None = None,
+) -> dict[str, Any]:
+    return _GLOBAL_STATUS_STORE.compute_metrics_timeseries(
+        run_id=run_id,
+        task_id=task_id,
+        session_id=session_id,
+        since_ts=since_ts,
+        until_ts=until_ts,
+        bucket_sec=bucket_sec,
+        max_buckets=max_buckets,
     )

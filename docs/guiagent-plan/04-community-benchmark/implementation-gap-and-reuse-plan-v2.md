@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.13`
+- 版本：`v2.15`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -131,13 +131,13 @@
 
 2.1 运行指标
 - 证据模块：`guiagent_v2/runtime/metrics.py`
-- 现状：已新增 web 执行链指标（`web_plan_count/web_replan_count/web_replan_recovery_rate/web_fallback_rate/web_step_success_rate`），可用于比较重规划与回退收益。
+- 现状：已新增 web 执行链指标（`web_plan_count/web_replan_count/web_replan_recovery_rate/web_fallback_rate/web_step_success_rate`），并通过 `SessionRuntimeServer /runtime/metrics` 与 `/runtime/metrics/timeseries` 对外查询。
 - 距离评估：`部分完成`
-- 关键差距：尚缺跨 run/session 的时序聚合视图与控制面展示接口。
+- 关键差距：时序聚合查询已具备，尚缺真实前端展示层与长期归档聚合。
 
 3. Web 子任务闭环
 - 证据模块：`v2_executor.py`, `agent_browser_skill.py`
-- 现状：可走 `initial web plan + 错误码分流的局部 replan + 上下文感知 fallback`，支持 `web_replan_max_attempts` 配置，并输出步骤级追踪字段（`web_plan_id/web_trace_id`）。
+- 现状：可走 `initial web plan + 错误码分流的局部 replan + 上下文感知 fallback`，支持 `web_replan_max_attempts` 配置；新增 `WebReplanPolicy` 做任务内反馈回灌，动态调整同类错误重规划预算，并输出策略事件。
 - 距离评估：`部分完成`
 - 关键差距：复杂网页任务规划能力仍偏启发式；缺少步骤级学习反馈与跨任务经验回灌。
 
@@ -149,7 +149,7 @@
 
 2. Domain Filter 与高级 Action Policy 治理
 - 目标来源：`agent-browser`
-- 差距：已具备基础文件化策略，但未实现域名级策略联动与动态策略分层（环境/任务级）。
+- 差距：已具备基础文件化策略与域名门禁（`web_domain_allowlist/web_domain_denylist`），仍缺动态策略分层（环境/任务级）与在线策略灰度。
 
 ## 3. 复用优先级重排（基于已实现状态）
 

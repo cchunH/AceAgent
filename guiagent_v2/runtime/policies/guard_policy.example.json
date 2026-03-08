@@ -9,5 +9,7 @@
   "allow_actions_by_channel": {
     "web_skill": ["web_open", "web_snapshot"]
   },
+  "web_domain_allowlist": ["example.com", "*.trusted.site"],
+  "web_domain_denylist": ["*.blocked.site"],
   "blocked_mobile_actions_on_web_skill": true
 }

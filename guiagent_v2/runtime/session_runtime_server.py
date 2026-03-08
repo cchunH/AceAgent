@@ -581,6 +581,32 @@ class SessionRuntimeAPIServer:
                     )
                     return
 
+                if path == "/runtime/metrics":
+                    self._ok(
+                        runtime.query_runtime_metrics(
+                            run_id=_first_query(params, "run_id"),
+                            task_id=_first_query(params, "task_id"),
+                            session_id=_first_query(params, "session_id"),
+                            since_ts=_first_query(params, "since_ts"),
+                            until_ts=_first_query(params, "until_ts"),
+                        )
+                    )
+                    return
+
+                if path == "/runtime/metrics/timeseries":
+                    self._ok(
+                        runtime.query_runtime_metrics_timeseries(
+                            run_id=_first_query(params, "run_id"),
+                            task_id=_first_query(params, "task_id"),
+                            session_id=_first_query(params, "session_id"),
+                            since_ts=_first_query(params, "since_ts"),
+                            until_ts=_first_query(params, "until_ts"),
+                            bucket_sec=_as_int(_first_query(params, "bucket_sec"), default=None),
+                            max_buckets=_as_int(_first_query(params, "max_buckets"), default=None),
+                        )
+                    )
+                    return
+
                 if path.startswith("/runtime/status/"):
                     tail = path[len("/runtime/status/") :]
                     if "/" not in tail:

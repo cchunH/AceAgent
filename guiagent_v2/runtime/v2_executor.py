@@ -16,6 +16,7 @@ from .loop_detector import LoopDetector
 from .pipeline import StepPipeline
 from .web_skill_router import WebSkillRouter
 from .web_planner import WebPlanStep, build_initial_web_plan, build_replan_after_failure
+from .web_replan_policy import WebReplanPolicy
 
 
 EventEmitter = Callable[[dict[str, Any]], None]
@@ -405,6 +406,8 @@ def run_probe_step(
         executed_steps = 0
         replan_attempt = 0
         max_replan_attempts = max(0, int(web_replan_max_attempts))
+        replan_policy = WebReplanPolicy(base_max_attempts=max_replan_attempts)
+        pending_recovery_reasons: list[str] = []
         pending_steps: list[WebPlanStep] = list(web_plan)
 
         while pending_steps and executed_steps < int(web_max_steps):
@@ -503,12 +506,53 @@ def run_probe_step(
             )
 
             if adapter_success:
+                if pending_recovery_reasons:
+                    for reason in pending_recovery_reasons:
+                        replan_policy.record_recovery(reason)
+                        policy_decision = replan_policy.decide(reason, attempted=replan_attempt)
+                        _emit(
+                            {
+                                "run_id": run_id,
+                                "task_id": task_id,
+                                "step_id": step_id,
+                                "chain_mode": chain_mode,
+                                "event_type": "web_replan_policy_update",
+                                "status": "SUCCESS",
+                                "intent_key": request.intent_key,
+                                "web_plan_id": web_plan_id,
+                                "replan_reason_key": policy_decision.reason_key,
+                                "replan_policy_note": "record_recovery",
+                                "replan_allowed_attempts": policy_decision.allowed_attempts,
+                                "replan_attempted": policy_decision.attempted,
+                                **route_info,
+                            }
+                        )
+                    pending_recovery_reasons.clear()
                 continue
 
             failed_reason = _normalize_adapter_error(step_result)
             failed_on_web_step = executed_steps
             remaining_steps = int(web_max_steps) - executed_steps
-            if replan_attempt < max_replan_attempts and remaining_steps > 0:
+            policy_decision = replan_policy.decide(failed_reason, attempted=replan_attempt)
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "web_replan_policy_decision",
+                    "status": "SUCCESS" if policy_decision.allow else "HANDOVER",
+                    "intent_key": request.intent_key,
+                    "web_plan_id": web_plan_id,
+                    "replan_reason_key": policy_decision.reason_key,
+                    "replan_allowed_attempts": policy_decision.allowed_attempts,
+                    "replan_attempted": policy_decision.attempted,
+                    "replan_policy_note": policy_decision.policy_note,
+                    "failed_reason": failed_reason,
+                    **route_info,
+                }
+            )
+            if policy_decision.allow and remaining_steps > 0:
                 replan_attempt += 1
                 replan_strategy, replanned_steps = build_replan_after_failure(
                     failed_step=plan_step,
@@ -519,6 +563,7 @@ def run_probe_step(
                 )
                 if replanned_steps:
                     pending_steps = list(replanned_steps) + pending_steps
+                    pending_recovery_reasons.append(failed_reason)
                     _emit(
                         {
                             "run_id": run_id,
@@ -538,6 +583,7 @@ def run_probe_step(
                         }
                     )
                     continue
+                replan_policy.record_failure(failed_reason)
                 _emit(
                     {
                         "run_id": run_id,
@@ -552,6 +598,33 @@ def run_probe_step(
                         "failed_on_web_step": failed_on_web_step,
                         "failed_reason": failed_reason,
                         "web_replan_strategy": replan_strategy,
+                        "replan_reason_key": policy_decision.reason_key,
+                        "replan_allowed_attempts": policy_decision.allowed_attempts,
+                        **route_info,
+                    }
+                )
+            else:
+                replan_policy.record_failure(failed_reason)
+                _emit(
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": step_id,
+                        "chain_mode": chain_mode,
+                        "event_type": "web_replan_skipped",
+                        "status": "HANDOVER",
+                        "intent_key": request.intent_key,
+                        "web_plan_id": web_plan_id,
+                        "web_replan_attempt": replan_attempt,
+                        "failed_on_web_step": failed_on_web_step,
+                        "failed_reason": failed_reason,
+                        "web_replan_strategy": (
+                            "backend_unavailable"
+                            if policy_decision.reason_key == "backend_unavailable"
+                            else "policy_budget_exhausted"
+                        ),
+                        "replan_reason_key": policy_decision.reason_key,
+                        "replan_allowed_attempts": policy_decision.allowed_attempts,
                         **route_info,
                     }
                 )

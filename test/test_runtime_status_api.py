@@ -115,6 +115,78 @@ class TestRuntimeStatusApi(unittest.TestCase):
         self.assertEqual(status["event_count"], 3)
         self.assertEqual(status["timeline_dropped"], 1)
 
+    def test_compute_metrics_from_store_scope(self):
+        store = TaskStatusStore()
+        store.update(
+            {
+                "run_id": "run-m1",
+                "task_id": "task-m1",
+                "session_id": "sess-m1",
+                "event_type": "web_plan",
+                "status": "SUCCESS",
+                "intent_key": "web:OPEN:URL",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "ts": "2026-03-08T12:01:00Z",
+            }
+        )
+        store.update(
+            {
+                "run_id": "run-m1",
+                "task_id": "task-m1",
+                "session_id": "sess-m1",
+                "event_type": "task_end",
+                "status": "SUCCESS",
+                "intent_key": "global:TASK:END",
+                "step_id": 999999,
+                "chain_mode": "guiagent_v2",
+                "ts": "2026-03-08T12:01:01Z",
+            }
+        )
+        metrics = store.compute_metrics(run_id="run-m1", task_id="task-m1")
+        self.assertEqual(metrics["web_plan_count"], 1)
+        self.assertAlmostEqual(metrics["task_success_rate"], 1.0)
+        self.assertEqual(metrics["scope"]["run_id"], "run-m1")
+
+    def test_compute_metrics_timeseries_from_store_scope(self):
+        store = TaskStatusStore()
+        store.update(
+            {
+                "run_id": "run-ts1",
+                "task_id": "task-ts1",
+                "session_id": "sess-ts1",
+                "event_type": "task_end",
+                "status": "SUCCESS",
+                "intent_key": "global:TASK:END",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "ts": "2026-03-08T12:10:00Z",
+            }
+        )
+        store.update(
+            {
+                "run_id": "run-ts1",
+                "task_id": "task-ts2",
+                "session_id": "sess-ts1",
+                "event_type": "task_end",
+                "status": "FAILED",
+                "intent_key": "global:TASK:END",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "ts": "2026-03-08T12:11:01Z",
+            }
+        )
+
+        metrics = store.compute_metrics_timeseries(
+            session_id="sess-ts1",
+            bucket_sec=60,
+            max_buckets=5,
+        )
+        self.assertEqual(metrics["scope"]["session_id"], "sess-ts1")
+        self.assertEqual(len(metrics["series"]), 2)
+        self.assertEqual(metrics["series"][0]["event_count"], 1)
+        self.assertEqual(metrics["series"][1]["event_count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
