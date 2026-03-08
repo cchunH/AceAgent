@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from guiagent_v2.blueprint_hub import BlueprintRepository
+from .flow_audit import audit_flow_from_jsonl
 from .metrics import compute_metrics_from_jsonl
 
 
@@ -23,6 +24,7 @@ def write_runtime_summary(
         "generated_at": _utc_now_iso(),
         "event_log": event_log_path,
         "metrics": metrics,
+        "flow_audit": audit_flow_from_jsonl(event_log_path),
         "blueprint_count": len(blueprint_repo.list_blueprints()) if blueprint_repo else 0,
     }
 
@@ -30,4 +32,3 @@ def write_runtime_summary(
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
     return {"summary_path": out_path, "summary": summary}
-

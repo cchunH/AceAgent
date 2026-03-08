@@ -11,6 +11,7 @@ from .status_api import (
     list_run_ids,
 )
 from .metrics import compute_metrics_from_jsonl
+from .flow_audit import audit_flow_from_events, audit_flow_from_jsonl
 from .reporting import write_runtime_summary
 from .blueprint_sync import upsert_blueprint_from_observation
 from .offline_replay import rebuild_blueprints_from_steps
@@ -70,6 +71,8 @@ __all__ = [
     "list_tasks",
     "list_run_ids",
     "compute_metrics_from_jsonl",
+    "audit_flow_from_events",
+    "audit_flow_from_jsonl",
     "write_runtime_summary",
     "upsert_blueprint_from_observation",
     "rebuild_blueprints_from_steps",

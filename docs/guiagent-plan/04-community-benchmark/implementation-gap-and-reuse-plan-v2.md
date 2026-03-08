@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.18`
+- 版本：`v2.19`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -178,6 +178,10 @@
 3. `VectorIndexAdapter` 与向量检索召回层
 - 目标来源：GUIAgent 蓝图 04/05（意图对齐 + 蓝图候选召回）
 - 差距：当前仅有 skeleton 结构匹配，尚未引入 embedding 召回与向量索引后端。
+
+4. 群智联邦分发（蓝图 06/11）
+- 目标来源：GUIAgent 蓝图 06/11
+- 差距：未实现；当前策略为明确后置，不纳入 R10-R13 主任务。
 
 ## 3. 复用优先级重排（基于已实现状态）
 
