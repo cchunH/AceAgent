@@ -37,6 +37,7 @@ def _run_with_mode(runtime_mode: str, **kwargs):
         kwargs.pop("mobile_execution_mode", None)
         kwargs.pop("mobile_wait_ms", None)
         kwargs.pop("v2_max_steps", None)
+        kwargs.pop("v2_use_live_perception", None)
         return run_single_task(**kwargs)
     kwargs["runtime_mode"] = runtime_mode
     return run_single_task_with_runtime(**kwargs)
@@ -145,6 +146,12 @@ def main():
         type=int,
         default=4,
         help="Max task steps for guiagent_v2 when --v2_skip_legacy is enabled.",
+    )
+    parser.add_argument(
+        "--v2_use_live_perception",
+        action="store_true",
+        default=False,
+        help="Enable live Perceptor snapshots for guiagent_v2 pre/post step context.",
     )
     parser.add_argument(
         "--watchdog_policy_path",
@@ -283,6 +290,9 @@ def main():
             persistent_skills_path = None
 
         try:
+            runtime_perceptor = None
+            if args.v2_use_live_perception and args.runtime_mode in {"guiagent_v2_shadow", "guiagent_v2"}:
+                runtime_perceptor = Perceptor(ADB_PATH, perception_args=default_perceptor_args)
             _run_with_mode(
                 args.runtime_mode,
                 instruction=args.instruction,
@@ -292,7 +302,7 @@ def main():
                 skills_path=args.specified_skills_path,
                 persistent_heuristics_path=persistent_heuristics_path,
                 persistent_skills_path=persistent_skills_path,
-                perceptor=None,
+                perceptor=runtime_perceptor,
                 perception_args=default_perceptor_args,
                 max_itr=args.max_itr,
                 max_consecutive_failures=args.max_consecutive_failures,
@@ -317,6 +327,7 @@ def main():
                 mobile_execution_mode=args.mobile_execution_mode,
                 mobile_wait_ms=args.mobile_wait_ms,
                 v2_max_steps=args.v2_max_steps,
+                v2_use_live_perception=args.v2_use_live_perception,
             )
         except Exception as e:
             print(f"Failed when doing task: {args.instruction}")
@@ -401,6 +412,7 @@ def main():
                 mobile_execution_mode=args.mobile_execution_mode,
                 mobile_wait_ms=args.mobile_wait_ms,
                 v2_max_steps=args.v2_max_steps,
+                v2_use_live_perception=args.v2_use_live_perception,
             )
             print("\n\nDONE:", task["instruction"])
             print("IMPORTANT: Please reset the device as needed before running the next task!")

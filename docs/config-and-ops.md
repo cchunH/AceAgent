@@ -67,6 +67,7 @@ python run.py \
 
 `--runtime_mode guiagent_v2`：
 - 与 `guiagent_v2_shadow` 共用当前骨架，预留后续真实 v2 执行逻辑接管。
+- 可选开启 `--v2_use_live_perception`，将 `Perceptor` 的实时 pre/post 感知注入 v2 step pipeline。
 
 ## 4. 日志与文件产物
 

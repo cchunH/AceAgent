@@ -24,6 +24,7 @@ from .web_replan_policy import WebReplanPolicy
 EventEmitter = Callable[[dict[str, Any]], None]
 ConfirmationRegistrar = Callable[[dict[str, Any]], dict[str, Any] | None]
 ConfirmationWaiter = Callable[[str, float, float], dict[str, Any] | None]
+PerceptionProvider = Callable[[], dict[str, Any] | None]
 _URL_PATTERN = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 _WEB_HINTS = (
     "http://",
@@ -98,8 +99,14 @@ def build_default_action_registry(
     def mobile_native_handler(payload: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
         del context
         legacy_action = payload.get("legacy_action")
-        step_context = payload.get("step_context")
-        request, result, exec_detail = pipeline.run_step(legacy_action, context=step_context)
+        raw_step_context = payload.get("step_context")
+        step_context = dict(raw_step_context or {}) if isinstance(raw_step_context, dict) else {}
+        post_context_provider = step_context.pop("post_context_provider", None)
+        request, result, exec_detail = pipeline.run_step(
+            legacy_action,
+            context=step_context,
+            post_context_provider=post_context_provider if callable(post_context_provider) else None,
+        )
         return {
             "status": result.status,
             "request_id": request.get("request_id"),
@@ -261,6 +268,7 @@ def run_probe_step(
     mobile_execution_mode: str = "auto",
     adb_path: str = "adb",
     mobile_wait_ms: int = 1000,
+    perception_provider: PerceptionProvider | None = None,
 ) -> V2ProbeResult:
     loop_detector = loop_detector or LoopDetector()
     context_compactor = context_compactor or ContextCompactor()
@@ -297,15 +305,57 @@ def run_probe_step(
             emit_event(compaction_event)
 
     action_obj, route_context = infer_probe_action(instruction)
+
+    def _default_snapshot(pre: bool) -> dict[str, Any]:
+        infos = [{"text": "__probe_pre__", "coordinates": (1, 1)}] if pre else [{"text": "__probe_post__", "coordinates": (1, 1)}]
+        return {
+            "perception_infos": infos,
+            "screen_width": int(screen_width),
+            "screen_height": int(screen_height),
+            "keyboard": False,
+        }
+
+    def _capture_snapshot(*, pre: bool) -> dict[str, Any]:
+        if perception_provider is None:
+            return _default_snapshot(pre=pre)
+        try:
+            raw = perception_provider() or {}
+        except Exception:
+            raw = {}
+        if not isinstance(raw, dict):
+            raw = {}
+        infos = raw.get("perception_infos")
+        if not isinstance(infos, list):
+            infos = []
+        return {
+            "perception_infos": infos,
+            "screen_width": int(raw.get("screen_width", screen_width) or screen_width),
+            "screen_height": int(raw.get("screen_height", screen_height) or screen_height),
+            "keyboard": bool(raw.get("keyboard", False)),
+        }
+
+    pre_snapshot = _capture_snapshot(pre=True)
+    post_seed = _default_snapshot(pre=False) if perception_provider is None else pre_snapshot
     step_context = {
-        # Probe context uses synthetic anchor diffs to avoid false NO_STATE_CHANGE
-        # when running in pure shadow mode without real perception snapshots.
-        "perception_infos_pre": [{"text": "__probe_pre__", "coordinates": (1, 1)}],
-        "perception_infos_post": [{"text": "__probe_post__", "coordinates": (1, 1)}],
-        "screen_width": int(screen_width),
-        "screen_height": int(screen_height),
+        "perception_infos_pre": list(pre_snapshot.get("perception_infos", [])),
+        "perception_infos_post": list(post_seed.get("perception_infos", [])),
+        "screen_width": int(pre_snapshot.get("screen_width", screen_width)),
+        "screen_height": int(pre_snapshot.get("screen_height", screen_height)),
         "task_type": route_context.get("task_type"),
+        "keyboard_pre": bool(pre_snapshot.get("keyboard", False)),
+        "keyboard_post": bool(post_seed.get("keyboard", False)),
     }
+    if perception_provider is not None:
+        def _post_context_provider() -> dict[str, Any]:
+            post_snapshot = _capture_snapshot(pre=False)
+            return {
+                "perception_infos_post": list(post_snapshot.get("perception_infos", [])),
+                "screen_width": int(post_snapshot.get("screen_width", step_context.get("screen_width", 1080))),
+                "screen_height": int(post_snapshot.get("screen_height", step_context.get("screen_height", 2340))),
+                "keyboard_post": bool(post_snapshot.get("keyboard", False)),
+            }
+
+        step_context["post_context_provider"] = _post_context_provider
     request_context = {
         "screen_width": int(screen_width),
         "screen_height": int(screen_height),

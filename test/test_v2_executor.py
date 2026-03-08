@@ -95,6 +95,28 @@ def _build_low_core_hooks():
     return hooks
 
 
+def _build_post_snapshot_hooks():
+    hooks = HookManager()
+
+    def _pre(req, ctx):  # noqa: ANN001
+        del req, ctx
+        return {"passed": True, "reason_code": "OK"}
+
+    def _post(req, ctx):  # noqa: ANN001
+        del req
+        infos = list(ctx.get("perception_infos_post", []))
+        texts = [str(item.get("text", "")) for item in infos if isinstance(item, dict)]
+        passed = any("post-marker" in text for text in texts)
+        return {
+            "passed": passed,
+            "reason_code": "STATE_TRANSITION_OK" if passed else "POST_SNAPSHOT_MISSING",
+        }
+
+    hooks.register_pre_assertion_hook(_pre)
+    hooks.register_post_check_hook(_post)
+    return hooks
+
+
 class TestV2Executor(unittest.TestCase):
     def test_infer_probe_action_url(self):
         action, context = infer_probe_action("请打开 https://example.com")
@@ -444,6 +466,45 @@ class TestV2Executor(unittest.TestCase):
         handovers = [e for e in events if e.get("event_type") == "handover"]
         self.assertTrue(handovers)
         self.assertEqual(handovers[-1].get("reason_code"), "DEVICE_EXEC_ERROR_UT")
+
+    def test_run_probe_uses_perception_provider_for_pre_post_snapshot(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+        calls = {"count": 0}
+
+        def _perception_provider():
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return {
+                    "perception_infos": [{"text": "pre-marker", "coordinates": [1, 1]}],
+                    "screen_width": 720,
+                    "screen_height": 1280,
+                    "keyboard": False,
+                }
+            return {
+                "perception_infos": [{"text": "post-marker", "coordinates": [2, 2]}],
+                "screen_width": 720,
+                "screen_height": 1280,
+                "keyboard": False,
+            }
+
+        result = run_probe_step(
+            instruction="在手机里等待一下",
+            run_id="r-perception",
+            task_id="t-perception",
+            session_id="sess-perception",
+            step_id=6,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_post_snapshot_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+            perception_provider=_perception_provider,
+        )
+
+        self.assertEqual(result.status, "SUCCESS")
+        self.assertGreaterEqual(calls["count"], 2)
 
 
 if __name__ == "__main__":

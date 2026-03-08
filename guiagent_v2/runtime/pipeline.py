@@ -1,5 +1,5 @@
 import time
-from typing import Any
+from typing import Any, Callable
 
 from guiagent_v2.intent_contract import (
     ExecutionResult,
@@ -21,8 +21,10 @@ class StepPipeline:
         self,
         legacy_action: dict[str, Any] | None,
         context: dict[str, Any] | None = None,
+        post_context_provider: Callable[[], dict[str, Any] | None] | None = None,
     ) -> tuple[dict[str, Any], ExecutionResult, dict[str, Any]]:
         start = time.time()
+        context = dict(context or {})
         request = map_legacy_action_to_request(legacy_action, context=context)
         pre_assertion = self.hooks.run_pre_assertion(request, context=context)
 
@@ -67,6 +69,14 @@ class StepPipeline:
                 }
                 result.recovery_level = "L2"
                 return request.to_dict(), result, exec_detail
+
+        if post_context_provider is not None:
+            try:
+                post_updates = post_context_provider() or {}
+            except Exception:
+                post_updates = {}
+            if isinstance(post_updates, dict) and post_updates:
+                context.update(post_updates)
 
         post_check = self.hooks.run_post_check(request, context=context)
         result = map_legacy_outcome_to_result(

@@ -83,6 +83,48 @@ def _load_runtime_config():
     return config
 
 
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _build_live_perception_provider(
+    *,
+    perceptor: Any,
+    runtime_config: Any,
+):
+    if perceptor is None or not hasattr(perceptor, "get_perception_infos"):
+        return None
+
+    paths_obj = getattr(runtime_config, "paths", None)
+    screenshot_dir = str(getattr(paths_obj, "SCREENSHOT_DIR", "screenshot") or "screenshot")
+    temp_dir = str(getattr(paths_obj, "TEMP_DIR", "temp") or "temp")
+    screenshot_file = os.path.join(".", screenshot_dir, "screenshot.jpg")
+
+    os.makedirs(screenshot_dir, exist_ok=True)
+    os.makedirs(temp_dir, exist_ok=True)
+
+    def _provider() -> dict[str, Any]:
+        try:
+            infos, width, height = perceptor.get_perception_infos(
+                screenshot_file,
+                temp_file=temp_dir,
+            )
+        except Exception:
+            return {}
+
+        return {
+            "perception_infos": infos if isinstance(infos, list) else [],
+            "screen_width": _safe_int(width, 1080),
+            "screen_height": _safe_int(height, 2340),
+            "keyboard": False,
+        }
+
+    return _provider
+
+
 def _emit_and_track(
     bus: JSONLEventBus,
     event: dict[str, Any],
@@ -558,6 +600,7 @@ def run_single_task_with_runtime(
     mobile_execution_mode="auto",
     mobile_wait_ms=1000,
     v2_max_steps=4,
+    v2_use_live_perception=False,
 ):
     future_tasks = future_tasks or []
     runtime_config = _load_runtime_config()
@@ -613,6 +656,12 @@ def run_single_task_with_runtime(
     probe_result = None
     if runtime_mode in {"guiagent_v2_shadow", "guiagent_v2"}:
         hooks = _build_hook_manager()
+        perception_provider = None
+        if bool(v2_use_live_perception):
+            perception_provider = _build_live_perception_provider(
+                perceptor=perceptor,
+                runtime_config=runtime_config,
+            )
         if runtime_mode == "guiagent_v2" and bool(v2_skip_legacy):
             step_instructions = _split_instruction_into_steps(instruction, max_steps=int(v2_max_steps))
             if not step_instructions:
@@ -660,6 +709,7 @@ def run_single_task_with_runtime(
                     mobile_execution_mode=str(mobile_execution_mode or "auto"),
                     adb_path=str(getattr(runtime_config.paths, "ADB_PATH", "adb")),
                     mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
+                    perception_provider=perception_provider,
                 )
                 _emit_and_track(
                     bus,
@@ -707,6 +757,7 @@ def run_single_task_with_runtime(
                 mobile_execution_mode=str(mobile_execution_mode or "auto"),
                 adb_path=str(getattr(runtime_config.paths, "ADB_PATH", "adb")),
                 mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
+                perception_provider=perception_provider,
             )
 
     should_delegate_legacy = not (runtime_mode == "guiagent_v2" and bool(v2_skip_legacy))

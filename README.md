@@ -244,6 +244,7 @@ while True:
 - `--mobile_execution_mode`
 - `--mobile_wait_ms`
 - `--v2_max_steps`
+- `--v2_use_live_perception`
 - `--watchdog_policy_path`
 - `--watchdog_policy_reload_interval`
 - `--session_id`

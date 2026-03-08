@@ -22,11 +22,19 @@ class _DummyModels:
 
 class _DummyPaths:
     ADB_PATH = "adb"
+    SCREENSHOT_DIR = "screenshot"
+    TEMP_DIR = "temp"
 
 
 class _DummyConfig:
     models = _DummyModels()
     paths = _DummyPaths()
+
+
+class _DummyLivePerceptor:
+    def get_perception_infos(self, screenshot_file, temp_file=None):  # noqa: ANN001
+        del screenshot_file, temp_file
+        return [{"text": "live-pre", "coordinates": [11, 22]}], 720, 1280
 
 
 class TestOrchestratorV2Loop(unittest.TestCase):
@@ -73,6 +81,7 @@ class TestOrchestratorV2Loop(unittest.TestCase):
         self.assertEqual(out["status"], "SUCCESS")
         self.assertEqual(len(calls), 2)
         self.assertEqual([item["step_id"] for item in calls], [1, 2])
+        self.assertTrue(all(item.get("perception_provider") is None for item in calls))
 
     def test_v2_skip_legacy_stops_on_handover(self):
         calls = []
@@ -106,6 +115,50 @@ class TestOrchestratorV2Loop(unittest.TestCase):
         self.assertEqual(out["status"], "HANDOVER")
         self.assertEqual(len(calls), 2)
         self.assertEqual([item["step_id"] for item in calls], [1, 2])
+        self.assertTrue(all(item.get("perception_provider") is None for item in calls))
+
+    def test_v2_live_perception_provider_forwarded(self):
+        calls = []
+
+        def _fake_probe(**kwargs):
+            calls.append(dict(kwargs))
+            return V2ProbeResult(
+                status="SUCCESS",
+                intent_key=f"global:STEP:{kwargs['step_id']}",
+                channel="mobile_native",
+                route_reason="ut",
+            )
+
+        with tempfile.TemporaryDirectory() as td:
+            with (
+                patch("guiagent_v2.runtime.orchestrator_v2._load_runtime_config", return_value=_DummyConfig()),
+                patch("guiagent_v2.runtime.orchestrator_v2.run_probe_step", side_effect=_fake_probe),
+                patch(
+                    "guiagent_v2.runtime.orchestrator_v2._emit_events_from_legacy_steps",
+                    side_effect=AssertionError("legacy should not be called when v2_skip_legacy=true"),
+                ),
+            ):
+                out = run_single_task_with_runtime(
+                    instruction="打开设置",
+                    run_name="ut-loop",
+                    task_id="t-live-perception",
+                    log_root=td,
+                    runtime_mode="guiagent_v2",
+                    v2_skip_legacy=True,
+                    v2_max_steps=1,
+                    mobile_execution_mode="shadow",
+                    v2_use_live_perception=True,
+                    perceptor=_DummyLivePerceptor(),
+                )
+
+        self.assertEqual(out["status"], "SUCCESS")
+        self.assertEqual(len(calls), 1)
+        provider = calls[0].get("perception_provider")
+        self.assertTrue(callable(provider))
+        snapshot = provider()
+        self.assertEqual(snapshot.get("screen_width"), 720)
+        self.assertEqual(snapshot.get("screen_height"), 1280)
+        self.assertEqual(snapshot.get("perception_infos", [])[0].get("text"), "live-pre")
 
 
 if __name__ == "__main__":
