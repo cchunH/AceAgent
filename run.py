@@ -36,6 +36,7 @@ def _run_with_mode(runtime_mode: str, **kwargs):
         kwargs.pop("confirm_poll_interval", None)
         kwargs.pop("mobile_execution_mode", None)
         kwargs.pop("mobile_wait_ms", None)
+        kwargs.pop("v2_max_steps", None)
         return run_single_task(**kwargs)
     kwargs["runtime_mode"] = runtime_mode
     return run_single_task_with_runtime(**kwargs)
@@ -138,6 +139,12 @@ def main():
         type=int,
         default=1000,
         help="Default wait duration for mobile Wait action in guiagent_v2.",
+    )
+    parser.add_argument(
+        "--v2_max_steps",
+        type=int,
+        default=4,
+        help="Max task steps for guiagent_v2 when --v2_skip_legacy is enabled.",
     )
     parser.add_argument(
         "--watchdog_policy_path",
@@ -309,6 +316,7 @@ def main():
                 confirm_poll_interval=args.confirm_poll_interval,
                 mobile_execution_mode=args.mobile_execution_mode,
                 mobile_wait_ms=args.mobile_wait_ms,
+                v2_max_steps=args.v2_max_steps,
             )
         except Exception as e:
             print(f"Failed when doing task: {args.instruction}")
@@ -392,6 +400,7 @@ def main():
                 confirm_poll_interval=args.confirm_poll_interval,
                 mobile_execution_mode=args.mobile_execution_mode,
                 mobile_wait_ms=args.mobile_wait_ms,
+                v2_max_steps=args.v2_max_steps,
             )
             print("\n\nDONE:", task["instruction"])
             print("IMPORTANT: Please reset the device as needed before running the next task!")

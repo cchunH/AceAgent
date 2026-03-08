@@ -192,6 +192,11 @@
 - 现状：移动端分支支持 `auto|shadow|device` 执行模式；有 ADB 时执行真实动作，无 ADB 自动回退 shadow；入口新增 `--mobile_execution_mode/--mobile_wait_ms`。
 - 距离评估：`完成（v0）`
 
+35. v2 多步任务循环骨架（Multi-step Task Skeleton）
+- 证据模块：`guiagent_v2/runtime/orchestrator_v2.py`, `run.py`, `test/test_orchestrator_v2_loop.py`
+- 现状：`runtime_mode=guiagent_v2 --v2_skip_legacy` 已支持指令拆步、多步执行（`v2_max_steps`）与 handover 早停；任务步级状态可通过 `v2_task_step` 事件追踪。
+- 距离评估：`完成（v0）`
+
 ### 2.2 部分落地（需增强）
 
 1. `SessionRuntime`

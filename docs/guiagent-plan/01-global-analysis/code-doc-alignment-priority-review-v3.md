@@ -78,10 +78,10 @@
 - 建议优先级：`P0-1`（剩余增强）
 
 2. v2 多步任务主循环（非单步 probe）
-- 问题：`v2_skip_legacy` 下仅一步推断。
-- 证据模块：`orchestrator_v2.py`
-- 影响：复杂任务无法在 v2 内完成。
-- 建议优先级：`P0-2`
+- 当前：已落地“指令拆步 + `v2_max_steps` + handover 早停”的多步骨架。
+- 证据模块：`orchestrator_v2.py`, `run.py`, `test/test_orchestrator_v2_loop.py`
+- 剩余影响：仍缺“基于实时感知的动态子目标生成”，复杂任务完成率仍受限。
+- 建议优先级：`P0-2`（剩余增强）
 
 3. 真实感知接入 v2 断言链（替换合成 pre/post）
 - 问题：断言输入不是设备真实帧。
@@ -120,8 +120,9 @@
 
 ## 5. 建议实施顺序（可直接开工）
 
-1. R14（P0）：多步循环骨架（真实执行桥接已完成 v0）
-- DoD：`runtime_mode=guiagent_v2 --v2_skip_legacy` 可完成至少 2 条真实设备任务。
+1. R14（P0）：多步循环骨架 + 真实执行桥接（已完成 v0）
+- 现状：骨架已落地并可配置 `v2_max_steps`。
+- 剩余 DoD：接入实时感知驱动子目标更新，提升复杂任务可完成性。
 
 2. R15（P0）：真实感知接入 + 在线回灌
 - DoD：v2 路径产生真实 `perception` 驱动的 `assertion/post_check`，并更新 `blueprints.json`。

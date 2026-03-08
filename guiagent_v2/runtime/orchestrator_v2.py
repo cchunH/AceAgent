@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 from typing import Any
 
@@ -35,6 +36,45 @@ def _normalize_chain_mode(runtime_mode: str) -> str:
     if runtime_mode == "legacy":
         return "legacy"
     return runtime_mode
+
+
+_STEP_SPLIT_PATTERN = re.compile(r"[;\n。！？!?；]+")
+_CONNECTOR_SPLIT_PATTERN = re.compile(
+    r"\b(?:and then|then|next)\b|然后|接着|随后|接下来|下一步",
+    flags=re.IGNORECASE,
+)
+
+
+def _split_instruction_into_steps(instruction: str, max_steps: int) -> list[str]:
+    raw = str(instruction or "").strip()
+    if not raw:
+        return []
+
+    cap = max(1, int(max_steps))
+    stage1 = [part.strip() for part in _STEP_SPLIT_PATTERN.split(raw) if str(part).strip()]
+    if not stage1:
+        stage1 = [raw]
+
+    chunks: list[str] = []
+    for part in stage1:
+        sub_parts = [
+            p.strip().strip("，,")
+            for p in _CONNECTOR_SPLIT_PATTERN.split(part)
+            if str(p).strip().strip("，,")
+        ]
+        if sub_parts:
+            chunks.extend(sub_parts)
+        else:
+            chunks.append(part.strip().strip("，,"))
+
+    deduped: list[str] = []
+    for chunk in chunks:
+        if deduped and deduped[-1] == chunk:
+            continue
+        deduped.append(chunk)
+        if len(deduped) >= cap:
+            break
+    return deduped or [raw]
 
 
 def _load_runtime_config():
@@ -517,6 +557,7 @@ def run_single_task_with_runtime(
     confirm_poll_interval=0.5,
     mobile_execution_mode="auto",
     mobile_wait_ms=1000,
+    v2_max_steps=4,
 ):
     future_tasks = future_tasks or []
     runtime_config = _load_runtime_config()
@@ -572,32 +613,101 @@ def run_single_task_with_runtime(
     probe_result = None
     if runtime_mode in {"guiagent_v2_shadow", "guiagent_v2"}:
         hooks = _build_hook_manager()
-        probe_result = run_probe_step(
-            instruction=instruction,
-            run_id=run_id,
-            task_id=task_id,
-            session_id=runtime_session_id,
-            step_id=1,
-            chain_mode=chain_mode,
-            emit_event=lambda event: _emit_and_track(bus, event, watchdog_manager=watchdog_manager),
-            hooks=hooks,
-            router=router,
-            guard_policy=guard_policy,
-            web_skill=web_skill,
-            loop_detector=loop_detector,
-            context_compactor=context_compactor,
-            screen_width=1080,
-            screen_height=2340,
-            web_max_steps=int(web_max_steps),
-            web_replan_max_attempts=int(web_replan_max_attempts),
-            confirm_wait_timeout=float(confirm_wait_timeout),
-            confirm_poll_interval=float(confirm_poll_interval),
-            register_confirmation=register_pending_confirmation,
-            wait_confirmation=wait_confirmation_decision,
-            mobile_execution_mode=str(mobile_execution_mode or "auto"),
-            adb_path=str(getattr(runtime_config.paths, "ADB_PATH", "adb")),
-            mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
-        )
+        if runtime_mode == "guiagent_v2" and bool(v2_skip_legacy):
+            step_instructions = _split_instruction_into_steps(instruction, max_steps=int(v2_max_steps))
+            if not step_instructions:
+                step_instructions = [str(instruction or "").strip() or "Wait"]
+
+            for idx, step_instruction in enumerate(step_instructions, start=1):
+                _emit_and_track(
+                    bus,
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": idx,
+                        "chain_mode": chain_mode,
+                        "event_type": "v2_task_step",
+                        "status": "RUNNING",
+                        "intent_key": "global:TASK:STEP",
+                        "v2_step_instruction": step_instruction,
+                        "v2_step_total": len(step_instructions),
+                        **({"session_id": runtime_session_id} if runtime_session_id else {}),
+                    },
+                    watchdog_manager=watchdog_manager,
+                )
+                probe_result = run_probe_step(
+                    instruction=step_instruction,
+                    run_id=run_id,
+                    task_id=task_id,
+                    session_id=runtime_session_id,
+                    step_id=idx,
+                    chain_mode=chain_mode,
+                    emit_event=lambda event: _emit_and_track(bus, event, watchdog_manager=watchdog_manager),
+                    hooks=hooks,
+                    router=router,
+                    guard_policy=guard_policy,
+                    web_skill=web_skill,
+                    loop_detector=loop_detector,
+                    context_compactor=context_compactor,
+                    screen_width=1080,
+                    screen_height=2340,
+                    web_max_steps=int(web_max_steps),
+                    web_replan_max_attempts=int(web_replan_max_attempts),
+                    confirm_wait_timeout=float(confirm_wait_timeout),
+                    confirm_poll_interval=float(confirm_poll_interval),
+                    register_confirmation=register_pending_confirmation,
+                    wait_confirmation=wait_confirmation_decision,
+                    mobile_execution_mode=str(mobile_execution_mode or "auto"),
+                    adb_path=str(getattr(runtime_config.paths, "ADB_PATH", "adb")),
+                    mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
+                )
+                _emit_and_track(
+                    bus,
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": idx,
+                        "chain_mode": chain_mode,
+                        "event_type": "v2_task_step",
+                        "status": str(probe_result.status).upper(),
+                        "intent_key": str(probe_result.intent_key or "global:TASK:STEP"),
+                        "v2_step_instruction": step_instruction,
+                        "v2_step_total": len(step_instructions),
+                        "channel": probe_result.channel,
+                        "route_reason": probe_result.route_reason,
+                        **({"session_id": runtime_session_id} if runtime_session_id else {}),
+                    },
+                    watchdog_manager=watchdog_manager,
+                )
+                if probe_result.status != "SUCCESS":
+                    break
+        else:
+            probe_result = run_probe_step(
+                instruction=instruction,
+                run_id=run_id,
+                task_id=task_id,
+                session_id=runtime_session_id,
+                step_id=1,
+                chain_mode=chain_mode,
+                emit_event=lambda event: _emit_and_track(bus, event, watchdog_manager=watchdog_manager),
+                hooks=hooks,
+                router=router,
+                guard_policy=guard_policy,
+                web_skill=web_skill,
+                loop_detector=loop_detector,
+                context_compactor=context_compactor,
+                screen_width=1080,
+                screen_height=2340,
+                web_max_steps=int(web_max_steps),
+                web_replan_max_attempts=int(web_replan_max_attempts),
+                confirm_wait_timeout=float(confirm_wait_timeout),
+                confirm_poll_interval=float(confirm_poll_interval),
+                register_confirmation=register_pending_confirmation,
+                wait_confirmation=wait_confirmation_decision,
+                mobile_execution_mode=str(mobile_execution_mode or "auto"),
+                adb_path=str(getattr(runtime_config.paths, "ADB_PATH", "adb")),
+                mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
+            )
 
     should_delegate_legacy = not (runtime_mode == "guiagent_v2" and bool(v2_skip_legacy))
     if should_delegate_legacy:

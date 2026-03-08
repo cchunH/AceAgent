@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.34`
+- 版本：`v1.35`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -70,6 +70,7 @@
 54. `v2_executor` 已增加锚点门控与辅锚点微重试（`anchor_gate/anchor_micro_retry`），并通过 `pipeline` 透传 `pre_assertion` 置信度避免后检场景误阻断。
 55. `runtime metrics` 与 `runtime_summary` 已补锚点策略成效统计（`anchor_gate_*`、`anchor_micro_retry_*`、`anchor_strategy`），支持门控/微重试收益量化。
 56. `v2_executor` 的移动端分支已接入 `MobileDeviceExecutor`（`auto|shadow|device`）：有 ADB 时执行真实设备动作，无 ADB 自动回退 shadow，入口新增 `--mobile_execution_mode/--mobile_wait_ms`。
+57. `orchestrator_v2` 在 `runtime_mode=guiagent_v2 --v2_skip_legacy` 下已支持多步任务骨架（指令拆步 + `v2_max_steps` + handover 早停），并输出 `v2_task_step` 事件。
 
 尚未落地：
 1. `watchdog` 深化生产化（下载/安全扩展插件、聚合统计导出）。
