@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.16`
+- 版本：`v2.17`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -120,6 +120,11 @@
 - 现状：已支持 `pending_confirm -> confirm_approved|confirm_rejected|confirm_timeout`；控制面支持 `/runtime/confirms` 查询与 `/runtime/confirm` 决策提交。
 - 距离评估：`完成（v0）`
 
+21. 动态去噪 + 静态骨架 + 快速匹配
+- 证据模块：`guiagent_v2/state_engine/scene_denoise.py`, `static_skeleton.py`, `fast_match.py`, `guiagent_v2/runtime/offline_replay.py`
+- 现状：已接入 `assertion_guard/post_check/blueprint_sync`，并提供离线复盘重建与在线 skeleton 快速匹配能力。
+- 距离评估：`完成（v0）`
+
 ### 2.2 部分落地（需增强）
 
 1. `SessionRuntime`
@@ -151,6 +156,12 @@
 - 现状：已完成最小确认闭环并可通过控制面决策。
 - 距离评估：`部分完成`
 - 关键差距：缺确认任务长期堆积治理、批量确认、前端交互模型与多步任务恢复协议。
+
+5. 状态感知算法生产化
+- 证据模块：`state_engine/*`, `action_engine/assertion_guard.py`, `post_check.py`
+- 现状：已具备启发式动态去噪、静态骨架和快速匹配。
+- 距离评估：`部分完成`
+- 关键差距：缺时序多帧鲁棒验证（长窗口）、OCR 抖动建模与真实设备压力回归基线。
 
 ### 2.3 未落地（待实施）
 

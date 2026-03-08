@@ -6,6 +6,7 @@ from threading import Lock
 from typing import Any
 
 from .patch_model import Blueprint, BlueprintPatch
+from guiagent_v2.state_engine import build_blueprint_match_index, match_blueprint_fast
 
 
 def _make_key(intent_key: str, app_state: str) -> str:
@@ -20,11 +21,13 @@ class BlueprintRepository:
         self._lock = Lock()
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         self._store: dict[str, dict[str, Any]] = {}
+        self._match_index_cache: dict[str, list[dict[str, Any]]] | None = None
         self._load()
 
     def _load(self) -> None:
         if not os.path.exists(self.file_path):
             self._store = {}
+            self._match_index_cache = None
             return
         try:
             with open(self.file_path, "r", encoding="utf-8") as f:
@@ -32,12 +35,14 @@ class BlueprintRepository:
             self._store = payload if isinstance(payload, dict) else {}
         except Exception:
             self._store = {}
+        self._match_index_cache = None
 
     def _save(self) -> None:
         tmp = f"{self.file_path}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(self._store, f, ensure_ascii=False, indent=2)
         os.replace(tmp, self.file_path)
+        self._match_index_cache = None
 
     def get_blueprint(self, intent_key: str, app_state: str = "global:DEFAULT") -> dict[str, Any] | None:
         with self._lock:
@@ -84,3 +89,37 @@ class BlueprintRepository:
         with self._lock:
             return [dict(v) for v in self._store.values()]
 
+    def build_match_index(
+        self,
+        app_state: str | None = None,
+        force_rebuild: bool = False,
+    ) -> dict[str, list[dict[str, Any]]]:
+        with self._lock:
+            needs_rebuild = self._match_index_cache is None or force_rebuild
+            snapshot = [dict(v) for v in self._store.values()] if needs_rebuild else None
+            cached = dict(self._match_index_cache or {})
+
+        if needs_rebuild:
+            rebuilt = build_blueprint_match_index(snapshot or [])
+            with self._lock:
+                self._match_index_cache = rebuilt
+                cached = dict(rebuilt)
+
+        if app_state is None:
+            return cached
+        state = str(app_state).strip() or "global:DEFAULT"
+        return {state: list(cached.get(state, []))}
+
+    def match_by_skeleton(
+        self,
+        observed_skeleton: dict[str, Any] | None,
+        app_state: str = "global:DEFAULT",
+        top_k: int = 3,
+    ) -> list[dict[str, Any]]:
+        index = self.build_match_index(app_state=app_state, force_rebuild=False)
+        return match_blueprint_fast(
+            observed_skeleton=observed_skeleton,
+            index=index,
+            app_state=app_state,
+            top_k=top_k,
+        )

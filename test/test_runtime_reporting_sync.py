@@ -28,7 +28,10 @@ class TestRuntimeReportingAndSync(unittest.TestCase):
                 post_check_result={"passed": True, "reason_code": "STATE_TRANSITION_OK"},
             )
             self.assertIn("anchors", updated)
+            self.assertIn("static_skeleton", updated)
+            self.assertTrue(updated["static_skeleton"].get("signature"))
             self.assertTrue(updated["post_expectations"])
+            self.assertIn("denoise_stable_ratio", updated.get("metadata", {}))
             found = repo.get_blueprint("global:TAP:SEARCH_BAR", "global:DEFAULT")
             self.assertIsNotNone(found)
 
@@ -73,4 +76,3 @@ class TestRuntimeReportingAndSync(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

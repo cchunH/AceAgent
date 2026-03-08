@@ -13,6 +13,7 @@ from .status_api import (
 from .metrics import compute_metrics_from_jsonl
 from .reporting import write_runtime_summary
 from .blueprint_sync import upsert_blueprint_from_observation
+from .offline_replay import rebuild_blueprints_from_steps
 from .task_service import (
     RuntimeTaskService,
     get_global_task_service,
@@ -71,6 +72,7 @@ __all__ = [
     "compute_metrics_from_jsonl",
     "write_runtime_summary",
     "upsert_blueprint_from_observation",
+    "rebuild_blueprints_from_steps",
     "RuntimeTaskService",
     "get_global_task_service",
     "submit_task",

@@ -4,7 +4,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 from guiagent_v2.blueprint_hub import Blueprint, BlueprintRepository
-from guiagent_v2.state_engine import extract_anchors
+from guiagent_v2.state_engine import (
+    build_static_skeleton,
+    denoise_perception_frames,
+    extract_anchors,
+)
 
 
 def _utc_now_iso() -> str:
@@ -58,10 +62,26 @@ def upsert_blueprint_from_observation(
         max_anchors=5,
     )
     blueprint["anchors"] = [a.to_dict() for a in anchors]
+    denoise = denoise_perception_frames(
+        frames=[perception_infos_pre, perception_infos_post],
+        screen_size=(int(screen_width), int(screen_height)),
+        min_presence_ratio=0.5,
+        max_items=12,
+    )
+    skeleton = build_static_skeleton(
+        frames=[perception_infos_pre, perception_infos_post],
+        screen_size=(int(screen_width), int(screen_height)),
+        min_presence_ratio=0.5,
+        max_nodes=8,
+    )
+    blueprint["static_skeleton"] = skeleton.to_dict()
 
     metadata = dict(blueprint.get("metadata", {}))
     metadata["last_outcome"] = action_outcome
     metadata["last_post_check_reason"] = post_check_result.get("reason_code", "UNKNOWN")
+    metadata["denoise_stable_ratio"] = round(float(denoise.get("stable_ratio", 0.0)), 4)
+    metadata["denoise_frame_count"] = int(denoise.get("frame_count", 1))
+    metadata["dynamic_noise_count"] = len(list(denoise.get("dynamic_infos", [])))
     metadata["updated_at"] = _utc_now_iso()
     blueprint["metadata"] = metadata
 
@@ -75,4 +95,3 @@ def upsert_blueprint_from_observation(
 
     repo.save_blueprint(blueprint)
     return blueprint
-

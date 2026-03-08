@@ -241,6 +241,8 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
             self.assertEqual(metrics["web_replan_count"], 1)
             self.assertEqual(metrics["fallback_action_selected_count"], 1)
             self.assertAlmostEqual(metrics["web_step_success_rate"], 1.0)
+            self.assertIn("denoise_stable_ratio_avg", metrics)
+            self.assertIn("fast_match_hit_rate", metrics)
 
     def test_compute_metrics_from_events(self):
         rows = [
@@ -289,6 +291,7 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
         self.assertAlmostEqual(metrics["task_success_rate"], 0.0)
         self.assertEqual(metrics["pending_confirm_count"], 1)
         self.assertEqual(metrics["confirm_approved_count"], 1)
+        self.assertIn("skeleton_confidence_p50", metrics)
 
     def test_compute_timeseries_from_events(self):
         rows = [

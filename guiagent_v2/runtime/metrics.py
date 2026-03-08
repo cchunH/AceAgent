@@ -93,6 +93,7 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     confirm_approved_events = [e for e in events if e.get("event_type") == "confirm_approved"]
     confirm_rejected_events = [e for e in events if e.get("event_type") == "confirm_rejected"]
     confirm_timeout_events = [e for e in events if e.get("event_type") == "confirm_timeout"]
+    post_check_events = [e for e in events if e.get("event_type") == "post_check"]
 
     success_tasks = [e for e in task_end_events if str(e.get("status", "")).upper() == "SUCCESS"]
     latencies = [int(e.get("latency_ms", 0)) for e in step_end_events if e.get("latency_ms") is not None]
@@ -105,6 +106,45 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     total_web_steps = len(web_step_end_events)
     total_pending_confirms = len(pending_confirm_events)
     total_resolved_confirms = len(confirm_approved_events) + len(confirm_rejected_events)
+    denoise_values: list[float] = []
+    skeleton_values: list[float] = []
+    fast_match_scores: list[float] = []
+    fast_match_hits = 0
+    fast_match_total = 0
+    for event in assertion_events:
+        result = dict(event.get("assertion_result", {}) or {})
+        if result.get("denoise_stable_ratio") is not None:
+            try:
+                denoise_values.append(float(result.get("denoise_stable_ratio")))
+            except Exception:
+                pass
+        if result.get("skeleton_confidence") is not None:
+            try:
+                skeleton_values.append(float(result.get("skeleton_confidence")))
+            except Exception:
+                pass
+        hint = event.get("fast_match_hint")
+        if isinstance(hint, dict):
+            score = hint.get("matched_score")
+            try:
+                fast_match_scores.append(float(score))
+            except Exception:
+                pass
+            fast_match_total += 1
+            if bool(hint.get("signature_hit", False)):
+                fast_match_hits += 1
+    for event in post_check_events:
+        result = dict(event.get("post_check", {}) or {})
+        if result.get("denoise_stable_ratio") is not None:
+            try:
+                denoise_values.append(float(result.get("denoise_stable_ratio")))
+            except Exception:
+                pass
+        if result.get("skeleton_confidence") is not None:
+            try:
+                skeleton_values.append(float(result.get("skeleton_confidence")))
+            except Exception:
+                pass
 
     replan_tasks = {_task_key(e) for e in web_replan_events}
     fallback_tasks = {_task_key(e) for e in fallback_events}
@@ -147,6 +187,14 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         "confirm_approval_rate": (
             len(confirm_approved_events) / total_resolved_confirms
         ) if total_resolved_confirms else 0.0,
+        "denoise_stable_ratio_avg": (
+            sum(denoise_values) / len(denoise_values)
+        ) if denoise_values else 0.0,
+        "skeleton_confidence_p50": median(skeleton_values) if skeleton_values else 0.0,
+        "skeleton_confidence_p95": _percentile(skeleton_values, 0.95) if skeleton_values else 0.0,
+        "fast_match_hit_rate": (fast_match_hits / fast_match_total) if fast_match_total else 0.0,
+        "fast_match_score_p50": median(fast_match_scores) if fast_match_scores else 0.0,
+        "fast_match_score_p95": _percentile(fast_match_scores, 0.95) if fast_match_scores else 0.0,
         "counts": {
             "events": len(events),
             "task_end": total_tasks,
@@ -163,6 +211,8 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
             "confirm_approved": len(confirm_approved_events),
             "confirm_rejected": len(confirm_rejected_events),
             "confirm_timeout": len(confirm_timeout_events),
+            "fast_match_total": fast_match_total,
+            "fast_match_hits": fast_match_hits,
         },
     }
 

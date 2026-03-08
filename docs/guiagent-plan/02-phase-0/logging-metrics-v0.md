@@ -5,7 +5,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v0.1`
+- 版本：`v0.2`
 - 更新时间：`2026-03-07`
 - 适用阶段：`Phase 0`
 
@@ -105,19 +105,84 @@ retry_count > 0 的步骤数 / 总步骤数
 assertion_result.passed == false 的步骤数 / 有断言步骤数
 ```
 
+### 2.6 Denoise Stable Ratio（新增）
+
+定义：
+```text
+每步去噪后稳定特征数 / (稳定特征数 + 动态特征数)
+```
+
+字段来源：
+- `assertion_result.denoise_stable_ratio`
+- `post_check.denoise_stable_ratio`
+
+解读：
+- 越高表示当前页面结构越稳定。
+- 长期低值通常意味着动态噪声过高或 OCR 抖动明显。
+
+### 2.7 Skeleton Match Confidence（新增）
+
+定义：
+```text
+静态骨架匹配置信度（0~1）
+```
+
+字段来源：
+- `assertion_result.skeleton_confidence`
+- `post_check.skeleton_confidence`
+
+解读：
+- 可作为结构断言和状态迁移判定的辅助信号。
+- 建议与 `topology_confidence` 联合观察。
+
+### 2.8 Fast Match Hit / Score（新增）
+
+定义：
+```text
+fast_match 命中次数 / 总匹配尝试次数
+```
+与
+```text
+fast_match score 的 P50/P95
+```
+
+字段来源：
+- `assertion.fast_match_hint.matched_score`
+- `assertion.fast_match_hint.signature_hit`
+
+解读：
+- 用于衡量在线快速匹配（blueprint 检索）效果。
+- 低命中率说明骨架索引质量或场景稳定性不足。
+
+### 2.9 Offline Replay Rebuild Coverage（新增）
+
+定义：
+```text
+离线复盘重建成功动作数 / 可复盘动作总数
+```
+
+字段来源（离线任务输出）：
+- `rebuilt_count`
+- `skipped_count`
+- `total_blueprints`
+
 ## 3. 报告模板（每次 PoC 固定输出）
 
 1. 实验上下文  
 - 设备、分辨率、App 版本、网络条件
 
 2. 指标对照表  
-- `Success Rate / P50 / P95 / Takeover Rate / Retry Rate / Assertion Fail Rate`
+- `Success Rate / P50 / P95 / Takeover Rate / Retry Rate / Assertion Fail Rate / Denoise Stable Ratio / Skeleton Confidence / Fast Match Hit`
 
 3. 失败分布  
 - 按 `reason_code` 排序统计
 
 4. 关键样例  
 - 选 3 个失败样例，附前后截图与事件链
+
+5. 复盘附录（新增）
+- `offline replay` 重建统计
+- 典型 `fast_match` 命中/误命中样例
 
 ## 4. 采样与统计规则
 
@@ -131,3 +196,5 @@ assertion_result.passed == false 的步骤数 / 有断言步骤数
 - `P95`：不高于旧链路 +20%  
 - `S2 Takeover Rate`：有下降趋势即可（Phase 0 不强卡绝对值）  
 - 日志完整率：100%（关键字段不可缺失）
+- `Denoise Stable Ratio`：核心场景建议 `>= 0.55`
+- `Skeleton Match Confidence`：关键路径建议 `P50 >= 0.6`

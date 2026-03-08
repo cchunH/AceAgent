@@ -34,7 +34,48 @@ class TestBlueprintHub(unittest.TestCase):
             self.assertEqual(found2["version"], "v0.1.1")
             self.assertEqual(found2["post_expectations"], ["KEYBOARD_VISIBLE"])
 
+    def test_match_by_skeleton(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "blueprints.json")
+            repo = BlueprintRepository(path)
+            repo.save_blueprint(
+                {
+                    "intent_key": "global:TAP:SEARCH_BAR",
+                    "app_state": "global:DEFAULT",
+                    "version": "v0.1.0",
+                    "anchors": [],
+                    "static_skeleton": {
+                        "signature": "sig-a",
+                        "nodes": [
+                            {
+                                "type": "TEXT",
+                                "text": "Search",
+                                "zone": "top",
+                                "norm_bbox": {"x": 0.5, "y": 0.08, "w": 0.0, "h": 0.0},
+                            }
+                        ],
+                    },
+                }
+            )
+            matched = repo.match_by_skeleton(
+                {
+                    "signature": "sig-a",
+                    "nodes": [
+                        {
+                            "type": "TEXT",
+                            "text": "Search",
+                            "zone": "top",
+                            "norm_bbox": {"x": 0.49, "y": 0.09, "w": 0.0, "h": 0.0},
+                        }
+                    ],
+                },
+                app_state="global:DEFAULT",
+                top_k=1,
+            )
+            self.assertTrue(matched)
+            self.assertEqual(matched[0]["intent_key"], "global:TAP:SEARCH_BAR")
+            self.assertGreaterEqual(matched[0]["score"], 0.5)
+
 
 if __name__ == "__main__":
     unittest.main()
-

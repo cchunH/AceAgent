@@ -6,6 +6,7 @@ from typing import Any
 from guiagent_v2.action_engine.affine_runtime import project_action
 from guiagent_v2.blueprint_hub import Blueprint, BlueprintRepository
 from guiagent_v2.intent_contract import map_legacy_action_to_request
+from guiagent_v2.state_engine import build_static_skeleton
 from .blueprint_sync import upsert_blueprint_from_observation
 from .agent_browser_skill import AgentBrowserSkill
 from .context_compaction import ContextCompactor
@@ -252,6 +253,45 @@ def _translate_legacy_step_to_events(
             "screen_height": int(screen_size.get("height", 2340)),
         }
         request = map_legacy_action_to_request(action_obj, context=step_context)
+        fast_match_hint: dict[str, Any] | None = None
+        if blueprint_repo is not None:
+            selected_blueprint = blueprint_repo.get_blueprint(
+                request.intent_key,
+                app_state="global:DEFAULT",
+            )
+            if selected_blueprint is None:
+                observed_skeleton = build_static_skeleton(
+                    frames=[step_context["perception_infos_pre"]],
+                    screen_size=(
+                        int(screen_size.get("width", 1080)),
+                        int(screen_size.get("height", 2340)),
+                    ),
+                    min_presence_ratio=1.0,
+                    max_nodes=8,
+                )
+                candidates = blueprint_repo.match_by_skeleton(
+                    observed_skeleton=observed_skeleton.to_dict(),
+                    app_state="global:DEFAULT",
+                    top_k=1,
+                )
+                if candidates:
+                    top = candidates[0]
+                    if float(top.get("score", 0.0)) >= 0.55:
+                        selected_blueprint = blueprint_repo.get_blueprint(
+                            str(top.get("intent_key", "")),
+                            app_state="global:DEFAULT",
+                        )
+                        fast_match_hint = {
+                            "matched_intent_key": top.get("intent_key"),
+                            "matched_score": top.get("score"),
+                            "signature_hit": top.get("signature_hit"),
+                        }
+            if selected_blueprint is not None:
+                step_context["expected_anchors"] = list(selected_blueprint.get("anchors", []))
+                step_context["expected_skeleton"] = selected_blueprint.get("static_skeleton")
+                step_context["post_expectations"] = list(
+                    selected_blueprint.get("post_expectations", step_context.get("post_expectations", []))
+                )
         assertion_result = hooks.run_pre_assertion(request, context=step_context)
         post_check_result = hooks.run_post_check(request, context=step_context)
 
@@ -304,6 +344,7 @@ def _translate_legacy_step_to_events(
                 "recovery_level": recovery,
                 "s2_takeover": not success or not assertion_result.get("passed", False),
                 **route_info,
+                **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
             }
         ]
         events.append(
