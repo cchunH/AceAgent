@@ -32,6 +32,8 @@ def _run_with_mode(runtime_mode: str, **kwargs):
         kwargs.pop("status_timeline_max_events", None)
         kwargs.pop("web_max_steps", None)
         kwargs.pop("web_replan_max_attempts", None)
+        kwargs.pop("confirm_wait_timeout", None)
+        kwargs.pop("confirm_poll_interval", None)
         return run_single_task(**kwargs)
     kwargs["runtime_mode"] = runtime_mode
     return run_single_task_with_runtime(**kwargs)
@@ -109,6 +111,18 @@ def main():
         type=int,
         default=1,
         help="Max local replan attempts for guiagent_v2 web execution.",
+    )
+    parser.add_argument(
+        "--confirm_wait_timeout",
+        type=float,
+        default=0.0,
+        help="Seconds to wait for guard confirm decision before handover in guiagent_v2.",
+    )
+    parser.add_argument(
+        "--confirm_poll_interval",
+        type=float,
+        default=0.5,
+        help="Polling interval in seconds for guard confirm decision checks.",
     )
     parser.add_argument(
         "--watchdog_policy_path",
@@ -276,6 +290,8 @@ def main():
                 status_timeline_max_events=args.status_timeline_max_events,
                 web_max_steps=args.web_max_steps,
                 web_replan_max_attempts=args.web_replan_max_attempts,
+                confirm_wait_timeout=args.confirm_wait_timeout,
+                confirm_poll_interval=args.confirm_poll_interval,
             )
         except Exception as e:
             print(f"Failed when doing task: {args.instruction}")
@@ -355,6 +371,8 @@ def main():
                 status_timeline_max_events=args.status_timeline_max_events,
                 web_max_steps=args.web_max_steps,
                 web_replan_max_attempts=args.web_replan_max_attempts,
+                confirm_wait_timeout=args.confirm_wait_timeout,
+                confirm_poll_interval=args.confirm_poll_interval,
             )
             print("\n\nDONE:", task["instruction"])
             print("IMPORTANT: Please reset the device as needed before running the next task!")

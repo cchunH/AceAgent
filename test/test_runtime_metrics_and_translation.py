@@ -258,6 +258,27 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
                 "task_id": "t2",
                 "step_id": 1,
                 "chain_mode": "guiagent_v2",
+                "event_type": "pending_confirm",
+                "status": "BLOCKED",
+                "intent_key": "global:PAY:ORDER",
+                "confirm_id": "r2:t2:1",
+                "policy_decision": "confirm",
+            },
+            {
+                "run_id": "r2",
+                "task_id": "t2",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "confirm_approved",
+                "status": "SUCCESS",
+                "intent_key": "global:PAY:ORDER",
+                "confirm_id": "r2:t2:1",
+            },
+            {
+                "run_id": "r2",
+                "task_id": "t2",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
                 "event_type": "task_end",
                 "status": "FAILED",
                 "intent_key": "global:TASK:END",
@@ -266,6 +287,8 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
         metrics = compute_metrics_from_events(rows)
         self.assertEqual(metrics["web_plan_count"], 1)
         self.assertAlmostEqual(metrics["task_success_rate"], 0.0)
+        self.assertEqual(metrics["pending_confirm_count"], 1)
+        self.assertEqual(metrics["confirm_approved_count"], 1)
 
     def test_compute_timeseries_from_events(self):
         rows = [

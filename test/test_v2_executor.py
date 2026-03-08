@@ -41,6 +41,18 @@ class _FakeWebSkill:
         }
 
 
+class _ConfirmGuardPolicy:
+    def decide(self, intent_key, action, context):  # noqa: ANN001
+        del intent_key, action, context
+        return {
+            "decision": "confirm",
+            "reason": "HIGH_RISK_INTENT",
+            "category": "risk_control",
+            "policy_source": "ut",
+            "policy_version": "v1",
+        }
+
+
 def _build_hooks():
     hooks = HookManager()
     hooks.register_pre_assertion_hook(semantic_pre_assertion_hook)
@@ -274,6 +286,79 @@ class TestV2Executor(unittest.TestCase):
         self.assertTrue(events)
         self.assertTrue(all(e.get("session_id") == "sess-route-1" for e in events))
         self.assertEqual(web_skill.calls[0]["session"]["session_id"], "sess-route-1")
+
+    def test_run_probe_confirm_approved_then_continue(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+        pending = []
+
+        def _register(payload):
+            pending.append(dict(payload))
+            return payload
+
+        def _wait(confirm_id, timeout_sec, poll_interval):
+            del timeout_sec, poll_interval
+            return {
+                "confirm_id": confirm_id,
+                "decision": "approve",
+                "actor": "ops",
+                "source": "control-panel",
+            }
+
+        result = run_probe_step(
+            instruction="在手机里等待一下",
+            run_id="r-confirm-ok",
+            task_id="t-confirm-ok",
+            session_id="sess-confirm-ok",
+            step_id=2,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=_ConfirmGuardPolicy(),
+            web_skill=web_skill,
+            confirm_wait_timeout=5.0,
+            register_confirmation=_register,
+            wait_confirmation=_wait,
+        )
+
+        self.assertEqual(result.status, "SUCCESS")
+        self.assertTrue(pending)
+        event_types = [e["event_type"] for e in events]
+        self.assertIn("pending_confirm", event_types)
+        self.assertIn("confirm_approved", event_types)
+        self.assertNotIn("handover", event_types)
+
+    def test_run_probe_confirm_rejected_handover(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+
+        result = run_probe_step(
+            instruction="在手机里等待一下",
+            run_id="r-confirm-no",
+            task_id="t-confirm-no",
+            session_id="sess-confirm-no",
+            step_id=3,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=_ConfirmGuardPolicy(),
+            web_skill=web_skill,
+            confirm_wait_timeout=5.0,
+            register_confirmation=lambda payload: payload,
+            wait_confirmation=lambda confirm_id, timeout_sec, poll_interval: {
+                "confirm_id": confirm_id,
+                "decision": "reject",
+                "actor": "ops",
+            },
+        )
+
+        self.assertEqual(result.status, "HANDOVER")
+        event_types = [e["event_type"] for e in events]
+        self.assertIn("pending_confirm", event_types)
+        self.assertIn("confirm_rejected", event_types)
+        self.assertIn("handover", event_types)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.17`
+- 版本：`v1.18`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -51,6 +51,7 @@
 37. `SessionRuntimeServer` 新增 `GET /runtime/metrics`，控制面可直接查询运行聚合指标（支持 `run_id/task_id/session_id/time-range` 过滤）。
 38. `SessionRuntimeServer` 新增 `GET /runtime/metrics/timeseries`，支持按时间桶查询跨 run/session 的时序指标（`bucket_sec/max_buckets`）。
 39. `GuardPolicy` 新增 web 域名门禁（`web_domain_allowlist/web_domain_denylist`），web_skill 执行前可按域名做 allow/deny/confirm 决策。
+40. 确认流最小闭环已接入：`pending_confirm -> confirm_approved|confirm_rejected|confirm_timeout`，并新增控制面确认接口（`/runtime/confirm`）。
 
 尚未落地：
 1. `watchdog` 深化生产化（下载/安全扩展插件、聚合统计导出）。
@@ -203,6 +204,10 @@ class AgentBrowserSkill:
 - `fallback_action_selected`
 - `web_replan_policy_decision`
 - `web_replan_policy_update`
+- `pending_confirm`
+- `confirm_approved`
+- `confirm_rejected`
+- `confirm_timeout`
 - `control_plane_audit`
 
 建议新增关键字段：

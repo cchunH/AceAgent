@@ -1,6 +1,6 @@
 import unittest
 
-from guiagent_v2.runtime.status_api import TaskStatusStore
+from guiagent_v2.runtime.status_api import RuntimeConfirmationStore, TaskStatusStore
 
 
 class TestRuntimeStatusApi(unittest.TestCase):
@@ -186,6 +186,58 @@ class TestRuntimeStatusApi(unittest.TestCase):
         self.assertEqual(len(metrics["series"]), 2)
         self.assertEqual(metrics["series"][0]["event_count"], 1)
         self.assertEqual(metrics["series"][1]["event_count"], 1)
+
+    def test_confirmation_store_register_resolve_and_wait(self):
+        store = RuntimeConfirmationStore()
+        pending = store.register_pending(
+            {
+                "confirm_id": "run-x:task-y:1",
+                "run_id": "run-x",
+                "task_id": "task-y",
+                "step_id": 1,
+                "session_id": "sess-z",
+                "intent_key": "global:PAY:ORDER",
+            }
+        )
+        self.assertEqual(pending["status"], "PENDING")
+
+        resolved = store.resolve(
+            confirm_id="run-x:task-y:1",
+            decision="approve",
+            actor="ops",
+            source="control-panel",
+            note="approved in ut",
+        )
+        self.assertIsNotNone(resolved)
+        self.assertEqual(resolved["status"], "APPROVED")
+        self.assertEqual(resolved["decision"], "approve")
+
+        waited = store.wait_for_decision("run-x:task-y:1", timeout_sec=1.0, poll_interval_sec=0.1)
+        self.assertIsNotNone(waited)
+        self.assertEqual(waited["status"], "APPROVED")
+
+    def test_confirmation_store_build_id_from_task_scope(self):
+        store = RuntimeConfirmationStore()
+        store.register_pending(
+            {
+                "run_id": "run-a",
+                "task_id": "task-b",
+                "step_id": 9,
+            }
+        )
+        resolved = store.resolve(
+            run_id="run-a",
+            task_id="task-b",
+            step_id=9,
+            decision="reject",
+            actor="ops",
+        )
+        self.assertIsNotNone(resolved)
+        self.assertEqual(resolved["status"], "REJECTED")
+
+        items = store.list(run_id="run-a", status="REJECTED")
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["confirm_id"], "run-a:task-b:9")
 
 
 if __name__ == "__main__":

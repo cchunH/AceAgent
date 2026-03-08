@@ -23,6 +23,10 @@ EVENT_REQUIRED_EXTRA_FIELDS: dict[str, tuple[str, ...]] = {
     "adapter_call": ("adapter_backend",),
     "web_replan": ("web_plan_id", "web_replan_attempt", "failed_reason"),
     "web_replan_skipped": ("web_plan_id", "web_replan_attempt", "failed_reason", "web_replan_strategy"),
+    "pending_confirm": ("confirm_id", "policy_decision"),
+    "confirm_approved": ("confirm_id",),
+    "confirm_rejected": ("confirm_id",),
+    "confirm_timeout": ("confirm_id",),
     "watchdog_alert": ("watchdog_name", "watchdog_severity", "source_event_type"),
     "control_plane_audit": ("control_action", "http_method", "http_path", "actor", "source"),
 }

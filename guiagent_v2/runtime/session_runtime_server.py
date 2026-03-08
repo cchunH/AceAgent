@@ -607,6 +607,33 @@ class SessionRuntimeAPIServer:
                     )
                     return
 
+                if path == "/runtime/confirms":
+                    self._ok(
+                        {
+                            "items": runtime.list_runtime_confirmations(
+                                run_id=_first_query(params, "run_id"),
+                                task_id=_first_query(params, "task_id"),
+                                session_id=_first_query(params, "session_id"),
+                                status=_first_query(params, "status"),
+                                limit=_as_int(_first_query(params, "limit"), default=100),
+                            )
+                        }
+                    )
+                    return
+
+                if path.startswith("/runtime/confirms/"):
+                    confirm_id = path.split("/", 3)[3].strip()
+                    item = runtime.get_runtime_confirmation(confirm_id)
+                    if item is None:
+                        self._error(
+                            "CONFIRM_NOT_FOUND",
+                            f"confirmation not found: {confirm_id}",
+                            status_code=404,
+                        )
+                        return
+                    self._ok(item)
+                    return
+
                 if path.startswith("/runtime/status/"):
                     tail = path[len("/runtime/status/") :]
                     if "/" not in tail:
@@ -724,6 +751,76 @@ class SessionRuntimeAPIServer:
                         task_id=item.get("task_id"),
                     )
                     self._ok(item, status_code=201)
+                    return
+
+                if path == "/runtime/confirm":
+                    decision = str(payload.get("decision", "")).strip().lower()
+                    if decision not in {"approve", "reject"}:
+                        self._error("INVALID_DECISION", "decision must be approve|reject", status_code=400)
+                        self._audit_write(
+                            action="submit_confirm_decision",
+                            method="POST",
+                            path=path,
+                            status="FAILED",
+                            payload=payload,
+                            run_id=str(payload.get("run_id", "")).strip() or None,
+                            task_id=str(payload.get("task_id", "")).strip() or None,
+                            detail={"reason_code": "INVALID_DECISION"},
+                        )
+                        return
+                    step_id = _as_int(payload.get("step_id"), default=None)
+                    try:
+                        item = runtime.submit_runtime_confirmation(
+                            decision=decision,
+                            confirm_id=payload.get("confirm_id"),
+                            run_id=payload.get("run_id"),
+                            task_id=payload.get("task_id"),
+                            step_id=step_id,
+                            actor=self._actor(payload),
+                            source=self._source(payload),
+                            note=payload.get("note"),
+                        )
+                    except ValueError as exc:
+                        self._error("INVALID_DECISION", str(exc), status_code=400)
+                        self._audit_write(
+                            action="submit_confirm_decision",
+                            method="POST",
+                            path=path,
+                            status="FAILED",
+                            payload=payload,
+                            run_id=str(payload.get("run_id", "")).strip() or None,
+                            task_id=str(payload.get("task_id", "")).strip() or None,
+                            detail={"reason_code": "INVALID_DECISION"},
+                        )
+                        return
+                    if item is None:
+                        self._error("CONFIRM_NOT_FOUND", "confirmation not found", status_code=404)
+                        self._audit_write(
+                            action="submit_confirm_decision",
+                            method="POST",
+                            path=path,
+                            status="FAILED",
+                            payload=payload,
+                            run_id=str(payload.get("run_id", "")).strip() or None,
+                            task_id=str(payload.get("task_id", "")).strip() or None,
+                            detail={"reason_code": "CONFIRM_NOT_FOUND"},
+                        )
+                        return
+                    self._audit_write(
+                        action="submit_confirm_decision",
+                        method="POST",
+                        path=path,
+                        status="SUCCESS",
+                        payload=payload,
+                        session_id=item.get("session_id"),
+                        run_id=item.get("run_id"),
+                        task_id=item.get("task_id"),
+                        detail={
+                            "confirm_id": item.get("confirm_id"),
+                            "confirm_decision": item.get("decision"),
+                        },
+                    )
+                    self._ok(item)
                     return
 
                 if path.startswith("/tasks/") and path.endswith("/wait"):

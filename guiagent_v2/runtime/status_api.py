@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import os
-from threading import Lock
+import time
+from threading import Condition, Lock
 from typing import Any
 
 
@@ -46,6 +47,178 @@ def _env_positive_int(name: str) -> int | None:
     if value <= 0:
         return None
     return value
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+
+
+def build_confirmation_id(run_id: str, task_id: str, step_id: int) -> str:
+    return f"{str(run_id).strip()}:{str(task_id).strip()}:{int(step_id)}"
+
+
+class RuntimeConfirmationStore:
+    """In-process confirmation store for guarded actions."""
+
+    def __init__(self):
+        self._lock = Lock()
+        self._cond = Condition(self._lock)
+        self._items: dict[str, dict[str, Any]] = {}
+
+    def register_pending(self, payload: dict[str, Any]) -> dict[str, Any]:
+        data = dict(payload or {})
+        run_id = str(data.get("run_id", "")).strip()
+        task_id = str(data.get("task_id", "")).strip()
+        step_id = int(data.get("step_id", 0) or 0)
+        confirm_id = str(data.get("confirm_id", "")).strip()
+        if not confirm_id:
+            confirm_id = build_confirmation_id(run_id, task_id, step_id)
+
+        with self._lock:
+            existing = self._items.get(confirm_id)
+            now_ts = _utc_now_iso()
+            if existing is not None and str(existing.get("status", "")).upper() == "PENDING":
+                existing["updated_at"] = now_ts
+                return dict(existing)
+
+            item = {
+                "confirm_id": confirm_id,
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": step_id,
+                "session_id": str(data.get("session_id", "")).strip() or None,
+                "intent_key": str(data.get("intent_key", "")).strip() or None,
+                "channel": str(data.get("channel", "")).strip() or None,
+                "route_reason": str(data.get("route_reason", "")).strip() or None,
+                "policy_decision": str(data.get("policy_decision", "confirm")).strip() or "confirm",
+                "policy_reason": str(data.get("policy_reason", "")).strip() or None,
+                "policy_category": str(data.get("policy_category", "")).strip() or None,
+                "status": "PENDING",
+                "decision": None,
+                "actor": None,
+                "source": None,
+                "note": None,
+                "created_at": now_ts,
+                "updated_at": now_ts,
+                "resolved_at": None,
+            }
+            self._items[confirm_id] = item
+            self._cond.notify_all()
+            return dict(item)
+
+    def resolve(
+        self,
+        *,
+        confirm_id: str | None = None,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        step_id: int | None = None,
+        decision: str,
+        actor: str | None = None,
+        source: str | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any] | None:
+        normalized_decision = str(decision or "").strip().lower()
+        if normalized_decision in {"approve", "approved", "allow"}:
+            resolved_status = "APPROVED"
+            resolved_decision = "approve"
+        elif normalized_decision in {"reject", "rejected", "deny"}:
+            resolved_status = "REJECTED"
+            resolved_decision = "reject"
+        else:
+            raise ValueError("decision must be approve|reject")
+
+        resolved_confirm_id = str(confirm_id or "").strip()
+        if not resolved_confirm_id:
+            if run_id is None or task_id is None or step_id is None:
+                return None
+            resolved_confirm_id = build_confirmation_id(str(run_id), str(task_id), int(step_id))
+
+        with self._lock:
+            item = self._items.get(resolved_confirm_id)
+            if item is None:
+                return None
+            now_ts = _utc_now_iso()
+            item["status"] = resolved_status
+            item["decision"] = resolved_decision
+            item["actor"] = str(actor or "").strip() or None
+            item["source"] = str(source or "").strip() or None
+            item["note"] = str(note or "").strip() or None
+            item["updated_at"] = now_ts
+            item["resolved_at"] = now_ts
+            self._cond.notify_all()
+            return dict(item)
+
+    def get(self, confirm_id: str) -> dict[str, Any] | None:
+        key = str(confirm_id or "").strip()
+        if not key:
+            return None
+        with self._lock:
+            item = self._items.get(key)
+            if item is None:
+                return None
+            return dict(item)
+
+    def list(
+        self,
+        *,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        session_id: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        normalized_run_id = str(run_id).strip() if run_id is not None else None
+        normalized_task_id = str(task_id).strip() if task_id is not None else None
+        normalized_session_id = str(session_id).strip() if session_id is not None else None
+        normalized_status = str(status).strip().upper() if status is not None else None
+        cap = _normalize_limit(limit, default=100)
+        if cap == 0:
+            return []
+        with self._lock:
+            items = [dict(item) for item in self._items.values()]
+        filtered: list[dict[str, Any]] = []
+        for item in items:
+            if normalized_run_id is not None and str(item.get("run_id", "")).strip() != normalized_run_id:
+                continue
+            if normalized_task_id is not None and str(item.get("task_id", "")).strip() != normalized_task_id:
+                continue
+            if normalized_session_id is not None and str(item.get("session_id", "")).strip() != normalized_session_id:
+                continue
+            if normalized_status is not None and str(item.get("status", "")).strip().upper() != normalized_status:
+                continue
+            filtered.append(item)
+        filtered.sort(key=lambda x: str(x.get("updated_at", "")), reverse=True)
+        if cap is None:
+            return filtered
+        return filtered[:cap]
+
+    def wait_for_decision(
+        self,
+        confirm_id: str,
+        timeout_sec: float = 0.0,
+        poll_interval_sec: float = 0.5,
+    ) -> dict[str, Any] | None:
+        key = str(confirm_id or "").strip()
+        if not key:
+            return None
+        timeout = max(0.0, float(timeout_sec))
+        poll = max(0.05, float(poll_interval_sec))
+        deadline = time.monotonic() + timeout
+        with self._lock:
+            while True:
+                item = self._items.get(key)
+                if item is None:
+                    return None
+                status = str(item.get("status", "")).upper()
+                if status in {"APPROVED", "REJECTED"}:
+                    return dict(item)
+                if timeout <= 0.0:
+                    return None
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                self._cond.wait(timeout=min(poll, remaining))
 
 
 class TaskStatusStore:
@@ -372,10 +545,15 @@ class TaskStatusStore:
 
 
 _GLOBAL_STATUS_STORE = TaskStatusStore()
+_GLOBAL_CONFIRMATION_STORE = RuntimeConfirmationStore()
 
 
 def get_global_status_store() -> TaskStatusStore:
     return _GLOBAL_STATUS_STORE
+
+
+def get_global_confirmation_store() -> RuntimeConfirmationStore:
+    return _GLOBAL_CONFIRMATION_STORE
 
 
 def configure_global_status_store(*, max_timeline_events_per_task: int | None = None) -> None:
@@ -495,4 +673,64 @@ def compute_runtime_metrics_timeseries(
         until_ts=until_ts,
         bucket_sec=bucket_sec,
         max_buckets=max_buckets,
+    )
+
+
+def register_pending_confirmation(payload: dict[str, Any]) -> dict[str, Any]:
+    return _GLOBAL_CONFIRMATION_STORE.register_pending(payload)
+
+
+def submit_confirmation_decision(
+    *,
+    decision: str,
+    confirm_id: str | None = None,
+    run_id: str | None = None,
+    task_id: str | None = None,
+    step_id: int | None = None,
+    actor: str | None = None,
+    source: str | None = None,
+    note: str | None = None,
+) -> dict[str, Any] | None:
+    return _GLOBAL_CONFIRMATION_STORE.resolve(
+        confirm_id=confirm_id,
+        run_id=run_id,
+        task_id=task_id,
+        step_id=step_id,
+        decision=decision,
+        actor=actor,
+        source=source,
+        note=note,
+    )
+
+
+def get_confirmation(confirm_id: str) -> dict[str, Any] | None:
+    return _GLOBAL_CONFIRMATION_STORE.get(confirm_id)
+
+
+def list_confirmations(
+    *,
+    run_id: str | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
+    status: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    return _GLOBAL_CONFIRMATION_STORE.list(
+        run_id=run_id,
+        task_id=task_id,
+        session_id=session_id,
+        status=status,
+        limit=limit,
+    )
+
+
+def wait_confirmation_decision(
+    confirm_id: str,
+    timeout_sec: float = 0.0,
+    poll_interval_sec: float = 0.5,
+) -> dict[str, Any] | None:
+    return _GLOBAL_CONFIRMATION_STORE.wait_for_decision(
+        confirm_id=confirm_id,
+        timeout_sec=timeout_sec,
+        poll_interval_sec=poll_interval_sec,
     )

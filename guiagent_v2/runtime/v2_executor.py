@@ -20,6 +20,8 @@ from .web_replan_policy import WebReplanPolicy
 
 
 EventEmitter = Callable[[dict[str, Any]], None]
+ConfirmationRegistrar = Callable[[dict[str, Any]], dict[str, Any] | None]
+ConfirmationWaiter = Callable[[str, float, float], dict[str, Any] | None]
 _URL_PATTERN = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 _WEB_HINTS = (
     "http://",
@@ -206,6 +208,10 @@ def run_probe_step(
     screen_height: int = 2340,
     web_max_steps: int = 3,
     web_replan_max_attempts: int = 1,
+    confirm_wait_timeout: float = 0.0,
+    confirm_poll_interval: float = 0.5,
+    register_confirmation: ConfirmationRegistrar | None = None,
+    wait_confirmation: ConfirmationWaiter | None = None,
 ) -> V2ProbeResult:
     loop_detector = loop_detector or LoopDetector()
     context_compactor = context_compactor or ContextCompactor()
@@ -334,41 +340,209 @@ def run_probe_step(
     )
 
     if guard_decision != "allow":
-        reason_code = "GUARD_CONFIRM_REQUIRED" if guard_decision == "confirm" else "GUARD_DENIED"
-        _emit(
-            {
+        if guard_decision == "confirm":
+            confirm_id = f"{run_id}:{task_id}:{step_id}"
+            pending_payload = {
+                "confirm_id": confirm_id,
                 "run_id": run_id,
                 "task_id": task_id,
-                "step_id": step_id,
-                "chain_mode": chain_mode,
-                "event_type": "handover",
-                "status": "HANDOVER",
+                "step_id": int(step_id),
+                "session_id": runtime_session_id,
                 "intent_key": request.intent_key,
-                "reason_code": reason_code,
-                **route_info,
+                "channel": route_info.get("channel"),
+                "route_reason": route_info.get("route_reason"),
+                "policy_decision": "confirm",
+                "policy_reason": guard.get("reason"),
+                "policy_category": guard.get("category"),
             }
-        )
-        _emit(
-            {
-                "run_id": run_id,
-                "task_id": task_id,
-                "step_id": step_id,
-                "chain_mode": chain_mode,
-                "event_type": "step_end",
-                "status": "HANDOVER",
-                "intent_key": request.intent_key,
-                "assertion_result": {"passed": False, "reason_code": reason_code},
-                "post_check": {"passed": False, "reason_code": reason_code},
-                "recovery_level": "L3",
-                **route_info,
-            }
-        )
-        return V2ProbeResult(
-            status="HANDOVER",
-            intent_key=request.intent_key,
-            channel=route_info.get("channel", "mobile_native"),
-            route_reason=route_info.get("route_reason", "unknown"),
-        )
+            if register_confirmation is not None:
+                try:
+                    register_confirmation(pending_payload)
+                except Exception:
+                    pass
+
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "pending_confirm",
+                    "status": "BLOCKED",
+                    "intent_key": request.intent_key,
+                    "confirm_id": confirm_id,
+                    "policy_decision": "confirm",
+                    "policy_reason": guard.get("reason"),
+                    "policy_category": guard.get("category"),
+                    "confirm_wait_timeout_sec": float(max(0.0, confirm_wait_timeout)),
+                    **route_info,
+                }
+            )
+
+            decision = None
+            if wait_confirmation is not None:
+                decision = wait_confirmation(
+                    confirm_id,
+                    float(max(0.0, confirm_wait_timeout)),
+                    float(max(0.05, confirm_poll_interval)),
+                )
+            if decision is not None:
+                decision_value = str(decision.get("decision", "")).strip().lower()
+                if decision_value in {"approve", "approved", "allow"}:
+                    _emit(
+                        {
+                            "run_id": run_id,
+                            "task_id": task_id,
+                            "step_id": step_id,
+                            "chain_mode": chain_mode,
+                            "event_type": "confirm_approved",
+                            "status": "SUCCESS",
+                            "intent_key": request.intent_key,
+                            "confirm_id": confirm_id,
+                            "confirm_actor": decision.get("actor"),
+                            "confirm_source": decision.get("source"),
+                            "confirm_note": decision.get("note"),
+                            **route_info,
+                        }
+                    )
+                else:
+                    _emit(
+                        {
+                            "run_id": run_id,
+                            "task_id": task_id,
+                            "step_id": step_id,
+                            "chain_mode": chain_mode,
+                            "event_type": "confirm_rejected",
+                            "status": "HANDOVER",
+                            "intent_key": request.intent_key,
+                            "confirm_id": confirm_id,
+                            "confirm_actor": decision.get("actor"),
+                            "confirm_source": decision.get("source"),
+                            "confirm_note": decision.get("note"),
+                            **route_info,
+                        }
+                    )
+                    reason_code = "GUARD_CONFIRM_REJECTED"
+                    _emit(
+                        {
+                            "run_id": run_id,
+                            "task_id": task_id,
+                            "step_id": step_id,
+                            "chain_mode": chain_mode,
+                            "event_type": "handover",
+                            "status": "HANDOVER",
+                            "intent_key": request.intent_key,
+                            "reason_code": reason_code,
+                            **route_info,
+                        }
+                    )
+                    _emit(
+                        {
+                            "run_id": run_id,
+                            "task_id": task_id,
+                            "step_id": step_id,
+                            "chain_mode": chain_mode,
+                            "event_type": "step_end",
+                            "status": "HANDOVER",
+                            "intent_key": request.intent_key,
+                            "assertion_result": {"passed": False, "reason_code": reason_code},
+                            "post_check": {"passed": False, "reason_code": reason_code},
+                            "recovery_level": "L3",
+                            **route_info,
+                        }
+                    )
+                    return V2ProbeResult(
+                        status="HANDOVER",
+                        intent_key=request.intent_key,
+                        channel=route_info.get("channel", "mobile_native"),
+                        route_reason=route_info.get("route_reason", "unknown"),
+                    )
+            else:
+                reason_code = "GUARD_CONFIRM_TIMEOUT" if float(confirm_wait_timeout) > 0 else "GUARD_CONFIRM_PENDING"
+                if float(confirm_wait_timeout) > 0:
+                    _emit(
+                        {
+                            "run_id": run_id,
+                            "task_id": task_id,
+                            "step_id": step_id,
+                            "chain_mode": chain_mode,
+                            "event_type": "confirm_timeout",
+                            "status": "HANDOVER",
+                            "intent_key": request.intent_key,
+                            "confirm_id": confirm_id,
+                            **route_info,
+                        }
+                    )
+                _emit(
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": step_id,
+                        "chain_mode": chain_mode,
+                        "event_type": "handover",
+                        "status": "HANDOVER",
+                        "intent_key": request.intent_key,
+                        "reason_code": reason_code,
+                        **route_info,
+                    }
+                )
+                _emit(
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": step_id,
+                        "chain_mode": chain_mode,
+                        "event_type": "step_end",
+                        "status": "HANDOVER",
+                        "intent_key": request.intent_key,
+                        "assertion_result": {"passed": False, "reason_code": reason_code},
+                        "post_check": {"passed": False, "reason_code": reason_code},
+                        "recovery_level": "L3",
+                        **route_info,
+                    }
+                )
+                return V2ProbeResult(
+                    status="HANDOVER",
+                    intent_key=request.intent_key,
+                    channel=route_info.get("channel", "mobile_native"),
+                    route_reason=route_info.get("route_reason", "unknown"),
+                )
+        else:
+            reason_code = "GUARD_DENIED"
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "handover",
+                    "status": "HANDOVER",
+                    "intent_key": request.intent_key,
+                    "reason_code": reason_code,
+                    **route_info,
+                }
+            )
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "step_end",
+                    "status": "HANDOVER",
+                    "intent_key": request.intent_key,
+                    "assertion_result": {"passed": False, "reason_code": reason_code},
+                    "post_check": {"passed": False, "reason_code": reason_code},
+                    "recovery_level": "L3",
+                    **route_info,
+                }
+            )
+            return V2ProbeResult(
+                status="HANDOVER",
+                intent_key=request.intent_key,
+                channel=route_info.get("channel", "mobile_native"),
+                route_reason=route_info.get("route_reason", "unknown"),
+            )
 
     pipeline = StepPipeline(hooks=hooks)
     registry = build_default_action_registry(pipeline=pipeline, web_skill=web_skill)

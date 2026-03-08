@@ -15,7 +15,12 @@ from .guard_policy import GuardPolicy
 from .hooks import HookManager
 from .loop_detector import LoopDetector
 from .reporting import write_runtime_summary
-from .status_api import configure_global_status_store, get_global_status_store
+from .status_api import (
+    configure_global_status_store,
+    get_global_status_store,
+    register_pending_confirmation,
+    wait_confirmation_decision,
+)
 from .v2_executor import run_probe_step
 from .web_skill_router import WebSkillRouter
 from .watchdogs import WatchdogManager, build_default_watchdog_manager
@@ -467,6 +472,8 @@ def run_single_task_with_runtime(
     status_timeline_max_events=None,
     web_max_steps=3,
     web_replan_max_attempts=1,
+    confirm_wait_timeout=0.0,
+    confirm_poll_interval=0.5,
 ):
     future_tasks = future_tasks or []
     runtime_config = _load_runtime_config()
@@ -540,6 +547,10 @@ def run_single_task_with_runtime(
             screen_height=2340,
             web_max_steps=int(web_max_steps),
             web_replan_max_attempts=int(web_replan_max_attempts),
+            confirm_wait_timeout=float(confirm_wait_timeout),
+            confirm_poll_interval=float(confirm_poll_interval),
+            register_confirmation=register_pending_confirmation,
+            wait_confirmation=wait_confirmation_decision,
         )
 
     should_delegate_legacy = not (runtime_mode == "guiagent_v2" and bool(v2_skip_legacy))

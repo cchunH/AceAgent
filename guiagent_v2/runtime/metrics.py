@@ -89,6 +89,10 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     web_step_success_events = [e for e in web_step_end_events if str(e.get("status", "")).upper() == "SUCCESS"]
     fallback_events = [e for e in events if e.get("event_type") == "skill_fallback"]
     fallback_action_events = [e for e in events if e.get("event_type") == "fallback_action_selected"]
+    pending_confirm_events = [e for e in events if e.get("event_type") == "pending_confirm"]
+    confirm_approved_events = [e for e in events if e.get("event_type") == "confirm_approved"]
+    confirm_rejected_events = [e for e in events if e.get("event_type") == "confirm_rejected"]
+    confirm_timeout_events = [e for e in events if e.get("event_type") == "confirm_timeout"]
 
     success_tasks = [e for e in task_end_events if str(e.get("status", "")).upper() == "SUCCESS"]
     latencies = [int(e.get("latency_ms", 0)) for e in step_end_events if e.get("latency_ms") is not None]
@@ -99,6 +103,8 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     total_assertions = len(assertion_events)
     total_web_plans = len(web_plan_events)
     total_web_steps = len(web_step_end_events)
+    total_pending_confirms = len(pending_confirm_events)
+    total_resolved_confirms = len(confirm_approved_events) + len(confirm_rejected_events)
 
     replan_tasks = {_task_key(e) for e in web_replan_events}
     fallback_tasks = {_task_key(e) for e in fallback_events}
@@ -131,6 +137,16 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         ) if replan_tasks else 0.0,
         "web_replan_task_count": len(replan_tasks),
         "fallback_action_selected_count": len(fallback_action_events),
+        "pending_confirm_count": total_pending_confirms,
+        "confirm_approved_count": len(confirm_approved_events),
+        "confirm_rejected_count": len(confirm_rejected_events),
+        "confirm_timeout_count": len(confirm_timeout_events),
+        "confirm_resolution_rate": (
+            total_resolved_confirms / total_pending_confirms
+        ) if total_pending_confirms else 0.0,
+        "confirm_approval_rate": (
+            len(confirm_approved_events) / total_resolved_confirms
+        ) if total_resolved_confirms else 0.0,
         "counts": {
             "events": len(events),
             "task_end": total_tasks,
@@ -143,6 +159,10 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
             "web_step_end": total_web_steps,
             "skill_fallback": len(fallback_events),
             "fallback_action_selected": len(fallback_action_events),
+            "pending_confirm": total_pending_confirms,
+            "confirm_approved": len(confirm_approved_events),
+            "confirm_rejected": len(confirm_rejected_events),
+            "confirm_timeout": len(confirm_timeout_events),
         },
     }
 

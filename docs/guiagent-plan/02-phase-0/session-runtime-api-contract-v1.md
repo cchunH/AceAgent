@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.6`
+- 版本：`v1.7`
 - 更新时间：`2026-03-08`
 - 适用范围：`guiagent_v2/runtime/session_runtime_server.py`
 
@@ -142,6 +142,30 @@
   - `meta`（源事件统计，如 `source_event_count/events_without_ts`）
   - `scope`（本次查询过滤条件与事件总数）
 
+7. `GET /runtime/confirms?run_id=&task_id=&session_id=&status=&limit=`
+- 说明：查询确认流记录（默认按 `updated_at` 倒序）。
+- 典型状态：`PENDING|APPROVED|REJECTED`。
+
+8. `GET /runtime/confirms/{confirm_id}`
+- 说明：查询单条确认流记录。
+
+9. `POST /runtime/confirm`
+- 说明：提交确认决策（写接口，受鉴权约束）。
+- 请求体：
+```json
+{
+  "confirm_id": "run-1:task-1:1",
+  "run_id": "run-1",
+  "task_id": "task-1",
+  "step_id": 1,
+  "decision": "approve",
+  "note": "approved by operator"
+}
+```
+- 说明补充：
+  - `confirm_id` 与 `run_id/task_id/step_id` 二选一即可定位目标确认项。
+  - `decision` 仅允许 `approve|reject`。
+
 ## 4. 错误码
 
 1. `INVALID_BODY`
@@ -153,6 +177,8 @@
 7. `TASK_SUBMIT_FAILED`
 8. `UNAUTHORIZED`
 9. `NOT_FOUND`
+10. `CONFIRM_NOT_FOUND`
+11. `INVALID_DECISION`
 
 ## 5. 兼容约束
 

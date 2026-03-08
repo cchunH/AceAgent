@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.15`
+- 版本：`v2.16`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -115,6 +115,11 @@
 - 现状：新增 `/runtime/audit`，支持按 `run_id/task_id/session_id/actor/source/control_action/status` 过滤，并支持 `cursor + since_ts/until_ts` 分页与时间窗口查询。
 - 距离评估：`完成（v1）`
 
+20. 确认流最小闭环
+- 证据模块：`guiagent_v2/runtime/v2_executor.py`, `guiagent_v2/runtime/status_api.py`, `guiagent_v2/runtime/session_runtime_server.py`
+- 现状：已支持 `pending_confirm -> confirm_approved|confirm_rejected|confirm_timeout`；控制面支持 `/runtime/confirms` 查询与 `/runtime/confirm` 决策提交。
+- 距离评估：`完成（v0）`
+
 ### 2.2 部分落地（需增强）
 
 1. `SessionRuntime`
@@ -140,6 +145,12 @@
 - 现状：可走 `initial web plan + 错误码分流的局部 replan + 上下文感知 fallback`，支持 `web_replan_max_attempts` 配置；新增 `WebReplanPolicy` 做任务内反馈回灌，动态调整同类错误重规划预算，并输出策略事件。
 - 距离评估：`部分完成`
 - 关键差距：复杂网页任务规划能力仍偏启发式；缺少步骤级学习反馈与跨任务经验回灌。
+
+4. 确认流生产化
+- 证据模块：`v2_executor.py`, `session_runtime_server.py`
+- 现状：已完成最小确认闭环并可通过控制面决策。
+- 距离评估：`部分完成`
+- 关键差距：缺确认任务长期堆积治理、批量确认、前端交互模型与多步任务恢复协议。
 
 ### 2.3 未落地（待实施）
 

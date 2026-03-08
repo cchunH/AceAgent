@@ -7,7 +7,7 @@ import os
 
 from guiagent_v2.runtime.session_runtime import SessionRuntime
 from guiagent_v2.runtime.session_runtime_server import SessionRuntimeAPIServer
-from guiagent_v2.runtime.status_api import get_global_status_store
+from guiagent_v2.runtime.status_api import get_global_status_store, register_pending_confirmation
 
 
 def _http_json(
@@ -269,6 +269,51 @@ class TestSessionRuntimeServer(unittest.TestCase):
         self.assertEqual(payload["scope"]["run_id"], run_id)
         self.assertEqual(payload["scope"]["session_id"], session_id)
         self.assertGreaterEqual(len(payload["series"]), 2)
+
+    def test_runtime_confirm_endpoints(self):
+        confirm = register_pending_confirmation(
+            {
+                "run_id": "run-confirm-http",
+                "task_id": "task-confirm-http",
+                "step_id": 7,
+                "session_id": "sess-confirm-http",
+                "intent_key": "global:PAY:ORDER",
+                "policy_decision": "confirm",
+                "policy_reason": "HIGH_RISK_INTENT",
+            }
+        )
+        confirm_id = confirm["confirm_id"]
+
+        code, body = _http_json(
+            self.base_url,
+            "GET",
+            f"/runtime/confirms?run_id=run-confirm-http&status=PENDING",
+        )
+        self.assertEqual(code, 200)
+        items = body["data"]["items"]
+        self.assertTrue(any(item["confirm_id"] == confirm_id for item in items))
+
+        code, body = _http_json(
+            self.base_url,
+            "POST",
+            "/runtime/confirm",
+            {
+                "confirm_id": confirm_id,
+                "decision": "approve",
+                "note": "approved via api",
+            },
+            headers={
+                "X-Actor": "ops-user",
+                "X-Source": "control-panel",
+            },
+        )
+        self.assertEqual(code, 200)
+        self.assertEqual(body["data"]["status"], "APPROVED")
+        self.assertEqual(body["data"]["decision"], "approve")
+
+        code, body = _http_json(self.base_url, "GET", f"/runtime/confirms/{confirm_id}")
+        self.assertEqual(code, 200)
+        self.assertEqual(body["data"]["status"], "APPROVED")
 
     def test_control_plane_audit_updates_timeline_without_audit_file(self):
         code, submit_body = _http_json(

@@ -10,12 +10,16 @@ from threading import Lock
 from typing import Any
 
 from .status_api import (
+    build_confirmation_id,
     compute_runtime_metrics as compute_runtime_metrics_api,
     compute_runtime_metrics_timeseries as compute_runtime_metrics_timeseries_api,
+    get_confirmation as get_runtime_confirmation_api,
     get_task_status,
     get_task_timeline,
+    list_confirmations as list_runtime_confirmations_api,
     list_events as list_runtime_events_api,
     query_events as query_runtime_events_api,
+    submit_confirmation_decision as submit_runtime_confirmation_api,
     list_tasks as list_runtime_tasks,
 )
 from .task_service import RuntimeTaskService, RunnerCallable
@@ -507,6 +511,52 @@ class SessionRuntime:
             bucket_sec=bucket_sec,
             max_buckets=max_buckets,
         )
+
+    def list_runtime_confirmations(
+        self,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        session_id: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        return list_runtime_confirmations_api(
+            run_id=run_id,
+            task_id=task_id,
+            session_id=session_id,
+            status=status,
+            limit=limit,
+        )
+
+    def get_runtime_confirmation(self, confirm_id: str) -> dict[str, Any] | None:
+        return get_runtime_confirmation_api(confirm_id)
+
+    def submit_runtime_confirmation(
+        self,
+        *,
+        decision: str,
+        confirm_id: str | None = None,
+        run_id: str | None = None,
+        task_id: str | None = None,
+        step_id: int | None = None,
+        actor: str | None = None,
+        source: str | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any] | None:
+        return submit_runtime_confirmation_api(
+            decision=decision,
+            confirm_id=confirm_id,
+            run_id=run_id,
+            task_id=task_id,
+            step_id=step_id,
+            actor=actor,
+            source=source,
+            note=note,
+        )
+
+    @staticmethod
+    def build_confirmation_id(run_id: str, task_id: str, step_id: int) -> str:
+        return build_confirmation_id(run_id, task_id, step_id)
 
     def shutdown_session(self, session_id: str, wait: bool = True) -> bool:
         sid = str(session_id or "").strip()
