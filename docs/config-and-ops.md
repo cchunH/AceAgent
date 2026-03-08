@@ -110,6 +110,10 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 - Web Skill 旁路事件：`skill_route`、`skill_fallback`
 - 该补充用于移动端主链 + Web 子任务旁路的统一观测
 
+当前 v2 mobile 分支已支持蓝图快速匹配提示：
+- `fast_match_hint.match_source`：`skeleton|vector|fused`
+- 便于区分“结构命中”与“语义近邻命中”的来源
+
 进程内状态 API：
 - `guiagent_v2.runtime.get_task_status(run_id, task_id)`
 - `guiagent_v2.runtime.get_task_timeline(run_id, task_id)`

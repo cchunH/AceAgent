@@ -223,6 +223,7 @@ while True:
 - `route_reason`
 - `skill_name`
 - `session_id`
+- `fast_match_hint.match_source` (`skeleton|vector|fused`)
 
 当前新增事件：
 - `skill_route`

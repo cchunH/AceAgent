@@ -40,6 +40,9 @@ _WEB_HINTS = (
 _CORE_ANCHOR_MIN_CONFIDENCE = 0.45
 _AUX_ANCHOR_RETRY_THRESHOLD = 0.35
 _ANCHOR_MICRO_RETRY_MAX = 1
+_BLUEPRINT_SKELETON_ACCEPT_SCORE = 0.55
+_BLUEPRINT_FUSED_ACCEPT_SCORE = 0.38
+_BLUEPRINT_VECTOR_STRONG_SCORE = 0.72
 
 
 @dataclass
@@ -244,10 +247,54 @@ def _choose_better_anchor_result(primary: dict[str, Any], candidate: dict[str, A
     return candidate if c_score > p_score else primary
 
 
+def _clip01(value: Any) -> float:
+    return max(0.0, min(1.0, _as_float(value, 0.0)))
+
+
+def _normalize_vector_similarity(value: Any) -> float:
+    score = _as_float(value, 0.0)
+    if score < 0.0:
+        score = (score + 1.0) / 2.0
+    return _clip01(score)
+
+
+def _build_vector_query_candidates(instruction: str, step_context: dict[str, Any]) -> list[str]:
+    parts: list[str] = []
+    base = str(instruction or "").strip()
+    if base:
+        parts.append(base)
+    for item in list(step_context.get("perception_infos_pre", []))[:12]:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text", "")).strip()
+        if not text or text == "icon: None":
+            continue
+        parts.append(text)
+
+    candidates: list[str] = []
+    full_query = " | ".join(parts).strip()
+    if full_query:
+        candidates.append(full_query)
+
+    token_query_parts: list[str] = []
+    seen_tokens: set[str] = set()
+    for text in parts:
+        for token in re.findall(r"[a-z0-9_]+", str(text).lower()):
+            if len(token) <= 1 or token in seen_tokens:
+                continue
+            seen_tokens.add(token)
+            token_query_parts.append(token)
+    token_query = " ".join(token_query_parts).strip()
+    if token_query and token_query not in candidates:
+        candidates.append(token_query)
+    return candidates
+
+
 def _resolve_blueprint_context(
     *,
     blueprint_repo: Any,
     request_intent_key: str,
+    instruction: str,
     step_context: dict[str, Any],
     screen_width: int,
     screen_height: int,
@@ -266,23 +313,109 @@ def _resolve_blueprint_context(
             min_presence_ratio=1.0,
             max_nodes=8,
         )
-        candidates = blueprint_repo.match_by_skeleton(
+        skeleton_candidates = blueprint_repo.match_by_skeleton(
             observed_skeleton=observed_skeleton.to_dict(),
             app_state="global:DEFAULT",
-            top_k=1,
+            top_k=3,
         )
-        if candidates:
-            top = candidates[0]
-            if float(top.get("score", 0.0)) >= 0.55:
-                selected_blueprint = blueprint_repo.get_blueprint(
-                    str(top.get("intent_key", "")),
-                    app_state="global:DEFAULT",
-                )
-                fast_match_hint = {
-                    "matched_intent_key": top.get("intent_key"),
-                    "matched_score": top.get("score"),
-                    "signature_hit": top.get("signature_hit"),
+        top_skeleton = skeleton_candidates[0] if skeleton_candidates else None
+        if top_skeleton and _clip01(top_skeleton.get("score", 0.0)) >= _BLUEPRINT_SKELETON_ACCEPT_SCORE:
+            selected_blueprint = blueprint_repo.get_blueprint(
+                str(top_skeleton.get("intent_key", "")),
+                app_state="global:DEFAULT",
+            )
+            fast_match_hint = {
+                "matched_intent_key": top_skeleton.get("intent_key"),
+                "match_source": "skeleton",
+                "skeleton_score": _clip01(top_skeleton.get("score", 0.0)),
+                "vector_score": 0.0,
+                "fused_score": _clip01(top_skeleton.get("score", 0.0)),
+                "signature_hit": bool(top_skeleton.get("signature_hit", False)),
+            }
+        else:
+            vector_candidates: list[dict[str, Any]] = []
+            for vector_query in _build_vector_query_candidates(instruction, step_context):
+                try:
+                    rows = blueprint_repo.match_by_vector(
+                        query_text=vector_query,
+                        app_state="global:DEFAULT",
+                        top_k=3,
+                    )
+                except Exception:
+                    rows = []
+                if rows:
+                    vector_candidates.extend(rows)
+
+            merged: dict[str, dict[str, Any]] = {}
+            for row in skeleton_candidates:
+                intent = str(row.get("intent_key", "")).strip()
+                if not intent:
+                    continue
+                merged[intent] = {
+                    "intent_key": intent,
+                    "skeleton_score": _clip01(row.get("score", 0.0)),
+                    "vector_score": 0.0,
+                    "signature_hit": bool(row.get("signature_hit", False)),
                 }
+            for row in vector_candidates:
+                intent = str(row.get("intent_key", "")).strip()
+                if not intent:
+                    continue
+                record = merged.setdefault(
+                    intent,
+                    {
+                        "intent_key": intent,
+                        "skeleton_score": 0.0,
+                        "vector_score": 0.0,
+                        "signature_hit": False,
+                    },
+                )
+                record["vector_score"] = max(
+                    float(record.get("vector_score", 0.0)),
+                    _normalize_vector_similarity(row.get("score", 0.0)),
+                )
+
+            for record in merged.values():
+                fused = (
+                    _clip01(record.get("skeleton_score", 0.0)) * 0.65
+                    + _clip01(record.get("vector_score", 0.0)) * 0.35
+                )
+                if bool(record.get("signature_hit", False)):
+                    fused += 0.05
+                record["fused_score"] = _clip01(fused)
+
+            if merged:
+                top = max(
+                    merged.values(),
+                    key=lambda x: (x.get("fused_score", 0.0), x.get("vector_score", 0.0), x.get("skeleton_score", 0.0)),
+                )
+                skeleton_score = _clip01(top.get("skeleton_score", 0.0))
+                vector_score = _clip01(top.get("vector_score", 0.0))
+                fused_score = _clip01(top.get("fused_score", 0.0))
+                accepted = (
+                    fused_score >= _BLUEPRINT_FUSED_ACCEPT_SCORE
+                    or vector_score >= _BLUEPRINT_VECTOR_STRONG_SCORE
+                    or skeleton_score >= _BLUEPRINT_SKELETON_ACCEPT_SCORE
+                )
+                if accepted:
+                    selected_blueprint = blueprint_repo.get_blueprint(
+                        str(top.get("intent_key", "")),
+                        app_state="global:DEFAULT",
+                    )
+                    if selected_blueprint is not None:
+                        source = "fused"
+                        if skeleton_score >= _BLUEPRINT_SKELETON_ACCEPT_SCORE and vector_score < 0.2:
+                            source = "skeleton"
+                        elif vector_score >= _BLUEPRINT_VECTOR_STRONG_SCORE and skeleton_score < 0.2:
+                            source = "vector"
+                        fast_match_hint = {
+                            "matched_intent_key": top.get("intent_key"),
+                            "match_source": source,
+                            "skeleton_score": skeleton_score,
+                            "vector_score": vector_score,
+                            "fused_score": fused_score,
+                            "signature_hit": bool(top.get("signature_hit", False)),
+                        }
     if selected_blueprint is not None:
         step_context["expected_anchors"] = list(selected_blueprint.get("anchors", []))
         step_context["expected_skeleton"] = selected_blueprint.get("static_skeleton")
@@ -417,6 +550,7 @@ def run_probe_step(
             fast_match_hint = _resolve_blueprint_context(
                 blueprint_repo=blueprint_repo,
                 request_intent_key=request.intent_key,
+                instruction=str(instruction or ""),
                 step_context=step_context,
                 screen_width=int(step_context.get("screen_width", screen_width)),
                 screen_height=int(step_context.get("screen_height", screen_height)),

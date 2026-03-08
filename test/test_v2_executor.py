@@ -555,6 +555,53 @@ class TestV2Executor(unittest.TestCase):
         self.assertTrue(blueprint_events)
         self.assertEqual(blueprint_events[-1].get("status"), "SUCCESS")
 
+    def test_run_probe_fast_match_uses_vector_fallback(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+
+        def _perception_provider():
+            return {
+                "perception_infos": [{"text": "入口", "coordinates": [80, 80]}],
+                "screen_width": 1080,
+                "screen_height": 2340,
+            }
+
+        with tempfile.TemporaryDirectory() as td:
+            repo = BlueprintRepository(os.path.join(td, "blueprints.json"))
+            repo.save_blueprint(
+                {
+                    "intent_key": "global:CHECKOUT:CTA",
+                    "app_state": "global:DEFAULT",
+                    "version": "v0.1.0",
+                    "reference_screen": {"width": 1080, "height": 2340},
+                    "anchors": [{"text": "checkout", "coordinates": [600, 2000]}],
+                    "post_expectations": [],
+                    "metadata": {},
+                }
+            )
+            result = run_probe_step(
+                instruction="请进入 checkout 页面",
+                run_id="r-fastmatch",
+                task_id="t-fastmatch",
+                session_id="sess-fastmatch",
+                step_id=8,
+                chain_mode="guiagent_v2",
+                emit_event=events.append,
+                hooks=_build_hooks(),
+                router=WebSkillRouter(),
+                guard_policy=GuardPolicy(),
+                web_skill=web_skill,
+                perception_provider=_perception_provider,
+                blueprint_repo=repo,
+            )
+
+        self.assertIn(result.status, {"SUCCESS", "HANDOVER"})
+        assertion_events = [e for e in events if e.get("event_type") == "assertion"]
+        self.assertTrue(assertion_events)
+        hint = assertion_events[-1].get("fast_match_hint", {})
+        self.assertEqual(hint.get("matched_intent_key"), "global:CHECKOUT:CTA")
+        self.assertIn(hint.get("match_source"), {"vector", "fused"})
+
 
 if __name__ == "__main__":
     unittest.main()
