@@ -45,6 +45,8 @@ def run_pre_assertion(
         min_presence_ratio=1.0,
         max_nodes=8,
     )
+    action_name = str((request.action or {}).get("name", "")).strip().lower()
+    mobile_execution_mode = str(context.get("mobile_execution_mode", "")).strip().lower()
 
     topo = None
     expected_anchors = context.get("expected_anchors")
@@ -72,17 +74,31 @@ def run_pre_assertion(
             }
 
     expected_skeleton = context.get("expected_skeleton")
+    skeleton_match = None
     if expected_skeleton:
-        sk = match_static_skeleton(observed_skeleton, expected_skeleton)
-        if sk.confidence < float(context.get("skeleton_threshold", 0.55)):
-            return {
-                "passed": False,
-                "reason_code": "SKELETON_ASSERTION_FAILED",
-                "skeleton_confidence": sk.confidence,
-                "matched": sk.matched,
-                "total_expected": sk.total_expected,
-                "denoise_stable_ratio": denoise.get("stable_ratio"),
-            }
+        skeleton_match = match_static_skeleton(observed_skeleton, expected_skeleton)
+        skeleton_threshold = float(context.get("skeleton_threshold", 0.55))
+        if skeleton_match.confidence < skeleton_threshold:
+            # Shadow baseline commonly uses synthetic/noisy snapshots around navigation actions.
+            # Relax skeleton assertion for back/home in shadow mode to avoid false-positive handovers.
+            allow_shadow_navigation_soften = bool(
+                context.get("allow_navigation_shadow_soften", True)
+            )
+            if (
+                allow_shadow_navigation_soften
+                and mobile_execution_mode == "shadow"
+                and action_name in {"back", "home", "wait"}
+            ):
+                pass
+            else:
+                return {
+                    "passed": False,
+                    "reason_code": "SKELETON_ASSERTION_FAILED",
+                    "skeleton_confidence": skeleton_match.confidence,
+                    "matched": skeleton_match.matched,
+                    "total_expected": skeleton_match.total_expected,
+                    "denoise_stable_ratio": denoise.get("stable_ratio"),
+                }
 
     expected_semantics = request.assertion.expected_semantics or []
     if expected_semantics:
@@ -112,5 +128,14 @@ def run_pre_assertion(
         "transform_fit_error": topo.transform_fit_error if topo is not None else 0.0,
         "transform_pair_count": topo.transform_pair_count if topo is not None else 0,
         "denoise_stable_ratio": denoise.get("stable_ratio"),
+        "skeleton_confidence": (
+            skeleton_match.confidence if skeleton_match is not None else 1.0
+        ),
+        "skeleton_matched": (
+            skeleton_match.matched if skeleton_match is not None else 0
+        ),
+        "skeleton_total_expected": (
+            skeleton_match.total_expected if skeleton_match is not None else 0
+        ),
         "skeleton_signature": observed_skeleton.signature,
     }

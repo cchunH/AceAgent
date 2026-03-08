@@ -42,6 +42,8 @@ _WEB_HINTS = (
     "web",
     "h5",
 )
+_BACK_HINTS = ("返回", "回退", "back")
+_HOME_HINTS = ("回到桌面", "返回桌面", "回桌面", "主页", "首页", "home screen", "go home")
 _CORE_ANCHOR_MIN_CONFIDENCE = 0.45
 _AUX_ANCHOR_RETRY_THRESHOLD = 0.35
 _ANCHOR_MICRO_RETRY_MAX = 1
@@ -90,6 +92,26 @@ def infer_probe_action(instruction: str) -> tuple[dict[str, Any], dict[str, Any]
                 "task_type": "web",
                 "is_web_subtask": True,
                 "web_task": {"action": "snapshot", "interactive": True},
+            },
+        )
+
+    if any(hint in text for hint in _HOME_HINTS) or " home" in lower:
+        return (
+            {"name": "Home", "arguments": {}},
+            {
+                "task_type": "mobile",
+                "is_web_subtask": False,
+                "web_task": None,
+            },
+        )
+
+    if any(hint in text for hint in _BACK_HINTS):
+        return (
+            {"name": "Back", "arguments": {}},
+            {
+                "task_type": "mobile",
+                "is_web_subtask": False,
+                "web_task": None,
             },
         )
 
@@ -611,6 +633,7 @@ def run_probe_step(
         "perception_infos_post": list(post_seed.get("perception_infos", [])),
         "screen_width": int(pre_snapshot.get("screen_width", screen_width)),
         "screen_height": int(pre_snapshot.get("screen_height", screen_height)),
+        "mobile_execution_mode": str(mobile_execution_mode or "").strip().lower(),
         "task_type": route_context.get("task_type"),
         "keyboard_pre": bool(pre_snapshot.get("keyboard", False)),
         "keyboard_post": bool(post_seed.get("keyboard", False)),

@@ -143,6 +143,18 @@ class TestV2Executor(unittest.TestCase):
         self.assertTrue(context["is_web_subtask"])
         self.assertEqual(context["web_task"]["action"], "open")
 
+    def test_infer_probe_action_back(self):
+        action, context = infer_probe_action("执行返回操作，然后等待")
+        self.assertEqual(action["name"], "Back")
+        self.assertFalse(context["is_web_subtask"])
+        self.assertEqual(context["task_type"], "mobile")
+
+    def test_infer_probe_action_home(self):
+        action, context = infer_probe_action("回到桌面，然后等待")
+        self.assertEqual(action["name"], "Home")
+        self.assertFalse(context["is_web_subtask"])
+        self.assertEqual(context["task_type"], "mobile")
+
     def test_run_probe_mobile_path(self):
         events = []
         web_skill = _FakeWebSkill(success=True)
