@@ -139,6 +139,30 @@ class TestSessionRuntimeServer(unittest.TestCase):
                 "ts": "2026-03-08T10:00:01Z",
             }
         )
+        store.update(
+            {
+                "run_id": "run-http",
+                "task_id": "task-http",
+                "session_id": "sess-http",
+                "event_type": "assertion",
+                "status": "SUCCESS",
+                "ts": "2026-03-08T10:00:02Z",
+                "fast_match_hint": {
+                    "matched_intent_key": "global:CHECKOUT:CTA",
+                    "match_source": "fused",
+                },
+            }
+        )
+        store.update(
+            {
+                "run_id": "run-http",
+                "task_id": "task-http",
+                "session_id": "sess-http",
+                "event_type": "blueprint_sync",
+                "status": "SUCCESS",
+                "ts": "2026-03-08T10:00:03Z",
+            }
+        )
 
         code, body = _http_json(self.base_url, "GET", "/runtime/status?session_id=sess-http")
         self.assertEqual(code, 200)
@@ -148,10 +172,14 @@ class TestSessionRuntimeServer(unittest.TestCase):
         code, body = _http_json(self.base_url, "GET", "/runtime/status/run-http/task-http")
         self.assertEqual(code, 200)
         self.assertEqual(body["data"]["status"], "SUCCESS")
+        runtime_stats = body["data"].get("runtime_stats", {})
+        self.assertEqual(runtime_stats.get("fast_match_hits"), 1)
+        self.assertEqual(runtime_stats.get("blueprint_sync_success"), 1)
+        self.assertEqual(runtime_stats.get("fast_match_source_counts", {}).get("fused"), 1)
 
         code, body = _http_json(self.base_url, "GET", "/runtime/timeline/run-http/task-http")
         self.assertEqual(code, 200)
-        self.assertEqual(len(body["data"]["timeline"]), 2)
+        self.assertEqual(len(body["data"]["timeline"]), 4)
 
     def test_runtime_metrics_endpoint(self):
         store = get_global_status_store()

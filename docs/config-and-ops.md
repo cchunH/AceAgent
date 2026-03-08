@@ -133,6 +133,11 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 - `guiagent_v2.runtime.compute_metrics_from_jsonl(jsonl_path)`
 - `guiagent_v2.runtime.write_runtime_summary(log_dir, event_log_path, blueprint_repo)`
 
+蓝图向量检索后端（当前默认内存索引）：
+- `BlueprintRepository(file_path, vector_index=None, embedding_fn=None, embedding_dim=32)`
+- 可通过 `configure_vector_backend(...)` 替换向量索引适配器或 embedding 函数
+- 兼容默认行为：不传参数时仍使用内置 `InMemoryVectorIndex + deterministic_text_embedding`
+
 ## 5. 关键参数建议
 
 - `max_itr`：默认 40，探索型任务可适当提高

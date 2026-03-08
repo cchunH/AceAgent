@@ -102,6 +102,50 @@ class TestBlueprintHub(unittest.TestCase):
             self.assertIn("intent_key", matched[0])
             self.assertGreaterEqual(matched[0]["score"], 0.4)
 
+    def test_vector_backend_can_be_configured(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "blueprints.json")
+
+            def _embed(text: str, dim: int) -> list[float]:
+                token = str(text).lower()
+                vec = [0.0 for _ in range(max(1, int(dim)))]
+                if "settings" in token:
+                    vec[0] = 1.0
+                elif "search" in token:
+                    vec[1] = 1.0
+                else:
+                    vec[2] = 1.0
+                return vec
+
+            repo = BlueprintRepository(path)
+            before = repo.get_vector_backend_info()
+            self.assertEqual(before["source"], "vector_mock")
+            self.assertEqual(before["embedding_dim"], 32)
+
+            repo.configure_vector_backend(embedding_fn=_embed, embedding_dim=4, rebuild=False)
+            after = repo.get_vector_backend_info()
+            self.assertEqual(after["embedding_dim"], 4)
+            self.assertFalse(after["ready"])
+
+            repo.save_blueprint(
+                Blueprint(
+                    intent_key="global:TAP:SEARCH_BAR",
+                    app_state="global:DEFAULT",
+                    anchors=[{"text": "Search", "x": 0.5, "y": 0.05}],
+                )
+            )
+            repo.save_blueprint(
+                Blueprint(
+                    intent_key="global:TAP:SETTINGS",
+                    app_state="global:DEFAULT",
+                    anchors=[{"text": "Settings", "x": 0.2, "y": 0.2}],
+                )
+            )
+            repo.rebuild_vector_index(app_state="global:DEFAULT")
+            matched = repo.match_by_vector("open settings", app_state="global:DEFAULT", top_k=1)
+            self.assertTrue(matched)
+            self.assertEqual(matched[0]["intent_key"], "global:TAP:SETTINGS")
+
 
 if __name__ == "__main__":
     unittest.main()

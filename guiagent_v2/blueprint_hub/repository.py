@@ -3,11 +3,15 @@ from __future__ import annotations
 import json
 import os
 from threading import Lock
-from typing import Any
+from typing import Any, Callable
 
 from .patch_model import Blueprint, BlueprintPatch
 from guiagent_v2.state_engine import build_blueprint_match_index, match_blueprint_fast
-from guiagent_v2.retrieval import InMemoryVectorIndex, deterministic_text_embedding
+from guiagent_v2.retrieval import (
+    InMemoryVectorIndex,
+    VectorIndexAdapter,
+    deterministic_text_embedding,
+)
 
 
 def _make_key(intent_key: str, app_state: str) -> str:
@@ -17,15 +21,57 @@ def _make_key(intent_key: str, app_state: str) -> str:
 class BlueprintRepository:
     """Local JSON-backed blueprint repository (single-file MVP)."""
 
-    def __init__(self, file_path: str):
+    def __init__(
+        self,
+        file_path: str,
+        vector_index: VectorIndexAdapter | None = None,
+        embedding_fn: Callable[[str, int], list[float]] | None = None,
+        embedding_dim: int = 32,
+    ):
         self.file_path = file_path
         self._lock = Lock()
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         self._store: dict[str, dict[str, Any]] = {}
         self._match_index_cache: dict[str, list[dict[str, Any]]] | None = None
-        self._vector_index = InMemoryVectorIndex()
+        self._vector_index = vector_index or InMemoryVectorIndex()
+        self._embedding_fn = embedding_fn or deterministic_text_embedding
+        self._embedding_dim = max(1, int(embedding_dim))
+        self._vector_backend_source = "vector_mock" if vector_index is None else "vector_custom"
         self._vector_index_ready = False
         self._load()
+
+    def configure_vector_backend(
+        self,
+        *,
+        vector_index: VectorIndexAdapter | None = None,
+        embedding_fn: Callable[[str, int], list[float]] | None = None,
+        embedding_dim: int | None = None,
+        rebuild: bool = False,
+    ) -> dict[str, Any]:
+        with self._lock:
+            if vector_index is not None:
+                self._vector_index = vector_index
+                self._vector_backend_source = "vector_custom"
+            if embedding_fn is not None:
+                self._embedding_fn = embedding_fn
+            if embedding_dim is not None:
+                self._embedding_dim = max(1, int(embedding_dim))
+            self._vector_index_ready = False
+        if rebuild:
+            return self.rebuild_vector_index()
+        return self.get_vector_backend_info()
+
+    def get_vector_backend_info(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "backend_type": self._vector_index.__class__.__name__,
+                "embedding_dim": int(self._embedding_dim),
+                "source": str(self._vector_backend_source),
+                "ready": bool(self._vector_index_ready),
+            }
+
+    def _encode_text(self, text: str) -> list[float]:
+        return self._embedding_fn(str(text or ""), self._embedding_dim)
 
     def _load(self) -> None:
         if not os.path.exists(self.file_path):
@@ -168,7 +214,7 @@ class BlueprintRepository:
                 continue
             item_id = _make_key(intent_key, state)
             vector_text = self._compose_vector_text(item)
-            vector = deterministic_text_embedding(vector_text, dim=32)
+            vector = self._encode_text(vector_text)
             self._vector_index.upsert(
                 item_id,
                 vector,
@@ -202,7 +248,7 @@ class BlueprintRepository:
             self.rebuild_vector_index()
 
         state = str(app_state).strip() or "global:DEFAULT"
-        query_vector = deterministic_text_embedding(str(query_text), dim=32)
+        query_vector = self._encode_text(str(query_text))
         hits = self._vector_index.search(query_vector, top_k=max(1, int(top_k)) * 4)
 
         rows: list[dict[str, Any]] = []
@@ -216,7 +262,7 @@ class BlueprintRepository:
                     "app_state": str(metadata.get("app_state", state)),
                     "score": float(hit.score),
                     "item_id": hit.item_id,
-                    "source": "vector_mock",
+                    "source": str(self._vector_backend_source),
                 }
             )
             if len(rows) >= max(1, int(top_k)):
