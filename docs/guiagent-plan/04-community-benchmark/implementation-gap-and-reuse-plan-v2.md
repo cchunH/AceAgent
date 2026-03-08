@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.25`
+- 版本：`v2.26`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -160,6 +160,11 @@
 28. 状态骨架动态槽位摘要（Dynamic Slots）
 - 证据模块：`guiagent_v2/state_engine/static_skeleton.py`, `guiagent_v2/state_engine/types.py`
 - 现状：`StaticSkeleton` 增加 `dynamic_slots`，用于结构化记录动态噪声区域。
+- 距离评估：`完成（v0）`
+
+29. 拓扑匹配权重化（Role/Zone Weighted Topology）
+- 证据模块：`guiagent_v2/state_engine/topology_matcher.py`, `test/test_topology_matcher_weighted.py`
+- 现状：匹配从简单计数升级为文本/距离/角色/区域加权评分，`CORE` 锚点在置信度中权重更高。
 - 距离评估：`完成（v0）`
 
 ### 2.2 部分落地（需增强）

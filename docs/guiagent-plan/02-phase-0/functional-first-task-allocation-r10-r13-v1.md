@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.6`
+- 版本：`v1.7`
 - 更新时间：`2026-03-08`
 - 关联主文档：`../01-global-analysis/guiagent-blueprint-fidelity-review-v1.md`
 
@@ -125,3 +125,4 @@
 3. B2 已落地 v0：`blueprint_sync` 由全量覆盖改为 Delta patch 优先（`plan_blueprint_delta + BlueprintPatch`），支持结构更新抑制与回滚指针。
 4. B3 已落地最小闭环：新增“离线重建 -> 向量召回命中”回归测试样例，验证回灌后可被在线检索路径消费。
 5. A2 已落地部分增强：`scene_denoise` 升级为跨帧聚类去噪，`StaticSkeleton` 增加 `dynamic_slots` 摘要。
+6. A2 已补匹配增强：`topology_matcher` 接入文本/距离/角色/区域加权评分，`CORE` 锚点优先级显式化。
