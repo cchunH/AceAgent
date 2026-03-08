@@ -69,6 +69,22 @@ class _FailingMobileExecutor:
         }
 
 
+class _ScreenshotMobileExecutor:
+    def execute_action(self, action, context=None):  # noqa: ANN001
+        del action, context
+        return {
+            "success": True,
+            "execution_mode": "device",
+            "device_executed": True,
+            "error": None,
+            "action_name": "Wait",
+            "latency_ms": 0,
+            "screenshot_path": "/tmp/mobile-action.png",
+            "screenshot_error": None,
+            "context": {"screenshot_post": "/tmp/post-live.jpg"},
+        }
+
+
 def _build_hooks():
     hooks = HookManager()
     hooks.register_pre_assertion_hook(semantic_pre_assertion_hook)
@@ -150,7 +166,7 @@ class TestV2Executor(unittest.TestCase):
         event_types = [e["event_type"] for e in events]
         self.assertIn("guard_decision", event_types)
         self.assertIn("executor_state", event_types)
-        self.assertNotIn("adapter_call", event_types)
+        self.assertIn("adapter_call", event_types)
         self.assertEqual(len(web_skill.calls), 0)
 
     def test_run_probe_web_success(self):
@@ -470,6 +486,32 @@ class TestV2Executor(unittest.TestCase):
         self.assertTrue(handovers)
         self.assertEqual(handovers[-1].get("reason_code"), "DEVICE_EXEC_ERROR_UT")
 
+    def test_run_probe_mobile_adapter_call_includes_screenshot(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+        result = run_probe_step(
+            instruction="在手机里等待一下",
+            run_id="r-mobile-shot",
+            task_id="t-mobile-shot",
+            session_id="sess-mobile-shot",
+            step_id=12,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+            mobile_executor=_ScreenshotMobileExecutor(),
+        )
+        self.assertEqual(result.status, "SUCCESS")
+        adapter_events = [e for e in events if e.get("event_type") == "adapter_call"]
+        self.assertTrue(adapter_events)
+        self.assertEqual(adapter_events[-1].get("adapter_backend"), "mobile-device")
+        self.assertEqual(adapter_events[-1].get("screenshot_path"), "/tmp/mobile-action.png")
+        step_end = [e for e in events if e.get("event_type") == "step_end"][-1]
+        self.assertEqual(step_end.get("action_screenshot"), "/tmp/mobile-action.png")
+        self.assertEqual(step_end.get("screenshot_post"), "/tmp/post-live.jpg")
+
     def test_run_probe_uses_perception_provider_for_pre_post_snapshot(self):
         events = []
         web_skill = _FakeWebSkill(success=True)
@@ -508,6 +550,46 @@ class TestV2Executor(unittest.TestCase):
 
         self.assertEqual(result.status, "SUCCESS")
         self.assertGreaterEqual(calls["count"], 2)
+
+    def test_run_probe_emits_snapshot_events_with_paths(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+        calls = {"count": 0}
+
+        def _perception_provider(**kwargs):  # noqa: ANN003
+            calls["count"] += 1
+            role = str(kwargs.get("snapshot_role", ""))
+            return {
+                "perception_infos": [{"text": f"{role}-marker", "coordinates": [1, 1]}],
+                "screen_width": 720,
+                "screen_height": 1280,
+                "keyboard": False,
+                "screenshot_path": f"/tmp/{role}-{calls['count']}.jpg",
+                "snapshot_seq": calls["count"],
+            }
+
+        result = run_probe_step(
+            instruction="在手机里等待一下",
+            run_id="r-snap",
+            task_id="t-snap",
+            session_id="sess-snap",
+            step_id=11,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_post_snapshot_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+            perception_provider=_perception_provider,
+        )
+
+        self.assertEqual(result.status, "SUCCESS")
+        snapshot_events = [e for e in events if e.get("event_type") == "snapshot_captured"]
+        self.assertGreaterEqual(len(snapshot_events), 2)
+        self.assertTrue(all(str(e.get("snapshot_path", "")).startswith("/tmp/") for e in snapshot_events))
+        step_end = [e for e in events if e.get("event_type") == "step_end"][-1]
+        self.assertTrue(str(step_end.get("screenshot_pre", "")).startswith("/tmp/pre"))
+        self.assertTrue(str(step_end.get("screenshot_post", "")).startswith("/tmp/post"))
 
     def test_run_probe_syncs_blueprint_after_mobile_step(self):
         events = []

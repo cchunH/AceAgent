@@ -251,6 +251,8 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
             self.assertIn("anchor_micro_retry_recovered_rate", metrics)
             self.assertIn("topology_projection_affine_rate", metrics)
             self.assertIn("topology_projection_guard_block_rate", metrics)
+            self.assertIn("snapshot_with_path_rate", metrics)
+            self.assertIn("mobile_action_screenshot_rate", metrics)
 
     def test_compute_metrics_from_events(self):
         rows = [
@@ -475,6 +477,38 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
         self.assertAlmostEqual(metrics["topology_projection_affine_rate"], 0.5)
         self.assertAlmostEqual(metrics["topology_projection_scale_rate"], 0.5)
         self.assertAlmostEqual(metrics["topology_projection_guard_block_rate"], 0.5)
+
+    def test_compute_metrics_screenshot_trace_breakdown(self):
+        rows = [
+            {
+                "run_id": "r-snap",
+                "task_id": "t-snap",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "snapshot_captured",
+                "status": "SUCCESS",
+                "intent_key": "global:SNAPSHOT:CAPTURE",
+                "snapshot_path": "/tmp/pre.jpg",
+            },
+            {
+                "run_id": "r-snap",
+                "task_id": "t-snap",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "adapter_call",
+                "status": "SUCCESS",
+                "intent_key": "global:TAP:BTN",
+                "adapter_backend": "mobile-device",
+                "screenshot_path": "/tmp/step1.png",
+            },
+        ]
+        metrics = compute_metrics_from_events(rows)
+        self.assertEqual(metrics["counts"]["snapshot_captured"], 1)
+        self.assertEqual(metrics["counts"]["snapshot_with_path"], 1)
+        self.assertEqual(metrics["counts"]["mobile_adapter_call"], 1)
+        self.assertEqual(metrics["counts"]["mobile_action_screenshot"], 1)
+        self.assertAlmostEqual(metrics["snapshot_with_path_rate"], 1.0)
+        self.assertAlmostEqual(metrics["mobile_action_screenshot_rate"], 1.0)
 
 
 if __name__ == "__main__":

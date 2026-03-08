@@ -49,6 +49,18 @@ def _build_topology_projection_summary(metrics: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _build_screenshot_trace_summary(metrics: dict[str, Any]) -> dict[str, Any]:
+    counts = dict(metrics.get("counts", {}) or {})
+    return {
+        "snapshot_event_count": int(counts.get("snapshot_captured", 0) or 0),
+        "snapshot_with_path_count": int(counts.get("snapshot_with_path", 0) or 0),
+        "snapshot_with_path_rate": float(metrics.get("snapshot_with_path_rate", 0.0) or 0.0),
+        "mobile_adapter_call_count": int(counts.get("mobile_adapter_call", 0) or 0),
+        "mobile_action_screenshot_count": int(counts.get("mobile_action_screenshot", 0) or 0),
+        "mobile_action_screenshot_rate": float(metrics.get("mobile_action_screenshot_rate", 0.0) or 0.0),
+    }
+
+
 def write_runtime_summary(
     log_dir: str,
     event_log_path: str,
@@ -61,6 +73,7 @@ def write_runtime_summary(
         "metrics": metrics,
         "anchor_strategy": _build_anchor_strategy_summary(metrics),
         "topology_projection": _build_topology_projection_summary(metrics),
+        "screenshot_trace": _build_screenshot_trace_summary(metrics),
         "flow_audit": audit_flow_from_jsonl(event_log_path),
         "blueprint_count": len(blueprint_repo.list_blueprints()) if blueprint_repo else 0,
         "blueprint_vector_backend": (

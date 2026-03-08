@@ -28,6 +28,8 @@ python3 run.py \
   --run_name stable_validation_shadow_v1
 ```
 
+可选：保留默认动作截图（推荐）；如需关闭可加 `--v2_disable_action_screenshots`。
+
 ## 4. Device 模式实测（通过 Shadow 后）
 
 ```bash
@@ -40,6 +42,16 @@ python3 run.py \
   --run_name stable_validation_device_v1
 ```
 
+一键入口（preflight + run + gate）：
+
+```bash
+python3 scripts/blueprint_stable_entry.py \
+  --tasks_json docs/guiagent-plan/02-phase-0/stable-validation-tasks-v1.json \
+  --run_name stable_validation_entry_v1 \
+  --runtime_mode guiagent_v2 \
+  --mobile_execution_mode shadow
+```
+
 ## 5. 结果检查
 
 1. 日志目录：
@@ -49,12 +61,14 @@ python3 run.py \
 - `events.jsonl`
 - `runtime_summary.json`
 - `blueprints.json`
+- `screenshots/`（动作与快照截图）
 
 3. 关键指标：
 - `task_success_rate`
 - `s2_takeover_rate`
 - `fast_match_*`
 - `anchor_gate_*`
+- `snapshot_*` / `mobile_action_screenshot_*`
 - `blueprint_sync_*`（status API 统计）
 
 ## 6. 失败定位顺序

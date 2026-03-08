@@ -3,6 +3,7 @@ import json
 import os
 import re
 import time
+import shutil
 from typing import Any
 
 from guiagent_v2.action_engine.affine_runtime import project_action
@@ -91,10 +92,16 @@ def _safe_int(value: Any, default: int) -> int:
         return default
 
 
+def _sanitize_file_token(value: str) -> str:
+    token = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(value or "").strip())
+    return token.strip("_") or "snapshot"
+
+
 def _build_live_perception_provider(
     *,
     perceptor: Any,
     runtime_config: Any,
+    screenshot_trace_dir: str | None = None,
 ):
     if perceptor is None or not hasattr(perceptor, "get_perception_infos"):
         return None
@@ -106,8 +113,18 @@ def _build_live_perception_provider(
 
     os.makedirs(screenshot_dir, exist_ok=True)
     os.makedirs(temp_dir, exist_ok=True)
+    if screenshot_trace_dir:
+        os.makedirs(str(screenshot_trace_dir), exist_ok=True)
+    sequence = {"idx": 0}
 
-    def _provider() -> dict[str, Any]:
+    def _provider(
+        *,
+        snapshot_role: str = "snapshot",
+        step_id: int = 0,
+        run_id: str = "",
+        task_id: str = "",
+        chain_mode: str = "",
+    ) -> dict[str, Any]:
         try:
             infos, width, height = perceptor.get_perception_infos(
                 screenshot_file,
@@ -116,11 +133,33 @@ def _build_live_perception_provider(
         except Exception:
             return {}
 
+        captured_path = None
+        if screenshot_trace_dir and os.path.exists(screenshot_file):
+            sequence["idx"] += 1
+            safe_role = _sanitize_file_token(snapshot_role)
+            safe_task = _sanitize_file_token(task_id or "task")
+            safe_mode = _sanitize_file_token(chain_mode or "runtime")
+            filename = (
+                f"{sequence['idx']:04d}__{safe_task}__step{int(step_id):04d}"
+                f"__{safe_role}__{safe_mode}.jpg"
+            )
+            target = os.path.join(str(screenshot_trace_dir), filename)
+            try:
+                shutil.copy2(screenshot_file, target)
+                captured_path = target
+            except Exception:
+                captured_path = None
+
         return {
             "perception_infos": infos if isinstance(infos, list) else [],
             "screen_width": _safe_int(width, 1080),
             "screen_height": _safe_int(height, 2340),
             "keyboard": False,
+            "screenshot_path": captured_path,
+            "snapshot_seq": int(sequence["idx"]),
+            "snapshot_role": snapshot_role,
+            "run_id": run_id,
+            "task_id": task_id,
         }
 
     return _provider
@@ -740,6 +779,8 @@ def run_single_task_with_runtime(
     mobile_wait_ms=1000,
     v2_max_steps=4,
     v2_use_live_perception=False,
+    v2_capture_action_screenshots=True,
+    v2_screenshot_subdir="screenshots",
     blueprint_vector_backend=None,
     blueprint_vector_plugin=None,
     blueprint_embedding_dim=None,
@@ -759,6 +800,8 @@ def run_single_task_with_runtime(
         )
     log_dir = _build_log_dir(log_root, run_name, task_id)
     os.makedirs(log_dir, exist_ok=True)
+    screenshot_log_dir = os.path.join(log_dir, str(v2_screenshot_subdir or "screenshots"))
+    os.makedirs(screenshot_log_dir, exist_ok=True)
     bus = JSONLEventBus(
         file_path=os.path.join(log_dir, "events.jsonl"),
         default_chain_mode=chain_mode,
@@ -828,6 +871,7 @@ def run_single_task_with_runtime(
             perception_provider = _build_live_perception_provider(
                 perceptor=perceptor,
                 runtime_config=runtime_config,
+                screenshot_trace_dir=screenshot_log_dir,
             )
         if runtime_mode == "guiagent_v2" and bool(v2_skip_legacy):
             step_instructions = _split_instruction_into_steps(instruction, max_steps=int(v2_max_steps))
@@ -878,6 +922,8 @@ def run_single_task_with_runtime(
                     mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
                     perception_provider=perception_provider,
                     blueprint_repo=blueprint_repo,
+                    screenshot_log_dir=screenshot_log_dir,
+                    capture_action_screenshot=bool(v2_capture_action_screenshots),
                 )
                 _emit_and_track(
                     bus,
@@ -927,6 +973,8 @@ def run_single_task_with_runtime(
                 mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
                 perception_provider=perception_provider,
                 blueprint_repo=blueprint_repo,
+                screenshot_log_dir=screenshot_log_dir,
+                capture_action_screenshot=bool(v2_capture_action_screenshots),
             )
 
     should_delegate_legacy = not (runtime_mode == "guiagent_v2" and bool(v2_skip_legacy))
@@ -1000,4 +1048,5 @@ def run_single_task_with_runtime(
         "log_dir": log_dir,
         "event_log": os.path.join(log_dir, "events.jsonl"),
         "summary_log": summary_info["summary_path"],
+        "screenshot_log_dir": screenshot_log_dir,
     }

@@ -98,6 +98,13 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     anchor_retry_events = [e for e in events if e.get("event_type") == "anchor_micro_retry"]
     anchor_retry_result_events = [e for e in anchor_retry_events if "anchor_retry_applied" in e]
     topology_projection_events = [e for e in events if e.get("event_type") == "topology_projection"]
+    snapshot_events = [e for e in events if e.get("event_type") == "snapshot_captured"]
+    mobile_adapter_events = [
+        e
+        for e in events
+        if e.get("event_type") == "adapter_call"
+        and str(e.get("adapter_backend", "")).startswith("mobile-")
+    ]
 
     success_tasks = [e for e in task_end_events if str(e.get("status", "")).upper() == "SUCCESS"]
     latencies = [int(e.get("latency_ms", 0)) for e in step_end_events if e.get("latency_ms") is not None]
@@ -150,6 +157,12 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
             topology_fit_errors.append(float(event.get("transform_fit_error")))
         except Exception:
             pass
+    snapshot_with_path_count = sum(
+        1 for event in snapshot_events if str(event.get("snapshot_path", "")).strip()
+    )
+    mobile_action_screenshot_count = sum(
+        1 for event in mobile_adapter_events if str(event.get("screenshot_path", "")).strip()
+    )
     denoise_values: list[float] = []
     skeleton_values: list[float] = []
     core_anchor_values: list[float] = []
@@ -339,6 +352,12 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         "topology_projection_fit_error_p95": (
             _percentile(topology_fit_errors, 0.95) if topology_fit_errors else 0.0
         ),
+        "snapshot_with_path_rate": (
+            snapshot_with_path_count / len(snapshot_events)
+        ) if snapshot_events else 0.0,
+        "mobile_action_screenshot_rate": (
+            mobile_action_screenshot_count / len(mobile_adapter_events)
+        ) if mobile_adapter_events else 0.0,
         "counts": {
             "events": len(events),
             "task_end": total_tasks,
@@ -375,6 +394,10 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
             "topology_projection_affine": topology_projection_affine_count,
             "topology_projection_scale": topology_projection_scale_count,
             "topology_projection_guard_block": topology_projection_guard_block_count,
+            "snapshot_captured": len(snapshot_events),
+            "snapshot_with_path": snapshot_with_path_count,
+            "mobile_adapter_call": len(mobile_adapter_events),
+            "mobile_action_screenshot": mobile_action_screenshot_count,
         },
     }
 

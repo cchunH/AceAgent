@@ -43,6 +43,16 @@ python run.py \
   --enable_experience_retriever
 ```
 
+### 2.3 稳定验证一键入口
+
+```bash
+python3 scripts/blueprint_stable_entry.py \
+  --tasks_json docs/guiagent-plan/02-phase-0/stable-validation-tasks-v1.json \
+  --run_name stable_validation_entry_v1 \
+  --runtime_mode guiagent_v2 \
+  --mobile_execution_mode shadow
+```
+
 说明：
 - 多任务模式下会复用同一个 `Perceptor` 实例，减少模型重复加载。
 - 当前实现在每个任务后有 `Press Enter to continue` 人工确认步骤。
@@ -68,6 +78,9 @@ python run.py \
 `--runtime_mode guiagent_v2`：
 - 与 `guiagent_v2_shadow` 共用当前骨架，预留后续真实 v2 执行逻辑接管。
 - 可选开启 `--v2_use_live_perception`，将 `Perceptor` 的实时 pre/post 感知注入 v2 step pipeline。
+- 默认开启移动动作截图留痕（落盘到任务目录 `screenshots/`）：
+  - `--v2_disable_action_screenshots`：关闭动作截图
+  - `--v2_screenshot_subdir <name>`：自定义截图子目录名（默认 `screenshots`）
 - 可选配置蓝图向量后端：
   - `--blueprint_vector_backend memory|custom`
   - `--blueprint_vector_plugin <module>:<factory>`（backend=custom）
@@ -102,7 +115,9 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 
 `events.jsonl` 关键事件（用于 Phase 0 对照）：
 - `step_start`
+- `snapshot_captured`（v2 live perception 截图快照）
 - `action_exec`
+- `adapter_call`（web 与 mobile 执行适配层调用；包含动作截图路径）
 - `assertion`
 - `handover`
 - `step_end`

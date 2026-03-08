@@ -31,7 +31,7 @@ from .web_replan_policy import WebReplanPolicy
 EventEmitter = Callable[[dict[str, Any]], None]
 ConfirmationRegistrar = Callable[[dict[str, Any]], dict[str, Any] | None]
 ConfirmationWaiter = Callable[[str, float, float], dict[str, Any] | None]
-PerceptionProvider = Callable[[], dict[str, Any] | None]
+PerceptionProvider = Callable[..., dict[str, Any] | None]
 _URL_PATTERN = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 _WEB_HINTS = (
     "http://",
@@ -524,6 +524,8 @@ def run_probe_step(
     mobile_wait_ms: int = 1000,
     perception_provider: PerceptionProvider | None = None,
     blueprint_repo: Any | None = None,
+    screenshot_log_dir: str | None = None,
+    capture_action_screenshot: bool = True,
 ) -> V2ProbeResult:
     loop_detector = loop_detector or LoopDetector()
     context_compactor = context_compactor or ContextCompactor()
@@ -574,7 +576,17 @@ def run_probe_step(
         if perception_provider is None:
             return _default_snapshot(pre=pre)
         try:
-            raw = perception_provider() or {}
+            role = "pre" if pre else "post"
+            try:
+                raw = perception_provider(
+                    snapshot_role=role,
+                    step_id=step_id,
+                    run_id=run_id,
+                    task_id=task_id,
+                    chain_mode=chain_mode,
+                ) or {}
+            except TypeError:
+                raw = perception_provider() or {}
         except Exception:
             raw = {}
         if not isinstance(raw, dict):
@@ -587,6 +599,8 @@ def run_probe_step(
             "screen_width": int(raw.get("screen_width", screen_width) or screen_width),
             "screen_height": int(raw.get("screen_height", screen_height) or screen_height),
             "keyboard": bool(raw.get("keyboard", False)),
+            "screenshot_path": str(raw.get("screenshot_path", "")).strip() or None,
+            "snapshot_seq": int(raw.get("snapshot_seq", 0) or 0),
         }
 
     pre_snapshot = _capture_snapshot(pre=True)
@@ -599,15 +613,53 @@ def run_probe_step(
         "task_type": route_context.get("task_type"),
         "keyboard_pre": bool(pre_snapshot.get("keyboard", False)),
         "keyboard_post": bool(post_seed.get("keyboard", False)),
+        "run_id": run_id,
+        "task_id": task_id,
+        "step_id": int(step_id),
+        "screenshot_pre": pre_snapshot.get("screenshot_path"),
+        "screenshot_post": post_seed.get("screenshot_path"),
+        "screenshot_prefix": f"{task_id}",
     }
+    if pre_snapshot.get("screenshot_path"):
+        _emit(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": step_id,
+                "chain_mode": chain_mode,
+                "event_type": "snapshot_captured",
+                "status": "SUCCESS",
+                "intent_key": "global:SNAPSHOT:CAPTURE",
+                "snapshot_role": "pre",
+                "snapshot_seq": int(pre_snapshot.get("snapshot_seq", 0) or 0),
+                "snapshot_path": pre_snapshot.get("screenshot_path"),
+            }
+        )
     if perception_provider is not None:
         def _post_context_provider() -> dict[str, Any]:
             post_snapshot = _capture_snapshot(pre=False)
+            post_path = post_snapshot.get("screenshot_path")
+            if post_path:
+                _emit(
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": step_id,
+                        "chain_mode": chain_mode,
+                        "event_type": "snapshot_captured",
+                        "status": "SUCCESS",
+                        "intent_key": "global:SNAPSHOT:CAPTURE",
+                        "snapshot_role": "post",
+                        "snapshot_seq": int(post_snapshot.get("snapshot_seq", 0) or 0),
+                        "snapshot_path": post_path,
+                    }
+                )
             return {
                 "perception_infos_post": list(post_snapshot.get("perception_infos", [])),
                 "screen_width": int(post_snapshot.get("screen_width", step_context.get("screen_width", 1080))),
                 "screen_height": int(post_snapshot.get("screen_height", step_context.get("screen_height", 2340))),
                 "keyboard_post": bool(post_snapshot.get("keyboard", False)),
+                "screenshot_post": post_path,
             }
 
         step_context["post_context_provider"] = _post_context_provider
@@ -1019,6 +1071,8 @@ def run_probe_step(
         adb_path=str(adb_path or "adb"),
         execution_mode=str(mobile_execution_mode or "auto"),
         default_wait_ms=int(max(0, mobile_wait_ms)),
+        screenshot_log_dir=screenshot_log_dir,
+        capture_action_screenshot=bool(capture_action_screenshot),
     )
     pipeline = StepPipeline(hooks=hooks, mobile_executor=mobile_executor)
     registry = build_default_action_registry(pipeline=pipeline, web_skill=web_skill)
@@ -1393,6 +1447,29 @@ def run_probe_step(
     latency_ms = int(exec_result.get("latency_ms", 0) or 0)
 
     if str(final_route_info.get("channel", "")) == "mobile_native":
+        adapter_call = dict(exec_result.get("adapter_call", {}) or {})
+        execution_mode = str(adapter_call.get("execution_mode", mobile_execution_mode or "unknown")).lower()
+        _emit(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": step_id,
+                "chain_mode": chain_mode,
+                "event_type": "adapter_call",
+                "status": "SUCCESS" if bool(adapter_call.get("success", False)) else "FAILED",
+                "intent_key": request.intent_key,
+                "adapter_backend": "mobile-device" if execution_mode == "device" else "mobile-shadow",
+                "adapter_execution_mode": execution_mode,
+                "adapter_device_executed": bool(adapter_call.get("device_executed", False)),
+                "adapter_action_name": adapter_call.get("action_name"),
+                "screenshot_path": adapter_call.get("screenshot_path"),
+                "screenshot_error": adapter_call.get("screenshot_error"),
+                "error": adapter_call.get("error"),
+                **final_route_info,
+            }
+        )
+
+    if str(final_route_info.get("channel", "")) == "mobile_native":
         core_conf, aux_conf, geom_conf = _extract_anchor_confidence(exec_result)
         gate_decision = "allow"
         gate_reason = "ANCHOR_CONFIDENCE_OK"
@@ -1586,13 +1663,14 @@ def run_probe_step(
             route_payload=final_route_info,
         )
 
+    effective_context = dict(step_context or {})
+    adapter_call_payload = exec_result.get("adapter_call", {})
+    if isinstance(adapter_call_payload, dict):
+        context_after = adapter_call_payload.get("context")
+        if isinstance(context_after, dict):
+            effective_context.update(context_after)
+
     if blueprint_repo is not None and str(final_route_info.get("channel", "")) == "mobile_native":
-        effective_context = dict(step_context or {})
-        adapter_call = exec_result.get("adapter_call", {})
-        if isinstance(adapter_call, dict):
-            context_after = adapter_call.get("context")
-            if isinstance(context_after, dict):
-                effective_context.update(context_after)
         outcome_code = "A"
         if final_status != "SUCCESS":
             assertion_passed = bool(assertion_result.get("passed", False))
@@ -1658,6 +1736,13 @@ def run_probe_step(
             "assertion_result": assertion_result,
             "post_check": post_check,
             "recovery_level": recovery_level,
+            "screenshot_pre": effective_context.get("screenshot_pre"),
+            "screenshot_post": effective_context.get("screenshot_post"),
+            "action_screenshot": (
+                adapter_call_payload.get("screenshot_path")
+                if isinstance(adapter_call_payload, dict)
+                else None
+            ),
             **final_route_info,
             **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
         }

@@ -200,6 +200,21 @@ topology_projection_affine/scale 占比 + guard_block 占比 + fit_error P50/P95
 - `topology_projection_guard_block_rate` 高：当前场景锚点质量不足，系统大量回退为缩放策略。
 - `topology_projection_fit_error_p95` 高：需要收紧蓝图锚点质量或调整多帧去噪参数。
 
+### 2.12 Screenshot Trace Coverage（新增）
+
+定义：
+```text
+snapshot_with_path_rate + mobile_action_screenshot_rate
+```
+
+字段来源：
+- `event_type=snapshot_captured`：`snapshot_path`
+- `event_type=adapter_call`（`adapter_backend=mobile-*`）：`screenshot_path`
+
+解读：
+- `snapshot_with_path_rate` 低：live perception 快照未稳定落盘。
+- `mobile_action_screenshot_rate` 低：移动执行动作截图留痕不完整（常见于 adb 不可用或路径权限问题）。
+
 ## 3. 报告模板（每次 PoC 固定输出）
 
 1. 实验上下文  

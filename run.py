@@ -38,6 +38,8 @@ def _run_with_mode(runtime_mode: str, **kwargs):
         kwargs.pop("mobile_wait_ms", None)
         kwargs.pop("v2_max_steps", None)
         kwargs.pop("v2_use_live_perception", None)
+        kwargs.pop("v2_capture_action_screenshots", None)
+        kwargs.pop("v2_screenshot_subdir", None)
         kwargs.pop("blueprint_vector_backend", None)
         kwargs.pop("blueprint_vector_plugin", None)
         kwargs.pop("blueprint_embedding_dim", None)
@@ -155,6 +157,18 @@ def main():
         action="store_true",
         default=False,
         help="Enable live Perceptor snapshots for guiagent_v2 pre/post step context.",
+    )
+    parser.add_argument(
+        "--v2_disable_action_screenshots",
+        action="store_true",
+        default=False,
+        help="Disable per-action screenshot capture in guiagent_v2 mobile-native execution.",
+    )
+    parser.add_argument(
+        "--v2_screenshot_subdir",
+        type=str,
+        default="screenshots",
+        help="Subdirectory under task log dir for guiagent_v2 screenshots.",
     )
     parser.add_argument(
         "--blueprint_vector_backend",
@@ -349,6 +363,8 @@ def main():
                 mobile_wait_ms=args.mobile_wait_ms,
                 v2_max_steps=args.v2_max_steps,
                 v2_use_live_perception=args.v2_use_live_perception,
+                v2_capture_action_screenshots=not args.v2_disable_action_screenshots,
+                v2_screenshot_subdir=args.v2_screenshot_subdir,
                 blueprint_vector_backend=args.blueprint_vector_backend,
                 blueprint_vector_plugin=args.blueprint_vector_plugin,
                 blueprint_embedding_dim=args.blueprint_embedding_dim,
@@ -437,6 +453,8 @@ def main():
                 mobile_wait_ms=args.mobile_wait_ms,
                 v2_max_steps=args.v2_max_steps,
                 v2_use_live_perception=args.v2_use_live_perception,
+                v2_capture_action_screenshots=not args.v2_disable_action_screenshots,
+                v2_screenshot_subdir=args.v2_screenshot_subdir,
                 blueprint_vector_backend=args.blueprint_vector_backend,
                 blueprint_vector_plugin=args.blueprint_vector_plugin,
                 blueprint_embedding_dim=args.blueprint_embedding_dim,

@@ -82,7 +82,10 @@ class StepPipeline:
                 result.recovery_level = "L2"
                 if isinstance(exec_detail, dict):
                     exec_detail = dict(exec_detail)
-                    exec_detail["context"] = dict(context)
+                    existing_context = dict(exec_detail.get("context", {}) or {})
+                    merged_context = dict(context)
+                    merged_context.update(existing_context)
+                    exec_detail["context"] = merged_context
                 return request.to_dict(), result, exec_detail
 
         if post_context_provider is not None:
@@ -103,7 +106,10 @@ class StepPipeline:
         result.post_check = post_check
         if isinstance(exec_detail, dict):
             exec_detail = dict(exec_detail)
-            exec_detail["context"] = dict(context)
+            existing_context = dict(exec_detail.get("context", {}) or {})
+            merged_context = dict(context)
+            merged_context.update(existing_context)
+            exec_detail["context"] = merged_context
         return request.to_dict(), result, exec_detail
 
     def run_shadow_step(
