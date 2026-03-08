@@ -6,7 +6,7 @@
 - 版本：`v1.0`
 - 更新时间：`2026-03-08`
 - 对齐基线：`R10-R13`（功能优先主线）
-- 代码基线：`main@cb7c57a` 及之后增量
+- 代码基线：`main@c0376ae` 及之后增量
 
 ## 1. 结论摘要
 
@@ -14,7 +14,7 @@
 当前实现仍在蓝图主轴：`意图 -> 蓝图匹配 -> 执行校验 -> 回灌复盘 -> 再命中`。
 
 2. 可用性已达“开发可用、受限实测可用”。  
-单元/集成回归通过（`161` 个测试），但当前环境缺失 `torch`，本机 CLI 冒烟无法直接启动完整运行链。
+单元/集成回归通过（`180` 个测试），但当前环境缺失 `torch`，本机 CLI 冒烟无法直接启动完整运行链。
 
 3. 蓝图功能已进入“闭环雏形完成”阶段，但未到“稳定实测版”。  
 核心链路已打通，算法鲁棒性、设备实测矩阵、发布门禁仍需补齐。
@@ -26,13 +26,13 @@
 - 证据：`orchestrator_v2 -> v2_executor -> action_registry -> pipeline` 主链已稳定；`mobile_execution_mode`、多步执行、guard/handover 可用。
 
 2. `R11`（状态面与回灌治理）  
-- 状态：`部分完成`  
-- 证据：`scene_denoise/static_skeleton/topology_matcher/fast_match` 已落地；`blueprint_sync + delta` 已落地。  
-- 缺口：长窗口多帧鲁棒评估、回灌质量门禁仍偏轻量。
+- 状态：`部分完成（持续推进）`  
+- 证据：`scene_denoise/static_skeleton/topology_matcher/fast_match` 已落地；`blueprint_sync + delta` 已落地；`replay_gate` 已接入结构更新门禁（支持 `metadata_only` 回灌路径）。  
+- 缺口：长窗口多帧鲁棒评估、门禁阈值实测标定、自动回滚策略强化。
 
 3. `R12`（稳定性与发布门禁）  
 - 状态：`部分完成`  
-- 证据：watchdog、status_api、metrics、runtime_summary 已具备。  
+- 证据：watchdog、status_api、metrics、runtime_summary 已具备；新增 `blueprint_sync`/`replay_gate` 观测指标。  
 - 缺口：真实设备回归矩阵、版本冻结门禁、长期归档治理尚未完成。
 
 4. `R13`（检索与算法强化）  
@@ -57,20 +57,20 @@
 - 已有：guard、fallback、handover、loop/watchdog。  
 - 缺口：策略分层和失败分类细化仍需实测标定。
 
-3. 流程 C（离线复盘回灌）：`68%`  
-- 已有：去噪、骨架、delta patch、offline replay、再命中链路雏形。  
-- 缺口：复盘质量评分、自动回滚门禁、长期数据治理。
+3. 流程 C（离线复盘回灌）：`76%`  
+- 已有：去噪、骨架、delta patch、offline replay、再命中链路雏形；回放质量评分与结构回灌门禁已接入。  
+- 缺口：自动回滚门禁、阈值收敛、长期数据治理。
 
 4. 流程 D（群智联邦分发）：`0%`（明确后置）  
 - 当前不纳入近期目标。
 
-5. 全局落地度（不含 D）：约 `71%`  
-6. 全局落地度（含 D）：约 `53%`
+5. 全局落地度（不含 D）：约 `74%`  
+6. 全局落地度（含 D）：约 `56%`
 
 ## 4. 程序可用性评估
 
 1. 代码质量与回归  
-- `python3 -m unittest discover -s test -p 'test_*.py'`：`161` tests `OK`。
+- `python3 -m unittest discover -s test -p 'test_*.py'`：`180` tests `OK`。
 
 2. 运行可用性  
 - v2 主链逻辑可跑（从测试与模块链路角度）。  
@@ -92,9 +92,9 @@
 
 ## 6. 到“稳定蓝图实测版本”还差多少阶段
 
-建议再走 `4` 个阶段后做冻结实测版（建议命名：`guiagent-v2-blueprint-beta1`）。
+建议再走 `3` 个阶段后做冻结实测版（建议命名：`guiagent-v2-blueprint-beta1`）。
 
-### Phase S1：环境与实测基线固化（1 阶段）
+### Phase S1：环境与实测基线固化（已完成）
 
 1. 目标  
 - 打通可重复的实测启动链（依赖、设备、最小任务集）。
@@ -111,7 +111,7 @@
 2. 退出条件  
 - 主链场景命中率、误触率达到门槛（由 R12 门禁定义）。
 
-### Phase S3：复盘回灌质量门禁（1 阶段）
+### Phase S3：复盘回灌质量门禁（进行中）
 
 1. 目标  
 - 增加 replay quality score 与 patch 回滚门禁。  
@@ -152,9 +152,10 @@
 - 固化依赖安装脚本与实测前置检查。  
 - 建立最小设备实测任务集（5~10 条）。
 
-2. 并行推进 S2 设计：  
+2. 并行推进 S2/S3 收敛：  
 - 增强锚点约束仿射估计。  
-- 补多帧时序去噪与回归样本。
+- 补多帧时序去噪与回归样本。  
+- 完成 replay gate 阈值标定与回灌污染回滚策略。
 
 3. S2 当前增量（2026-03-08）
 - 已新增锚点约束仿射估计器（`state_engine/anchor_transform.py`）并接入拓扑匹配结果。  
@@ -165,6 +166,8 @@
 - 已新增稳定验证门禁脚本：`scripts/blueprint_validation_gate.py`，支持基于 `runtime_summary.json` + 阈值模板输出 `PASS/WARN/FAIL`。
 - 已补完整实测入口：`scripts/blueprint_stable_entry.py`（preflight + run + gate）。
 - 已补完整截图留痕：`v2` 移动动作截图、live pre/post 快照事件（`snapshot_captured`）与 `runtime_summary.screenshot_trace` 统计。
+- 已新增回放门禁回灌：`upsert_blueprint_from_observation_with_gate`，并将 `replay_gate_passed/reason`、`blueprint_sync_mode`、`metadata_only` 路径落入事件与 summary 指标。
+- 已支持策略化回放门禁配置：`guard_policy.replay_gate`（`enabled/min_score/min_stable_ratio/min_skeleton_nodes`）。
 
 3. 完成 S1 后立即打第一个 checkpoint tag，作为“可运行实测起点”。
 

@@ -922,6 +922,7 @@ def run_single_task_with_runtime(
                     mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
                     perception_provider=perception_provider,
                     blueprint_repo=blueprint_repo,
+                    replay_gate_config=guard_policy.get_replay_gate_config(),
                     screenshot_log_dir=screenshot_log_dir,
                     capture_action_screenshot=bool(v2_capture_action_screenshots),
                 )
@@ -973,6 +974,7 @@ def run_single_task_with_runtime(
                 mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
                 perception_provider=perception_provider,
                 blueprint_repo=blueprint_repo,
+                replay_gate_config=guard_policy.get_replay_gate_config(),
                 screenshot_log_dir=screenshot_log_dir,
                 capture_action_screenshot=bool(v2_capture_action_screenshots),
             )

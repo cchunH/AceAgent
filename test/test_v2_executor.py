@@ -636,6 +636,11 @@ class TestV2Executor(unittest.TestCase):
         blueprint_events = [e for e in events if e.get("event_type") == "blueprint_sync"]
         self.assertTrue(blueprint_events)
         self.assertEqual(blueprint_events[-1].get("status"), "SUCCESS")
+        self.assertIn("replay_gate_passed", blueprint_events[-1])
+        self.assertIn("replay_quality_score", blueprint_events[-1])
+        self.assertTrue(str(blueprint_events[-1].get("blueprint_sync_mode", "")).strip())
+        self.assertIn("replay_gate_enabled_cfg", blueprint_events[-1])
+        self.assertIn("replay_gate_min_score_cfg", blueprint_events[-1])
 
     def test_run_probe_fast_match_uses_vector_fallback(self):
         events = []

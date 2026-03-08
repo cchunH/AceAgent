@@ -99,6 +99,7 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     anchor_retry_result_events = [e for e in anchor_retry_events if "anchor_retry_applied" in e]
     topology_projection_events = [e for e in events if e.get("event_type") == "topology_projection"]
     snapshot_events = [e for e in events if e.get("event_type") == "snapshot_captured"]
+    blueprint_sync_events = [e for e in events if e.get("event_type") == "blueprint_sync"]
     mobile_adapter_events = [
         e
         for e in events
@@ -149,6 +150,33 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     topology_projection_guard_block_count = sum(
         1 for event in topology_projection_events if str(event.get("projection_guard_reason", "OK")) != "OK"
     )
+    blueprint_sync_success_count = sum(
+        1 for event in blueprint_sync_events if str(event.get("status", "")).upper() == "SUCCESS"
+    )
+    blueprint_sync_failed_count = sum(
+        1
+        for event in blueprint_sync_events
+        if str(event.get("status", "")).upper() not in {"", "SUCCESS"}
+    )
+    blueprint_sync_gate_pass_count = sum(
+        1 for event in blueprint_sync_events if event.get("replay_gate_passed") is True
+    )
+    blueprint_sync_gate_block_count = sum(
+        1 for event in blueprint_sync_events if event.get("replay_gate_passed") is False
+    )
+    blueprint_sync_metadata_only_count = sum(
+        1
+        for event in blueprint_sync_events
+        if "metadata_only" in str(event.get("blueprint_sync_mode", "")).lower()
+    )
+    blueprint_quality_scores: list[float] = []
+    for event in blueprint_sync_events:
+        if event.get("replay_quality_score") is None:
+            continue
+        try:
+            blueprint_quality_scores.append(float(event.get("replay_quality_score")))
+        except Exception:
+            pass
     topology_fit_errors: list[float] = []
     for event in topology_projection_events:
         if event.get("transform_fit_error") is None:
@@ -352,6 +380,23 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         "topology_projection_fit_error_p95": (
             _percentile(topology_fit_errors, 0.95) if topology_fit_errors else 0.0
         ),
+        "blueprint_sync_success_rate": (
+            blueprint_sync_success_count / len(blueprint_sync_events)
+        ) if blueprint_sync_events else 0.0,
+        "blueprint_sync_failed_rate": (
+            blueprint_sync_failed_count / len(blueprint_sync_events)
+        ) if blueprint_sync_events else 0.0,
+        "replay_gate_pass_rate": (
+            blueprint_sync_gate_pass_count / len(blueprint_sync_events)
+        ) if blueprint_sync_events else 0.0,
+        "replay_gate_block_rate": (
+            blueprint_sync_gate_block_count / len(blueprint_sync_events)
+        ) if blueprint_sync_events else 0.0,
+        "blueprint_sync_metadata_only_rate": (
+            blueprint_sync_metadata_only_count / len(blueprint_sync_events)
+        ) if blueprint_sync_events else 0.0,
+        "replay_quality_score_p50": median(blueprint_quality_scores) if blueprint_quality_scores else 0.0,
+        "replay_quality_score_p95": _percentile(blueprint_quality_scores, 0.95) if blueprint_quality_scores else 0.0,
         "snapshot_with_path_rate": (
             snapshot_with_path_count / len(snapshot_events)
         ) if snapshot_events else 0.0,
@@ -394,6 +439,12 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
             "topology_projection_affine": topology_projection_affine_count,
             "topology_projection_scale": topology_projection_scale_count,
             "topology_projection_guard_block": topology_projection_guard_block_count,
+            "blueprint_sync": len(blueprint_sync_events),
+            "blueprint_sync_success": blueprint_sync_success_count,
+            "blueprint_sync_failed": blueprint_sync_failed_count,
+            "replay_gate_pass": blueprint_sync_gate_pass_count,
+            "replay_gate_block": blueprint_sync_gate_block_count,
+            "blueprint_sync_metadata_only": blueprint_sync_metadata_only_count,
             "snapshot_captured": len(snapshot_events),
             "snapshot_with_path": snapshot_with_path_count,
             "mobile_adapter_call": len(mobile_adapter_events),

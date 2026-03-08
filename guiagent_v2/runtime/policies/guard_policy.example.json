@@ -11,5 +11,11 @@
   },
   "web_domain_allowlist": ["example.com", "*.trusted.site"],
   "web_domain_denylist": ["*.blocked.site"],
-  "blocked_mobile_actions_on_web_skill": true
+  "blocked_mobile_actions_on_web_skill": true,
+  "replay_gate": {
+    "enabled": true,
+    "min_score": 0.45,
+    "min_stable_ratio": 0.3,
+    "min_skeleton_nodes": 2
+  }
 }

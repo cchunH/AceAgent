@@ -14,7 +14,10 @@ from .metrics import compute_metrics_from_jsonl
 from .flow_audit import audit_flow_from_events, audit_flow_from_jsonl
 from .reporting import write_runtime_summary
 from .validation_gate import evaluate_runtime_summary
-from .blueprint_sync import upsert_blueprint_from_observation
+from .blueprint_sync import (
+    upsert_blueprint_from_observation,
+    upsert_blueprint_from_observation_with_gate,
+)
 from .blueprint_delta import BlueprintDeltaPlan, bump_blueprint_version, plan_blueprint_delta
 from .offline_replay import rebuild_blueprints_from_steps
 from .replay_quality import score_replay_sample
@@ -81,6 +84,7 @@ __all__ = [
     "write_runtime_summary",
     "evaluate_runtime_summary",
     "upsert_blueprint_from_observation",
+    "upsert_blueprint_from_observation_with_gate",
     "BlueprintDeltaPlan",
     "bump_blueprint_version",
     "plan_blueprint_delta",

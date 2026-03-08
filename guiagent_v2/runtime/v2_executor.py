@@ -15,7 +15,7 @@ from guiagent_v2.state_engine import (
 )
 from .action_registry import ActionRegistry
 from .agent_browser_skill import AgentBrowserSkill
-from .blueprint_sync import upsert_blueprint_from_observation
+from .blueprint_sync import upsert_blueprint_from_observation_with_gate
 from .context_compaction import ContextCompactor
 from .guard_policy import GuardPolicy
 from .hooks import HookManager
@@ -524,6 +524,7 @@ def run_probe_step(
     mobile_wait_ms: int = 1000,
     perception_provider: PerceptionProvider | None = None,
     blueprint_repo: Any | None = None,
+    replay_gate_config: dict[str, Any] | None = None,
     screenshot_log_dir: str | None = None,
     capture_action_screenshot: bool = True,
 ) -> V2ProbeResult:
@@ -1671,6 +1672,14 @@ def run_probe_step(
             effective_context.update(context_after)
 
     if blueprint_repo is not None and str(final_route_info.get("channel", "")) == "mobile_native":
+        replay_gate = dict(replay_gate_config or {})
+        replay_gate_enabled = bool(replay_gate.get("enabled", True))
+        replay_gate_min_score = _clip01(replay_gate.get("min_score", 0.45))
+        replay_gate_min_stable_ratio = _clip01(replay_gate.get("min_stable_ratio", 0.30))
+        try:
+            replay_gate_min_skeleton_nodes = max(1, int(replay_gate.get("min_skeleton_nodes", 2)))
+        except Exception:
+            replay_gate_min_skeleton_nodes = 2
         outcome_code = "A"
         if final_status != "SUCCESS":
             assertion_passed = bool(assertion_result.get("passed", False))
@@ -1682,7 +1691,7 @@ def run_probe_step(
             else:
                 outcome_code = "B"
         try:
-            synced_blueprint = upsert_blueprint_from_observation(
+            sync_payload = upsert_blueprint_from_observation_with_gate(
                 repo=blueprint_repo,
                 intent_key=request.intent_key,
                 screen_width=int(effective_context.get("screen_width", screen_width)),
@@ -1691,7 +1700,13 @@ def run_probe_step(
                 perception_infos_post=list(effective_context.get("perception_infos_post", [])),
                 action_outcome=outcome_code,
                 post_check_result=post_check,
+                replay_gate_enabled=replay_gate_enabled,
+                replay_gate_min_score=replay_gate_min_score,
+                replay_gate_min_stable_ratio=replay_gate_min_stable_ratio,
+                replay_gate_min_skeleton_nodes=replay_gate_min_skeleton_nodes,
             )
+            synced_blueprint = dict(sync_payload.get("blueprint", {}))
+            sync_info = dict(sync_payload.get("sync", {}))
             _emit(
                 {
                     "run_id": run_id,
@@ -1702,6 +1717,17 @@ def run_probe_step(
                     "status": "SUCCESS",
                     "intent_key": request.intent_key,
                     "blueprint_version": str(synced_blueprint.get("version", "")),
+                    "blueprint_sync_mode": str(sync_info.get("sync_mode", "unknown")),
+                    "replay_gate_passed": sync_info.get("replay_gate_passed"),
+                    "replay_gate_reason": sync_info.get("replay_gate_reason"),
+                    "replay_quality_score": sync_info.get("replay_quality_score"),
+                    "replay_quality_level": sync_info.get("replay_quality_level"),
+                    "replay_gate_enabled_cfg": replay_gate_enabled,
+                    "replay_gate_min_score_cfg": replay_gate_min_score,
+                    "replay_gate_min_stable_ratio_cfg": replay_gate_min_stable_ratio,
+                    "replay_gate_min_skeleton_nodes_cfg": replay_gate_min_skeleton_nodes,
+                    "blueprint_changed_fields": list(sync_info.get("changed_fields", [])),
+                    "blueprint_suppressed_fields": list(sync_info.get("suppressed_fields", [])),
                     **final_route_info,
                     **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
                 }

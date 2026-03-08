@@ -4,7 +4,10 @@ import tempfile
 import unittest
 
 from guiagent_v2.blueprint_hub import BlueprintRepository
-from guiagent_v2.runtime.blueprint_sync import upsert_blueprint_from_observation
+from guiagent_v2.runtime.blueprint_sync import (
+    upsert_blueprint_from_observation,
+    upsert_blueprint_from_observation_with_gate,
+)
 from guiagent_v2.runtime.reporting import write_runtime_summary
 
 
@@ -81,6 +84,51 @@ class TestRuntimeReportingAndSync(unittest.TestCase):
             self.assertEqual(metadata2.get("last_patch_mode"), "delta")
             self.assertIn("anchors", list(metadata2.get("last_patch_suppressed_fields", [])))
 
+    def test_upsert_blueprint_gate_blocks_structural_update(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = BlueprintRepository(os.path.join(td, "blueprints.json"))
+            first = upsert_blueprint_from_observation(
+                repo=repo,
+                intent_key="global:TAP:SEARCH_BAR",
+                screen_width=1080,
+                screen_height=2340,
+                perception_infos_pre=[
+                    {"text": "Search", "coordinates": (520, 110)},
+                    {"text": "Home", "coordinates": (100, 2250)},
+                ],
+                perception_infos_post=[
+                    {"text": "Search", "coordinates": (520, 110)},
+                    {"text": "Results", "coordinates": (320, 200)},
+                ],
+                action_outcome="A",
+                post_check_result={"passed": True, "reason_code": "STATE_TRANSITION_OK"},
+            )
+            anchors_before = list(first.get("anchors", []))
+            skeleton_before = dict(first.get("static_skeleton", {}))
+            result = upsert_blueprint_from_observation_with_gate(
+                repo=repo,
+                intent_key="global:TAP:SEARCH_BAR",
+                screen_width=1080,
+                screen_height=2340,
+                perception_infos_pre=[
+                    {"text": "Transient", "coordinates": (100, 100)},
+                ],
+                perception_infos_post=[
+                    {"text": "Noise", "coordinates": (900, 2200)},
+                ],
+                action_outcome="A",
+                post_check_result={"passed": True, "reason_code": "STATE_TRANSITION_OK"},
+                replay_gate_min_score=0.95,
+            )
+            updated = dict(result.get("blueprint", {}))
+            sync = dict(result.get("sync", {}))
+            self.assertFalse(sync.get("replay_gate_passed"))
+            self.assertIn("metadata_only", str(sync.get("sync_mode", "")))
+            self.assertEqual(updated.get("anchors", []), anchors_before)
+            self.assertEqual(updated.get("static_skeleton", {}), skeleton_before)
+            self.assertIn("replay_gate_reason", dict(updated.get("metadata", {})))
+            self.assertTrue("anchors" in list(sync.get("suppressed_fields", [])) or "anchors" in list(dict(updated.get("metadata", {})).get("last_patch_suppressed_fields", [])))
+
     def test_write_runtime_summary(self):
         with tempfile.TemporaryDirectory() as td:
             event_path = os.path.join(td, "events.jsonl")
@@ -121,6 +169,7 @@ class TestRuntimeReportingAndSync(unittest.TestCase):
             self.assertIn("anchor_strategy", out["summary"])
             self.assertIn("topology_projection", out["summary"])
             self.assertIn("screenshot_trace", out["summary"])
+            self.assertIn("blueprint_sync", out["summary"])
             self.assertIn("flow_audit", out["summary"])
             self.assertIn("blueprint_vector_backend", out["summary"])
 

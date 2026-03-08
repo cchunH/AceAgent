@@ -253,6 +253,8 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
             self.assertIn("topology_projection_guard_block_rate", metrics)
             self.assertIn("snapshot_with_path_rate", metrics)
             self.assertIn("mobile_action_screenshot_rate", metrics)
+            self.assertIn("replay_gate_pass_rate", metrics)
+            self.assertIn("blueprint_sync_metadata_only_rate", metrics)
 
     def test_compute_metrics_from_events(self):
         rows = [
@@ -509,6 +511,42 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
         self.assertEqual(metrics["counts"]["mobile_action_screenshot"], 1)
         self.assertAlmostEqual(metrics["snapshot_with_path_rate"], 1.0)
         self.assertAlmostEqual(metrics["mobile_action_screenshot_rate"], 1.0)
+
+    def test_compute_metrics_blueprint_sync_gate_breakdown(self):
+        rows = [
+            {
+                "run_id": "r-sync",
+                "task_id": "t-sync",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "blueprint_sync",
+                "status": "SUCCESS",
+                "intent_key": "global:TAP:SEARCH",
+                "blueprint_sync_mode": "delta",
+                "replay_gate_passed": True,
+                "replay_quality_score": 0.72,
+            },
+            {
+                "run_id": "r-sync",
+                "task_id": "t-sync",
+                "step_id": 2,
+                "chain_mode": "guiagent_v2",
+                "event_type": "blueprint_sync",
+                "status": "SUCCESS",
+                "intent_key": "global:TAP:SEARCH",
+                "blueprint_sync_mode": "metadata_only_delta",
+                "replay_gate_passed": False,
+                "replay_quality_score": 0.31,
+            },
+        ]
+        metrics = compute_metrics_from_events(rows)
+        self.assertEqual(metrics["counts"]["blueprint_sync"], 2)
+        self.assertEqual(metrics["counts"]["replay_gate_pass"], 1)
+        self.assertEqual(metrics["counts"]["replay_gate_block"], 1)
+        self.assertEqual(metrics["counts"]["blueprint_sync_metadata_only"], 1)
+        self.assertAlmostEqual(metrics["replay_gate_pass_rate"], 0.5)
+        self.assertAlmostEqual(metrics["replay_gate_block_rate"], 0.5)
+        self.assertAlmostEqual(metrics["blueprint_sync_metadata_only_rate"], 0.5)
 
 
 if __name__ == "__main__":

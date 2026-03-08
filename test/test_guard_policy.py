@@ -131,6 +131,29 @@ class TestGuardPolicy(unittest.TestCase):
             self.assertEqual(denied["decision"], "deny")
             self.assertEqual(denied["reason"], "WEB_DOMAIN_DENIED")
 
+    def test_get_replay_gate_config(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "version": "v-replay",
+                    "replay_gate": {
+                        "enabled": False,
+                        "min_score": 0.8,
+                        "min_stable_ratio": 0.6,
+                        "min_skeleton_nodes": 3,
+                    },
+                },
+                f,
+                ensure_ascii=False,
+            )
+            f.flush()
+            policy = GuardPolicy.from_policy_file(f.name, reload_interval_sec=0.0)
+            cfg = policy.get_replay_gate_config()
+            self.assertEqual(cfg["enabled"], False)
+            self.assertEqual(cfg["min_score"], 0.8)
+            self.assertEqual(cfg["min_stable_ratio"], 0.6)
+            self.assertEqual(cfg["min_skeleton_nodes"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()

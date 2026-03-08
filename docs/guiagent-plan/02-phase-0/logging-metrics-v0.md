@@ -215,6 +215,24 @@ snapshot_with_path_rate + mobile_action_screenshot_rate
 - `snapshot_with_path_rate` 低：live perception 快照未稳定落盘。
 - `mobile_action_screenshot_rate` 低：移动执行动作截图留痕不完整（常见于 adb 不可用或路径权限问题）。
 
+### 2.13 Replay Gate / Blueprint Sync（新增）
+
+定义：
+```text
+replay_gate_pass/block 占比 + blueprint_sync_metadata_only 占比 + replay_quality_score P50/P95
+```
+
+字段来源：
+- `event_type=blueprint_sync`
+- `replay_gate_passed`
+- `blueprint_sync_mode`
+- `replay_quality_score`
+
+解读：
+- `replay_gate_block_rate` 高：回灌输入质量不足，系统频繁阻断结构更新。
+- `blueprint_sync_metadata_only_rate` 高：系统处于“保守回灌”模式，长期高位说明状态面噪声仍偏高。
+- `replay_quality_score_p95` 低：闭环样本整体质量偏弱，需优先提升感知稳定性与后验检查质量。
+
 ## 3. 报告模板（每次 PoC 固定输出）
 
 1. 实验上下文  

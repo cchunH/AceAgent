@@ -29,6 +29,7 @@ python3 run.py \
 ```
 
 可选：保留默认动作截图（推荐）；如需关闭可加 `--v2_disable_action_screenshots`。
+可选：通过 `--guard_policy_path` 传入策略文件，调节 `replay_gate` 阈值（建议仅在实测标定阶段调整）。
 
 ## 4. Device 模式实测（通过 Shadow 后）
 
@@ -69,7 +70,7 @@ python3 scripts/blueprint_stable_entry.py \
 - `fast_match_*`
 - `anchor_gate_*`
 - `snapshot_*` / `mobile_action_screenshot_*`
-- `blueprint_sync_*`（status API 统计）
+- `blueprint_sync_*` / `replay_gate_*`（status API 与 runtime_summary 统计）
 
 ## 6. 失败定位顺序
 
@@ -77,6 +78,7 @@ python3 scripts/blueprint_stable_entry.py \
 2. `step_start -> step_end` 缺失：先查执行链。
 3. `handover` 高：查断言阈值与锚点匹配。
 4. `blueprint_sync` 失败：查回灌输入与 repo 写入路径。
+5. `replay_gate_block_rate` 过高：查 `replay_quality_score` 与 `replay_gate` 阈值配置是否过严。
 
 ## 7. 自动门禁评估（新增）
 
@@ -99,3 +101,31 @@ python3 scripts/blueprint_validation_gate.py \
 - `anchor_gate_deny_rate <= 0.25`
 - `topology_projection_guard_block_rate <= 0.25`
 - `topology_projection_fit_error_p95 <= 0.2`
+- `replay_gate_block_rate <= 0.4`（初始建议值，需结合场景再标定）
+
+## 8. Replay Gate 策略示例（新增）
+
+在 guard policy JSON 中加入：
+
+```json
+{
+  "replay_gate": {
+    "enabled": true,
+    "min_score": 0.45,
+    "min_stable_ratio": 0.3,
+    "min_skeleton_nodes": 2
+  }
+}
+```
+
+运行时加载：
+
+```bash
+python3 run.py \
+  --tasks_json docs/guiagent-plan/02-phase-0/stable-validation-tasks-v1.json \
+  --runtime_mode guiagent_v2 \
+  --v2_skip_legacy \
+  --mobile_execution_mode shadow \
+  --guard_policy_path guiagent_v2/runtime/policies/guard_policy.example.json \
+  --run_name stable_validation_shadow_with_gate_v1
+```

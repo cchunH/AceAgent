@@ -17,6 +17,12 @@ DEFAULT_GUARD_POLICY: dict[str, Any] = {
     "web_domain_allowlist": [],
     "web_domain_denylist": [],
     "blocked_mobile_actions_on_web_skill": True,
+    "replay_gate": {
+        "enabled": True,
+        "min_score": 0.45,
+        "min_stable_ratio": 0.30,
+        "min_skeleton_nodes": 2,
+    },
 }
 
 
@@ -53,6 +59,36 @@ def _normalize_domain_rules(value: Any) -> list[str]:
     return normalized
 
 
+def _normalize_replay_gate(value: Any, default: dict[str, Any]) -> dict[str, Any]:
+    base = dict(default or {})
+    if not isinstance(value, dict):
+        return base
+
+    enabled = value.get("enabled", base.get("enabled", True))
+    try:
+        min_score = float(value.get("min_score", base.get("min_score", 0.45)))
+    except Exception:
+        min_score = float(base.get("min_score", 0.45))
+    try:
+        min_stable_ratio = float(
+            value.get("min_stable_ratio", base.get("min_stable_ratio", 0.30))
+        )
+    except Exception:
+        min_stable_ratio = float(base.get("min_stable_ratio", 0.30))
+    try:
+        min_skeleton_nodes = int(
+            value.get("min_skeleton_nodes", base.get("min_skeleton_nodes", 2))
+        )
+    except Exception:
+        min_skeleton_nodes = int(base.get("min_skeleton_nodes", 2))
+
+    base["enabled"] = bool(enabled)
+    base["min_score"] = max(0.0, min(1.0, min_score))
+    base["min_stable_ratio"] = max(0.0, min(1.0, min_stable_ratio))
+    base["min_skeleton_nodes"] = max(1, min_skeleton_nodes)
+    return base
+
+
 def normalize_guard_policy(raw: dict[str, Any] | None) -> dict[str, Any]:
     policy = deepcopy(DEFAULT_GUARD_POLICY)
     if not isinstance(raw, dict):
@@ -71,6 +107,7 @@ def normalize_guard_policy(raw: dict[str, Any] | None) -> dict[str, Any]:
     policy["blocked_mobile_actions_on_web_skill"] = bool(
         raw.get("blocked_mobile_actions_on_web_skill", policy["blocked_mobile_actions_on_web_skill"])
     )
+    policy["replay_gate"] = _normalize_replay_gate(raw.get("replay_gate"), dict(policy.get("replay_gate", {})))
     return policy
 
 
