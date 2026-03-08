@@ -33,6 +33,9 @@ _WEB_HINTS = (
     "web",
     "h5",
 )
+_CORE_ANCHOR_MIN_CONFIDENCE = 0.45
+_AUX_ANCHOR_RETRY_THRESHOLD = 0.35
+_ANCHOR_MICRO_RETRY_MAX = 1
 
 
 @dataclass
@@ -189,6 +192,45 @@ def _normalize_adapter_error(step_result: dict[str, Any]) -> str:
         or step_result.get("assertion_result", {}).get("reason_code")
         or "WEB_SKILL_EXEC_FAILED"
     )
+
+
+def _as_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _extract_anchor_confidence(exec_result: dict[str, Any]) -> tuple[float, float, float]:
+    assertion_result = dict(exec_result.get("assertion_result", {}) or {})
+    post_check = dict(exec_result.get("post_check", {}) or {})
+    core = _as_float(
+        assertion_result.get("core_anchor_confidence", post_check.get("core_anchor_confidence", 1.0)),
+        1.0,
+    )
+    aux = _as_float(
+        assertion_result.get("aux_anchor_confidence", post_check.get("aux_anchor_confidence", 1.0)),
+        1.0,
+    )
+    geometry = _as_float(
+        assertion_result.get("geometry_confidence", post_check.get("geometry_confidence", 1.0)),
+        1.0,
+    )
+    return core, aux, geometry
+
+
+def _choose_better_anchor_result(primary: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    p_pass = bool(dict(primary.get("assertion_result", {}) or {}).get("passed", False))
+    c_pass = bool(dict(candidate.get("assertion_result", {}) or {}).get("passed", False))
+    if c_pass and not p_pass:
+        return candidate
+    if p_pass and not c_pass:
+        return primary
+    p_core, p_aux, p_geom = _extract_anchor_confidence(primary)
+    c_core, c_aux, c_geom = _extract_anchor_confidence(candidate)
+    p_score = (p_core * 0.6) + (p_aux * 0.25) + (p_geom * 0.15)
+    c_score = (c_core * 0.6) + (c_aux * 0.25) + (c_geom * 0.15)
+    return candidate if c_score > p_score else primary
 
 
 def run_probe_step(
@@ -994,6 +1036,123 @@ def run_probe_step(
     post_check = dict(exec_result.get("post_check", {}))
     recovery_level = str(exec_result.get("recovery_level", "L3"))
     latency_ms = int(exec_result.get("latency_ms", 0) or 0)
+
+    if str(final_route_info.get("channel", "")) == "mobile_native":
+        core_conf, aux_conf, geom_conf = _extract_anchor_confidence(exec_result)
+        gate_decision = "allow"
+        gate_reason = "ANCHOR_CONFIDENCE_OK"
+
+        if core_conf < _CORE_ANCHOR_MIN_CONFIDENCE:
+            gate_decision = "deny"
+            gate_reason = "CORE_ANCHOR_CONFIDENCE_LOW"
+        elif aux_conf < _AUX_ANCHOR_RETRY_THRESHOLD:
+            gate_decision = "retry"
+            gate_reason = "AUX_ANCHOR_CONFIDENCE_LOW"
+
+        _emit(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": step_id,
+                "chain_mode": chain_mode,
+                "event_type": "anchor_gate",
+                "status": "SUCCESS" if gate_decision == "allow" else "HANDOVER",
+                "intent_key": request.intent_key,
+                "anchor_gate_decision": gate_decision,
+                "anchor_gate_reason": gate_reason,
+                "core_anchor_confidence": core_conf,
+                "aux_anchor_confidence": aux_conf,
+                "geometry_confidence": geom_conf,
+                **final_route_info,
+            }
+        )
+
+        if gate_decision == "retry":
+            for attempt in range(1, _ANCHOR_MICRO_RETRY_MAX + 1):
+                _emit(
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": step_id,
+                        "chain_mode": chain_mode,
+                        "event_type": "anchor_micro_retry",
+                        "status": "RUNNING",
+                        "intent_key": request.intent_key,
+                        "anchor_retry_attempt": attempt,
+                        "anchor_retry_reason": gate_reason,
+                        **final_route_info,
+                    }
+                )
+                try:
+                    retry_result = registry.dispatch(
+                        "mobile_native_shadow",
+                        {
+                            "legacy_action": action_obj,
+                            "step_context": step_context,
+                        },
+                        context={},
+                    )
+                except Exception as exc:
+                    retry_result = {
+                        "status": "FAILED",
+                        "assertion_result": {"passed": False, "reason_code": "ANCHOR_RETRY_DISPATCH_ERROR"},
+                        "post_check": {"passed": False, "reason_code": "ANCHOR_RETRY_DISPATCH_ERROR"},
+                        "recovery_level": "L3",
+                        "latency_ms": 0,
+                        "adapter_call": {
+                            "success": False,
+                            "error": str(exc),
+                        },
+                    }
+                merged = _choose_better_anchor_result(exec_result, retry_result)
+                changed = merged is retry_result
+                exec_result = merged
+                status = _normalize_step_status(exec_result.get("status", "FAILED"))
+                assertion_result = dict(exec_result.get("assertion_result", {}))
+                post_check = dict(exec_result.get("post_check", {}))
+                recovery_level = str(exec_result.get("recovery_level", recovery_level))
+                latency_ms = int(exec_result.get("latency_ms", latency_ms) or latency_ms)
+                core_conf, aux_conf, geom_conf = _extract_anchor_confidence(exec_result)
+                _emit(
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": step_id,
+                        "chain_mode": chain_mode,
+                        "event_type": "anchor_micro_retry",
+                        "status": "SUCCESS" if status == "SUCCESS" else "FAILED",
+                        "intent_key": request.intent_key,
+                        "anchor_retry_attempt": attempt,
+                        "anchor_retry_applied": changed,
+                        "core_anchor_confidence": core_conf,
+                        "aux_anchor_confidence": aux_conf,
+                        "geometry_confidence": geom_conf,
+                        **final_route_info,
+                    }
+                )
+                if core_conf >= _CORE_ANCHOR_MIN_CONFIDENCE and aux_conf >= _AUX_ANCHOR_RETRY_THRESHOLD:
+                    break
+
+        if gate_decision == "deny":
+            status = "FAILED"
+            reason = "CORE_ANCHOR_CONFIDENCE_LOW"
+            assertion_result = dict(assertion_result)
+            post_check = dict(post_check)
+            assertion_result["passed"] = False
+            assertion_result["reason_code"] = reason
+            post_check["passed"] = False
+            post_check["reason_code"] = reason
+            assertion_result["core_anchor_confidence"] = core_conf
+            assertion_result["aux_anchor_confidence"] = aux_conf
+            assertion_result["geometry_confidence"] = geom_conf
+            post_check["core_anchor_confidence"] = core_conf
+            post_check["aux_anchor_confidence"] = aux_conf
+            post_check["geometry_confidence"] = geom_conf
+            recovery_level = "L2"
+            exec_result["status"] = "FAILED"
+            exec_result["assertion_result"] = assertion_result
+            exec_result["post_check"] = post_check
+            exec_result["recovery_level"] = recovery_level
     _transition_state(
         ProbeState.VERIFYING,
         "enter_assertion_post_check",

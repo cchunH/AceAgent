@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.10`
+- 版本：`v1.11`
 - 更新时间：`2026-03-08`
 - 关联主文档：`../01-global-analysis/guiagent-blueprint-fidelity-review-v1.md`
 
@@ -129,3 +129,4 @@
 7. A2 已补召回增强：`fast_match` 融合 `dynamic_slots`，对动态污染静态锚点的候选进行惩罚。
 8. A2 已补分路评分：`assertion_guard/post_check` 输出 `core_anchor_confidence/aux_anchor_confidence/geometry_confidence` 并接入运行指标聚合。
 9. 审查链增强：`flow_audit` 对低 `core_anchor_confidence/geometry_confidence` 的“伪成功步骤”输出 `WARN`。
+10. 执行分流增强：`v2_executor` 增加锚点门控（低主锚点阻断；低辅锚点触发微重试），并修复 `pipeline` 透传 `pre_assertion` 置信度以避免误拦截。

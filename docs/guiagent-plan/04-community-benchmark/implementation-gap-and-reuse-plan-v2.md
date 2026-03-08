@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.29`
+- 版本：`v2.30`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -180,6 +180,11 @@
 32. 低置信度流程审查（Flow Audit Warning）
 - 证据模块：`guiagent_v2/runtime/flow_audit.py`, `test/test_flow_audit.py`
 - 现状：流程审查可识别“步骤通过但主锚点/几何置信度偏低”的潜在风险并输出 `WARN`。
+- 距离评估：`完成（v0）`
+
+33. 执行层锚点门控与微重试（Execution Anchor Gate）
+- 证据模块：`guiagent_v2/runtime/v2_executor.py`, `guiagent_v2/runtime/pipeline.py`, `test/test_v2_executor.py`
+- 现状：已支持低主锚点阻断与低辅锚点微重试；并修复 `pre_assertion` 置信度透传，避免以 `post_check` 误判门控。
 - 距离评估：`完成（v0）`
 
 ### 2.2 部分落地（需增强）

@@ -60,6 +60,28 @@ def _build_hooks():
     return hooks
 
 
+def _build_low_core_hooks():
+    hooks = HookManager()
+
+    def _pre(req, ctx):  # noqa: ANN001
+        del req, ctx
+        return {
+            "passed": True,
+            "reason_code": "OK",
+            "core_anchor_confidence": 0.2,
+            "aux_anchor_confidence": 0.9,
+            "geometry_confidence": 0.8,
+        }
+
+    def _post(req, ctx):  # noqa: ANN001
+        del req, ctx
+        return {"passed": True, "reason_code": "STATE_TRANSITION_OK"}
+
+    hooks.register_pre_assertion_hook(_pre)
+    hooks.register_post_check_hook(_post)
+    return hooks
+
+
 class TestV2Executor(unittest.TestCase):
     def test_infer_probe_action_url(self):
         action, context = infer_probe_action("请打开 https://example.com")
@@ -360,6 +382,31 @@ class TestV2Executor(unittest.TestCase):
         self.assertIn("pending_confirm", event_types)
         self.assertIn("confirm_rejected", event_types)
         self.assertIn("handover", event_types)
+
+    def test_run_probe_blocks_when_core_anchor_confidence_low(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+
+        result = run_probe_step(
+            instruction="在手机里等待一下",
+            run_id="r-core-low",
+            task_id="t-core-low",
+            session_id="sess-core-low",
+            step_id=4,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_low_core_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+        )
+
+        self.assertEqual(result.status, "HANDOVER")
+        event_types = [e["event_type"] for e in events]
+        self.assertIn("anchor_gate", event_types)
+        handovers = [e for e in events if e.get("event_type") == "handover"]
+        self.assertTrue(handovers)
+        self.assertEqual(handovers[-1].get("reason_code"), "CORE_ANCHOR_CONFIDENCE_LOW")
 
 
 if __name__ == "__main__":

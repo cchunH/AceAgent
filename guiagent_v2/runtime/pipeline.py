@@ -36,6 +36,6 @@ class StepPipeline:
             "A" if post_check.get("passed", True) else "B",
             latency_ms=int((time.time() - start) * 1000),
         )
+        result.assertion_result = {**dict(result.assertion_result or {}), **dict(pre_assertion or {})}
         result.post_check = post_check
         return request.to_dict(), result
-
