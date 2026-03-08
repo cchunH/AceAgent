@@ -95,6 +95,9 @@ docs/guiagent-plan/
 12. [stable-validation-tasks-v1.json](./02-phase-0/stable-validation-tasks-v1.json)  
    稳定实测最小任务集模板（5 个基线任务）。
 
+13. [stable-validation-thresholds-v1.json](./02-phase-0/stable-validation-thresholds-v1.json)  
+   稳定实测门禁阈值模板（用于运行后自动判定 PASS/WARN/FAIL）。
+
 ## 3) 治理规范（03-governance）
 
 1. [documentation-standard-v1.md](./03-governance/documentation-standard-v1.md)  

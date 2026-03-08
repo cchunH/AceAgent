@@ -42,3 +42,6 @@
 
 13. [stable-validation-tasks-v1.json](./stable-validation-tasks-v1.json)  
    稳定实测最小任务集模板（5 个基线任务）。
+
+14. [stable-validation-thresholds-v1.json](./stable-validation-thresholds-v1.json)  
+   稳定实测门禁阈值模板（供 `blueprint_validation_gate.py` 读取）。

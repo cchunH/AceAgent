@@ -63,3 +63,25 @@ python3 run.py \
 2. `step_start -> step_end` 缺失：先查执行链。
 3. `handover` 高：查断言阈值与锚点匹配。
 4. `blueprint_sync` 失败：查回灌输入与 repo 写入路径。
+
+## 7. 自动门禁评估（新增）
+
+在 shadow/device 运行后，对 `runtime_summary.json` 执行门禁评估：
+
+```bash
+python3 scripts/blueprint_validation_gate.py \
+  --summary_json logs/<model>/unimind_agent/<run_name>/<task_id>/runtime_summary.json \
+  --thresholds_json docs/guiagent-plan/02-phase-0/stable-validation-thresholds-v1.json \
+  --output_json /tmp/guiagent_validation_gate_report.json
+```
+
+判定标准：
+- `overall_status=PASS`：可进入下一阶段或版本冻结候选。
+- `overall_status=WARN`：允许继续测试，但需记录偏差并复核阈值。
+- `overall_status=FAIL`：停止扩面，优先修复失败项后复测。
+
+关键门禁项（v1）：
+- `task_success_rate >= 0.7`
+- `anchor_gate_deny_rate <= 0.25`
+- `topology_projection_guard_block_rate <= 0.25`
+- `topology_projection_fit_error_p95 <= 0.2`
