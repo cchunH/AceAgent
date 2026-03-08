@@ -30,3 +30,6 @@
 
 9. [functional-first-task-allocation-r10-r13-v1.md](./functional-first-task-allocation-r10-r13-v1.md)  
    功能优先任务分配（R10-R13，含向量检索接入时序）。
+
+10. [runtime-flow-code-audit-r10-v1.md](./runtime-flow-code-audit-r10-v1.md)  
+   R10 代码流程审查报告（主链完整性、状态机接入、测试证据与后续动作）。

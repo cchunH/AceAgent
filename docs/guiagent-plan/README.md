@@ -77,6 +77,9 @@ docs/guiagent-plan/
 8. [functional-first-task-allocation-r10-r13-v1.md](./02-phase-0/functional-first-task-allocation-r10-r13-v1.md)  
    功能优先任务分配（R10-R13，覆盖执行链、复盘回灌、检索层与控制面）。
 
+9. [runtime-flow-code-audit-r10-v1.md](./02-phase-0/runtime-flow-code-audit-r10-v1.md)  
+   R10 代码流程审查报告（按代码链路核对主流程实现与风险缺口）。
+
 ## 3) 治理规范（03-governance）
 
 1. [documentation-standard-v1.md](./03-governance/documentation-standard-v1.md)  
