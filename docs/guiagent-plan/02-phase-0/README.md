@@ -27,3 +27,6 @@
 
 8. [session-runtime-api-contract-v1.md](./session-runtime-api-contract-v1.md)  
    SessionRuntime 本地 HTTP IPC 接口契约（路径、鉴权、错误码）。
+
+9. [functional-first-task-allocation-r10-r13-v1.md](./functional-first-task-allocation-r10-r13-v1.md)  
+   功能优先任务分配（R10-R13，含向量检索接入时序）。

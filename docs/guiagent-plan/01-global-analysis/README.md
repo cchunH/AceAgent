@@ -30,3 +30,6 @@
 
 9. [post-r4-deep-assessment-and-next-plan-v2.md](./post-r4-deep-assessment-and-next-plan-v2.md)  
    代码与文档深度对齐审查后的新计划（R5-R8：治理硬化、Web 执行增强、控制面数据面、跨节点会话治理）。
+
+10. [guiagent-blueprint-fidelity-review-v1.md](./guiagent-blueprint-fidelity-review-v1.md)  
+   原始 GUIAgent 蓝图一致性复盘（流程复刻映射、向量库接入评估、功能优先计划）。

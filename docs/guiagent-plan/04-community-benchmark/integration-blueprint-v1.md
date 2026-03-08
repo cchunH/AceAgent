@@ -3,11 +3,13 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.19`
+- 版本：`v1.20`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
 - 差距评估与后续推进详见：`implementation-gap-and-reuse-plan-v2.md`
+- 蓝图流程一致性约束详见：`../01-global-analysis/guiagent-blueprint-fidelity-review-v1.md`
+- 功能优先任务分配详见：`../02-phase-0/functional-first-task-allocation-r10-r13-v1.md`
 
 ## 实施进展（截至 2026-03-08）
 
@@ -59,6 +61,7 @@
 1. `watchdog` 深化生产化（下载/安全扩展插件、聚合统计导出）。
 2. `SessionRuntime` 生产级进程化（当前已具备本地 HTTP IPC + 索引恢复 + token 鉴权 + 多实例治理 + 控制面审计，仍缺服务发现与跨节点协调）。
 3. 真正的生产级 web 子任务执行闭环（当前已具备启发式 plan + 单次局部重规划 + fallback，仍缺复杂任务策略与学习反馈）。
+4. `VectorIndexAdapter` 与向量召回层（意图对齐/蓝图候选检索）尚未接入主链。
 
 ## 0. 决策基线（先定方向）
 

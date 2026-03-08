@@ -3,10 +3,12 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.17`
+- 版本：`v2.18`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
+- 蓝图流程一致性复盘见：`../01-global-analysis/guiagent-blueprint-fidelity-review-v1.md`
+- 功能优先任务分配见：`../02-phase-0/functional-first-task-allocation-r10-r13-v1.md`
 
 ## 1. 评估范围
 
@@ -173,6 +175,10 @@
 - 目标来源：`agent-browser`
 - 差距：已具备基础文件化策略与域名门禁（`web_domain_allowlist/web_domain_denylist`），仍缺动态策略分层（环境/任务级）与在线策略灰度。
 
+3. `VectorIndexAdapter` 与向量检索召回层
+- 目标来源：GUIAgent 蓝图 04/05（意图对齐 + 蓝图候选召回）
+- 差距：当前仅有 skeleton 结构匹配，尚未引入 embedding 召回与向量索引后端。
+
 ## 3. 复用优先级重排（基于已实现状态）
 
 ## P0（下一迭代必须完成）
@@ -209,11 +215,16 @@
 - 初始插件：`crash_watchdog.py`, `security_watchdog.py`。
 - 当前状态：`已落地 v1`（含策略文件、去重节流），后续进入告警升级增强。
 
+4. `VectorIndexAdapter`（向量检索抽象）
+- 落位：`guiagent_v2/retrieval/*`（建议新增）或 `guiagent_v2/blueprint_hub/*`（适配层）
+- 能力：统一 `upsert/search/delete`，支持离线后端与在线后端平滑切换。
+
 ## P2（后置）
 
 1. SnapshotRef 深化与 diff 证据链
 2. stream-server 控制通道对接
 3. 更深层 browser-use agent 机制拆取
+4. 在线向量服务接入（Qdrant/Milvus/pgvector）
 
 ## 4. 建议实施序列（代码可直接开工）
 
@@ -265,6 +276,16 @@
 退出条件：
 - 关键事件字段稳定且可回溯，schema 升级不破坏已有消费方。
 - watchdog 告警可控，不出现告警风暴。
+
+### 阶段 R5：检索层接入（2-4 天）
+
+1. 待实现：新增 `VectorIndexAdapter` 抽象与本地 mock/FAISS 实验后端。
+2. 待实现：在 `blueprint_hub` 增加“结构匹配 + 向量召回”融合排序。
+3. 待实现：补齐离线 A/B 指标（intent recall、blueprint top-k 命中率）。
+
+退出条件：
+- 不降低现有 skeleton 快速匹配成功率。
+- 向量召回离线指标达到预设阈值后再考虑在线后端。
 
 ## 5. 风险与控制
 

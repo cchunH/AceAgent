@@ -48,6 +48,9 @@ docs/guiagent-plan/
 9. [post-r4-deep-assessment-and-next-plan-v2.md](./01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md)  
    新一轮代码-文档深度审查与 R5-R8 推进计划（治理硬化优先）。
 
+10. [guiagent-blueprint-fidelity-review-v1.md](./01-global-analysis/guiagent-blueprint-fidelity-review-v1.md)  
+   原始 GUIAgent 蓝图一致性复盘（流程复刻、偏移检查、向量检索接入建议）。
+
 ## 2) 分阶段实施（02-phase-0）
 
 1. [phase0-execution-checklist.md](./02-phase-0/phase0-execution-checklist.md)  
@@ -70,6 +73,9 @@ docs/guiagent-plan/
 
 7. [phase0-experiment-report-template.md](./02-phase-0/phase0-experiment-report-template.md)  
    Phase 0 实验结果记录模板（可直接填报）。
+
+8. [functional-first-task-allocation-r10-r13-v1.md](./02-phase-0/functional-first-task-allocation-r10-r13-v1.md)  
+   功能优先任务分配（R10-R13，覆盖执行链、复盘回灌、检索层与控制面）。
 
 ## 3) 治理规范（03-governance）
 
