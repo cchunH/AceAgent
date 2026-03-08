@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from statistics import median
 from typing import Any
 
 from guiagent_v2.blueprint_hub import BlueprintRepository
 from guiagent_v2.intent_contract import map_legacy_action_to_request
 from .blueprint_sync import upsert_blueprint_from_observation
+from .replay_quality import score_replay_sample
 
 
 def _load_steps(steps_path: str) -> list[dict[str, Any]]:
@@ -20,6 +22,7 @@ def rebuild_blueprints_from_steps(
     steps_path: str,
     blueprints_path: str,
     app_state: str = "global:DEFAULT",
+    min_quality_score: float = 0.45,
 ) -> dict[str, Any]:
     """Offline replay: rebuild blueprints from legacy steps.json."""
     steps = _load_steps(steps_path)
@@ -47,6 +50,8 @@ def rebuild_blueprints_from_steps(
 
     rebuilt = 0
     skipped = 0
+    low_quality_skipped = 0
+    quality_scores: list[float] = []
     for step in steps:
         if str(step.get("operation", "")) != "action_reflection":
             continue
@@ -67,6 +72,21 @@ def rebuild_blueprints_from_steps(
             reason_code = "ASSERTION_MISMATCH"
         else:
             reason_code = "UNKNOWN_ERROR"
+        post_check = {"passed": passed, "reason_code": reason_code}
+
+        quality = score_replay_sample(
+            perception_infos_pre=perception_by_step.get(step_id, []),
+            perception_infos_post=perception_by_step.get(step_id + 1, []),
+            screen_width=screen_width,
+            screen_height=screen_height,
+            action_outcome="A" if passed else ("B" if "B" in outcome else "C"),
+            post_check_result=post_check,
+            min_score=float(min_quality_score),
+        )
+        quality_scores.append(float(quality.get("score", 0.0)))
+        if not bool(quality.get("accepted", False)):
+            low_quality_skipped += 1
+            continue
 
         upsert_blueprint_from_observation(
             repo=repo,
@@ -76,16 +96,20 @@ def rebuild_blueprints_from_steps(
             perception_infos_pre=perception_by_step.get(step_id, []),
             perception_infos_post=perception_by_step.get(step_id + 1, []),
             action_outcome="A" if passed else ("B" if "B" in outcome else "C"),
-            post_check_result={"passed": passed, "reason_code": reason_code},
+            post_check_result=post_check,
             app_state=app_state,
         )
         rebuilt += 1
 
+    quality_p50 = float(median(quality_scores)) if quality_scores else 0.0
     return {
         "status": "SUCCESS",
         "steps_path": steps_path,
         "blueprints_path": blueprints_path,
         "rebuilt_count": rebuilt,
         "skipped_count": skipped,
+        "low_quality_skipped_count": low_quality_skipped,
+        "min_quality_score": float(min_quality_score),
+        "replay_quality_score_p50": round(quality_p50, 4),
         "total_blueprints": len(repo.list_blueprints()),
     }

@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.19`
+- 版本：`v2.20`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -125,6 +125,16 @@
 21. 动态去噪 + 静态骨架 + 快速匹配
 - 证据模块：`guiagent_v2/state_engine/scene_denoise.py`, `static_skeleton.py`, `fast_match.py`, `guiagent_v2/runtime/offline_replay.py`
 - 现状：已接入 `assertion_guard/post_check/blueprint_sync`，并提供离线复盘重建与在线 skeleton 快速匹配能力。
+- 距离评估：`完成（v0）`
+
+22. 主流程审查器（Flow Audit）
+- 证据模块：`guiagent_v2/runtime/flow_audit.py`, `guiagent_v2/runtime/reporting.py`
+- 现状：运行后自动输出 `flow_audit`，按 task 校验主流程关键事件链并给出缺失定位。
+- 距离评估：`完成（v0）`
+
+23. 离线复盘评分器（Replay Quality）
+- 证据模块：`guiagent_v2/runtime/replay_quality.py`, `guiagent_v2/runtime/offline_replay.py`
+- 现状：离线回灌前已支持质量打分与低质量样本过滤（`min_quality_score`）。
 - 距离评估：`完成（v0）`
 
 ### 2.2 部分落地（需增强）

@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.21`
+- 版本：`v1.22`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -56,6 +56,8 @@
 40. 确认流最小闭环已接入：`pending_confirm -> confirm_approved|confirm_rejected|confirm_timeout`，并新增控制面确认接口（`/runtime/confirm`）。
 41. `state_engine` 新增动态场景去噪与静态骨架提取（`denoise_perception_frames/build_static_skeleton`），并接入 `assertion_guard/post_check/blueprint_sync`。
 42. 新增离线复盘入口 `runtime.offline_replay.rebuild_blueprints_from_steps` 与 blueprint 在线快速匹配能力（`BlueprintRepository.match_by_skeleton`）。
+43. 新增运行后主流程审查能力：`runtime.flow_audit`，`runtime_summary.json` 自动输出 `flow_audit`（按 task 给出 PASS/WARN/FAIL 与缺失事件定位）。
+44. 新增离线复盘质量评分门槛：`runtime.replay_quality.score_replay_sample`，`offline_replay` 已支持低质量样本过滤（`min_quality_score`）。
 
 尚未落地：
 1. `watchdog` 深化生产化（下载/安全扩展插件、聚合统计导出）。
