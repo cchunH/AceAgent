@@ -102,6 +102,7 @@ python3 scripts/blueprint_validation_gate.py \
 - `topology_projection_guard_block_rate <= 0.25`
 - `topology_projection_fit_error_p95 <= 0.2`
 - `replay_gate_block_rate <= 0.4`（初始建议值，需结合场景再标定）
+- `blueprint_sync_failed_rate <= 0.15`
 
 ## 8. Replay Gate 策略示例（新增）
 

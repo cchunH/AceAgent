@@ -6,5 +6,8 @@
   "topology_projection_min_samples": 3,
   "topology_projection_guard_block_rate_max": 0.25,
   "topology_projection_fit_error_p95_max": 0.2,
-  "topology_projection_affine_rate_min": 0.4
+  "topology_projection_affine_rate_min": 0.4,
+  "replay_gate_min_samples": 3,
+  "replay_gate_block_rate_max": 0.4,
+  "blueprint_sync_failed_rate_max": 0.15
 }

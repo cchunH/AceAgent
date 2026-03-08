@@ -14,7 +14,9 @@ class TestRuntimeValidationGate(unittest.TestCase):
                 "topology_projection_affine_rate": 0.7,
                 "topology_projection_guard_block_rate": 0.1,
                 "topology_projection_fit_error_p95": 0.08,
-                "counts": {"topology_projection": 8},
+                "replay_gate_block_rate": 0.1,
+                "blueprint_sync_failed_rate": 0.02,
+                "counts": {"topology_projection": 8, "blueprint_sync": 10},
             }
         }
         report = evaluate_runtime_summary(summary)
@@ -31,7 +33,9 @@ class TestRuntimeValidationGate(unittest.TestCase):
                 "topology_projection_affine_rate": 0.1,
                 "topology_projection_guard_block_rate": 0.9,
                 "topology_projection_fit_error_p95": 0.4,
-                "counts": {"topology_projection": 10},
+                "replay_gate_block_rate": 0.9,
+                "blueprint_sync_failed_rate": 0.7,
+                "counts": {"topology_projection": 10, "blueprint_sync": 12},
             }
         }
         report = evaluate_runtime_summary(summary)

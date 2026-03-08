@@ -13,6 +13,9 @@ DEFAULT_VALIDATION_THRESHOLDS: dict[str, Any] = {
     "topology_projection_guard_block_rate_max": 0.25,
     "topology_projection_fit_error_p95_max": 0.20,
     "topology_projection_affine_rate_min": 0.40,
+    "replay_gate_min_samples": 3,
+    "replay_gate_block_rate_max": 0.40,
+    "blueprint_sync_failed_rate_max": 0.15,
 }
 
 
@@ -172,6 +175,38 @@ def evaluate_runtime_summary(
             )
         )
 
+    replay_count = _safe_int(counts.get("blueprint_sync", 0), 0)
+    replay_min_samples = _safe_int(cfg.get("replay_gate_min_samples", 3), 3)
+    if replay_count < replay_min_samples:
+        checks.append(
+            ValidationCheck(
+                name="replay_gate_samples",
+                status="WARN",
+                message="blueprint sync samples below threshold; skip strict replay gate checks",
+                value=float(replay_count),
+                threshold=float(replay_min_samples),
+                operator=">=",
+                detail={"blueprint_sync_count": replay_count},
+            )
+        )
+    else:
+        checks.append(
+            _check_max(
+                "replay_gate_block_rate",
+                _safe_float(metrics.get("replay_gate_block_rate", 0.0), 0.0),
+                _safe_float(cfg.get("replay_gate_block_rate_max", 1.0), 1.0),
+                detail={"blueprint_sync_count": replay_count},
+            )
+        )
+        checks.append(
+            _check_max(
+                "blueprint_sync_failed_rate",
+                _safe_float(metrics.get("blueprint_sync_failed_rate", 0.0), 0.0),
+                _safe_float(cfg.get("blueprint_sync_failed_rate_max", 1.0), 1.0),
+                detail={"blueprint_sync_count": replay_count},
+            )
+        )
+
     totals = {"PASS": 0, "WARN": 0, "FAIL": 0}
     for item in checks:
         totals[_normalize_status(item.status)] += 1
@@ -201,6 +236,9 @@ def evaluate_runtime_summary(
                 metrics.get("topology_projection_fit_error_p95", 0.0), 0.0
             ),
             "topology_projection_count": topology_count,
+            "replay_gate_block_rate": _safe_float(metrics.get("replay_gate_block_rate", 0.0), 0.0),
+            "blueprint_sync_failed_rate": _safe_float(metrics.get("blueprint_sync_failed_rate", 0.0), 0.0),
+            "blueprint_sync_count": replay_count,
         },
         "checks": [item.to_dict() for item in checks],
     }
