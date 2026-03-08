@@ -60,6 +60,92 @@ class TestSceneDenoiseAndMatch(unittest.TestCase):
         self.assertEqual(matched[0]["intent_key"], "global:TAP:SEARCH_BAR")
         self.assertGreaterEqual(matched[0]["score"], 0.8)
 
+    def test_fast_blueprint_match_uses_dynamic_slots_to_reduce_noise_recall(self):
+        observed = {
+            "signature": "obs-1",
+            "nodes": [
+                {
+                    "type": "TEXT",
+                    "text": "Search",
+                    "zone": "top",
+                    "norm_bbox": {"x": 0.5, "y": 0.08, "w": 0.0, "h": 0.0},
+                },
+                {
+                    "type": "TEXT",
+                    "text": "Toast",
+                    "zone": "middle",
+                    "norm_bbox": {"x": 0.5, "y": 0.45, "w": 0.0, "h": 0.0},
+                },
+            ],
+            "dynamic_slots": [
+                {
+                    "key": "middle:toast",
+                    "zone": "middle",
+                    "text": "Toast",
+                    "norm_pos": {"x": 0.5, "y": 0.45},
+                }
+            ],
+        }
+        index = build_blueprint_match_index(
+            [
+                {
+                    "intent_key": "global:TAP:SEARCH_DYNAMIC_TOAST",
+                    "app_state": "global:DEFAULT",
+                    "static_skeleton": {
+                        "signature": "bp-a",
+                        "nodes": [
+                            {
+                                "type": "TEXT",
+                                "text": "Search",
+                                "zone": "top",
+                                "norm_bbox": {"x": 0.5, "y": 0.08, "w": 0.0, "h": 0.0},
+                            }
+                        ],
+                        "dynamic_slots": [
+                            {
+                                "key": "middle:toast",
+                                "zone": "middle",
+                                "text": "Toast",
+                            }
+                        ],
+                    },
+                },
+                {
+                    "intent_key": "global:TAP:SEARCH_STATIC_TOAST",
+                    "app_state": "global:DEFAULT",
+                    "static_skeleton": {
+                        "signature": "bp-b",
+                        "nodes": [
+                            {
+                                "type": "TEXT",
+                                "text": "Search",
+                                "zone": "top",
+                                "norm_bbox": {"x": 0.5, "y": 0.08, "w": 0.0, "h": 0.0},
+                            },
+                            {
+                                "type": "TEXT",
+                                "text": "Toast",
+                                "zone": "middle",
+                                "norm_bbox": {"x": 0.5, "y": 0.45, "w": 0.0, "h": 0.0},
+                            },
+                        ],
+                        "dynamic_slots": [],
+                    },
+                },
+            ]
+        )
+        matched = match_blueprint_fast(
+            observed_skeleton=observed,
+            index=index,
+            app_state="global:DEFAULT",
+            top_k=2,
+        )
+        self.assertTrue(matched)
+        self.assertEqual(matched[0]["intent_key"], "global:TAP:SEARCH_DYNAMIC_TOAST")
+        static_toast = [item for item in matched if item.get("intent_key") == "global:TAP:SEARCH_STATIC_TOAST"]
+        self.assertTrue(static_toast)
+        self.assertGreater(static_toast[0]["dynamic_noise_penalty"], 0.0)
+
     def test_denoise_clusters_jittered_positions(self):
         frames = [
             [{"text": "Search", "coordinates": (520, 110)}],

@@ -80,6 +80,9 @@ docs/guiagent-plan/
 9. [runtime-flow-code-audit-r10-v1.md](./02-phase-0/runtime-flow-code-audit-r10-v1.md)  
    R10 代码流程审查报告（按代码链路核对主流程实现与风险缺口）。
 
+10. [anchor-selection-and-aux-anchor-thinking-v1.md](./02-phase-0/anchor-selection-and-aux-anchor-thinking-v1.md)  
+   主辅锚点选择与辅助锚点作用思考文档（进入下一任务前的策略梳理）。
+
 ## 3) 治理规范（03-governance）
 
 1. [documentation-standard-v1.md](./03-governance/documentation-standard-v1.md)  

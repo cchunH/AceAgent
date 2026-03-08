@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.7`
+- 版本：`v1.8`
 - 更新时间：`2026-03-08`
 - 关联主文档：`../01-global-analysis/guiagent-blueprint-fidelity-review-v1.md`
 
@@ -126,3 +126,4 @@
 4. B3 已落地最小闭环：新增“离线重建 -> 向量召回命中”回归测试样例，验证回灌后可被在线检索路径消费。
 5. A2 已落地部分增强：`scene_denoise` 升级为跨帧聚类去噪，`StaticSkeleton` 增加 `dynamic_slots` 摘要。
 6. A2 已补匹配增强：`topology_matcher` 接入文本/距离/角色/区域加权评分，`CORE` 锚点优先级显式化。
+7. A2 已补召回增强：`fast_match` 融合 `dynamic_slots`，对动态污染静态锚点的候选进行惩罚。

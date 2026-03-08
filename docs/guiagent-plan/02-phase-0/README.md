@@ -33,3 +33,6 @@
 
 10. [runtime-flow-code-audit-r10-v1.md](./runtime-flow-code-audit-r10-v1.md)  
    R10 代码流程审查报告（主链完整性、状态机接入、测试证据与后续动作）。
+
+11. [anchor-selection-and-aux-anchor-thinking-v1.md](./anchor-selection-and-aux-anchor-thinking-v1.md)  
+   主辅锚点选择与辅助锚点作用思考（辅助定位、消歧、抗噪、恢复引导）。
