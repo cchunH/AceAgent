@@ -132,6 +132,13 @@ def match_topology(
             confidence=1.0,
             matched_anchor_ids=[],
             reason_code="NO_EXPECTED_ANCHORS",
+            core_confidence=1.0,
+            aux_confidence=1.0,
+            geometry_confidence=1.0,
+            matched_core=0,
+            matched_aux=0,
+            total_core=0,
+            total_aux=0,
         )
 
     observed = [_as_anchor_dict(a) for a in observed_anchors]
@@ -147,8 +154,26 @@ def match_topology(
     weighted_sum = 0.0
     total_weight = max(1e-6, sum(weight for weight, _ in expected_weighted))
     used_observed_ids: set[str] = set()
+    core_weight_sum = 0.0
+    core_weight_total = 0.0
+    aux_weight_sum = 0.0
+    aux_weight_total = 0.0
+    geometry_weight_sum = 0.0
+    geometry_weight_total = 0.0
+    matched_core = 0
+    matched_aux = 0
+    total_core = 0
+    total_aux = 0
 
     for weight, exp in expected_weighted:
+        role = str(exp.get("role", "")).strip().upper()
+        if role == "CORE":
+            total_core += 1
+            core_weight_total += weight
+        else:
+            total_aux += 1
+            aux_weight_total += weight
+
         best: tuple[float, dict[str, Any]] | None = None
         for obs in observed:
             obs_id = str(obs.get("id", ""))
@@ -161,12 +186,38 @@ def match_topology(
         if best and best[0] >= 0.45:
             matched += 1
             weighted_sum += weight * best[0]
+            if role == "CORE":
+                matched_core += 1
+                core_weight_sum += weight * best[0]
+            else:
+                matched_aux += 1
+                aux_weight_sum += weight * best[0]
+
+            exp_bbox = dict(exp.get("norm_bbox", {}) or {})
+            obs_bbox = dict(best[1].get("norm_bbox", {}) or {})
+            exp_center = {"norm_bbox": {"x": exp_bbox.get("x", 0.0), "y": exp_bbox.get("y", 0.0)}}
+            obs_center = {"norm_bbox": {"x": obs_bbox.get("x", 0.0), "y": obs_bbox.get("y", 0.0)}}
+            dist = _distance(exp_center, obs_center)
+            geometry_weight_sum += weight * _distance_score(dist, distance_threshold)
+            geometry_weight_total += weight
+
             obs_id = str(best[1].get("id", ""))
             matched_ids.append(obs_id)
             if obs_id:
                 used_observed_ids.add(obs_id)
 
     confidence = weighted_sum / total_weight
+    if core_weight_total > 0:
+        core_confidence = core_weight_sum / core_weight_total
+    else:
+        core_confidence = confidence
+    if aux_weight_total > 0:
+        aux_confidence = aux_weight_sum / aux_weight_total
+    else:
+        aux_confidence = confidence
+    geometry_confidence = (
+        geometry_weight_sum / geometry_weight_total if geometry_weight_total > 0 else confidence
+    )
     reason_code = "TOPOLOGY_MATCH_OK" if confidence >= 0.6 else "TOPOLOGY_MISMATCH"
     return TopologyMatchResult(
         matched=matched,
@@ -174,6 +225,13 @@ def match_topology(
         confidence=confidence,
         matched_anchor_ids=matched_ids,
         reason_code=reason_code,
+        core_confidence=max(0.0, min(1.0, core_confidence)),
+        aux_confidence=max(0.0, min(1.0, aux_confidence)),
+        geometry_confidence=max(0.0, min(1.0, geometry_confidence)),
+        matched_core=matched_core,
+        matched_aux=matched_aux,
+        total_core=total_core,
+        total_aux=total_aux,
     )
 
 

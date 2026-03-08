@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.8`
+- 版本：`v1.9`
 - 更新时间：`2026-03-08`
 - 关联主文档：`../01-global-analysis/guiagent-blueprint-fidelity-review-v1.md`
 
@@ -127,3 +127,4 @@
 5. A2 已落地部分增强：`scene_denoise` 升级为跨帧聚类去噪，`StaticSkeleton` 增加 `dynamic_slots` 摘要。
 6. A2 已补匹配增强：`topology_matcher` 接入文本/距离/角色/区域加权评分，`CORE` 锚点优先级显式化。
 7. A2 已补召回增强：`fast_match` 融合 `dynamic_slots`，对动态污染静态锚点的候选进行惩罚。
+8. A2 已补分路评分：`assertion_guard/post_check` 输出 `core_anchor_confidence/aux_anchor_confidence/geometry_confidence` 并接入运行指标聚合。

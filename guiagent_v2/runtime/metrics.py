@@ -108,6 +108,9 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     total_resolved_confirms = len(confirm_approved_events) + len(confirm_rejected_events)
     denoise_values: list[float] = []
     skeleton_values: list[float] = []
+    core_anchor_values: list[float] = []
+    aux_anchor_values: list[float] = []
+    geometry_values: list[float] = []
     fast_match_scores: list[float] = []
     fast_match_hits = 0
     fast_match_total = 0
@@ -121,6 +124,21 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         if result.get("skeleton_confidence") is not None:
             try:
                 skeleton_values.append(float(result.get("skeleton_confidence")))
+            except Exception:
+                pass
+        if result.get("core_anchor_confidence") is not None:
+            try:
+                core_anchor_values.append(float(result.get("core_anchor_confidence")))
+            except Exception:
+                pass
+        if result.get("aux_anchor_confidence") is not None:
+            try:
+                aux_anchor_values.append(float(result.get("aux_anchor_confidence")))
+            except Exception:
+                pass
+        if result.get("geometry_confidence") is not None:
+            try:
+                geometry_values.append(float(result.get("geometry_confidence")))
             except Exception:
                 pass
         hint = event.get("fast_match_hint")
@@ -143,6 +161,21 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         if result.get("skeleton_confidence") is not None:
             try:
                 skeleton_values.append(float(result.get("skeleton_confidence")))
+            except Exception:
+                pass
+        if result.get("core_anchor_confidence") is not None:
+            try:
+                core_anchor_values.append(float(result.get("core_anchor_confidence")))
+            except Exception:
+                pass
+        if result.get("aux_anchor_confidence") is not None:
+            try:
+                aux_anchor_values.append(float(result.get("aux_anchor_confidence")))
+            except Exception:
+                pass
+        if result.get("geometry_confidence") is not None:
+            try:
+                geometry_values.append(float(result.get("geometry_confidence")))
             except Exception:
                 pass
 
@@ -192,6 +225,15 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         ) if denoise_values else 0.0,
         "skeleton_confidence_p50": median(skeleton_values) if skeleton_values else 0.0,
         "skeleton_confidence_p95": _percentile(skeleton_values, 0.95) if skeleton_values else 0.0,
+        "core_anchor_confidence_avg": (
+            sum(core_anchor_values) / len(core_anchor_values)
+        ) if core_anchor_values else 0.0,
+        "aux_anchor_confidence_avg": (
+            sum(aux_anchor_values) / len(aux_anchor_values)
+        ) if aux_anchor_values else 0.0,
+        "geometry_confidence_avg": (
+            sum(geometry_values) / len(geometry_values)
+        ) if geometry_values else 0.0,
         "fast_match_hit_rate": (fast_match_hits / fast_match_total) if fast_match_total else 0.0,
         "fast_match_score_p50": median(fast_match_scores) if fast_match_scores else 0.0,
         "fast_match_score_p95": _percentile(fast_match_scores, 0.95) if fast_match_scores else 0.0,

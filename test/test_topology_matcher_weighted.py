@@ -33,6 +33,7 @@ class TestTopologyMatcherWeighted(unittest.TestCase):
         result = match_topology(observed, expected)
         self.assertLess(result.confidence, 0.6)
         self.assertEqual(result.reason_code, "TOPOLOGY_MISMATCH")
+        self.assertLess(result.core_confidence, result.aux_confidence)
 
     def test_core_anchor_match_can_pass_with_aux_missing(self):
         expected = [
@@ -63,6 +64,7 @@ class TestTopologyMatcherWeighted(unittest.TestCase):
         result = match_topology(observed, expected)
         self.assertGreaterEqual(result.confidence, 0.6)
         self.assertEqual(result.reason_code, "TOPOLOGY_MATCH_OK")
+        self.assertGreaterEqual(result.core_confidence, result.aux_confidence)
 
     def test_identical_sets_high_confidence(self):
         expected = [
@@ -104,4 +106,3 @@ class TestTopologyMatcherWeighted(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

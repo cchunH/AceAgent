@@ -242,6 +242,9 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
             self.assertEqual(metrics["fallback_action_selected_count"], 1)
             self.assertAlmostEqual(metrics["web_step_success_rate"], 1.0)
             self.assertIn("denoise_stable_ratio_avg", metrics)
+            self.assertIn("core_anchor_confidence_avg", metrics)
+            self.assertIn("aux_anchor_confidence_avg", metrics)
+            self.assertIn("geometry_confidence_avg", metrics)
             self.assertIn("fast_match_hit_rate", metrics)
 
     def test_compute_metrics_from_events(self):

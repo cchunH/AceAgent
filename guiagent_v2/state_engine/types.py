@@ -23,6 +23,13 @@ class TopologyMatchResult:
     confidence: float
     matched_anchor_ids: list[str]
     reason_code: str
+    core_confidence: float = 0.0
+    aux_confidence: float = 0.0
+    geometry_confidence: float = 0.0
+    matched_core: int = 0
+    matched_aux: int = 0
+    total_core: int = 0
+    total_aux: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

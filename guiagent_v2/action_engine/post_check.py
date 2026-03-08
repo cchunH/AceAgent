@@ -75,6 +75,9 @@ def run_post_check(
                     "reason_code": "POST_EXPECTATION_MISMATCH",
                     "expected": post_expectations,
                     "topology_confidence": topo.confidence,
+                    "core_anchor_confidence": topo.core_confidence,
+                    "aux_anchor_confidence": topo.aux_confidence,
+                    "geometry_confidence": topo.geometry_confidence,
                     "skeleton_confidence": skeleton_topo.confidence,
                 }
 
@@ -87,6 +90,9 @@ def run_post_check(
             "passed": False,
             "reason_code": "NO_STATE_CHANGE",
             "topology_confidence": topo.confidence,
+            "core_anchor_confidence": topo.core_confidence,
+            "aux_anchor_confidence": topo.aux_confidence,
+            "geometry_confidence": topo.geometry_confidence,
             "skeleton_confidence": skeleton_topo.confidence,
             "denoise_stable_ratio": denoise.get("stable_ratio"),
         }
@@ -95,6 +101,9 @@ def run_post_check(
         "passed": True,
         "reason_code": "STATE_TRANSITION_OK",
         "topology_confidence": topo.confidence,
+        "core_anchor_confidence": topo.core_confidence,
+        "aux_anchor_confidence": topo.aux_confidence,
+        "geometry_confidence": topo.geometry_confidence,
         "skeleton_confidence": skeleton_topo.confidence,
         "denoise_stable_ratio": denoise.get("stable_ratio"),
     }

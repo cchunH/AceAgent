@@ -37,6 +37,9 @@ class TestStateActionEngine(unittest.TestCase):
         result = run_pre_assertion(req, context)
         self.assertFalse(result["passed"])
         self.assertEqual(result["reason_code"], "STRUCTURAL_ASSERTION_FAILED")
+        self.assertIn("core_anchor_confidence", result)
+        self.assertIn("aux_anchor_confidence", result)
+        self.assertIn("geometry_confidence", result)
 
     def test_post_check_no_change(self):
         req = map_legacy_action_to_request({"name": "Tap", "arguments": {"x": 1, "y": 1}})
@@ -50,8 +53,10 @@ class TestStateActionEngine(unittest.TestCase):
         result = run_post_check(req, context)
         self.assertFalse(result["passed"])
         self.assertEqual(result["reason_code"], "NO_STATE_CHANGE")
+        self.assertIn("core_anchor_confidence", result)
+        self.assertIn("aux_anchor_confidence", result)
+        self.assertIn("geometry_confidence", result)
 
 
 if __name__ == "__main__":
     unittest.main()
-

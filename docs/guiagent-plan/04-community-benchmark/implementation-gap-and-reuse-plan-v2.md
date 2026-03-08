@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.27`
+- 版本：`v2.28`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -170,6 +170,11 @@
 30. 动态槽位融合快速匹配（Dynamic-aware Fast Match）
 - 证据模块：`guiagent_v2/state_engine/fast_match.py`, `test/test_scene_denoise_and_match.py`
 - 现状：`fast_match` 已引入 `dynamic_overlap_score` 与 `dynamic_noise_penalty`，对动态污染静态锚点场景进行惩罚。
+- 距离评估：`完成（v0）`
+
+31. 主辅锚点分路评分观测（Core/Aux/Geometry Confidence）
+- 证据模块：`guiagent_v2/action_engine/assertion_guard.py`, `guiagent_v2/action_engine/post_check.py`, `guiagent_v2/runtime/metrics.py`
+- 现状：断言与后检均输出主辅锚点与几何置信度，`runtime metrics` 增加对应聚合指标。
 - 距离评估：`完成（v0）`
 
 ### 2.2 部分落地（需增强）

@@ -46,6 +46,7 @@ def run_pre_assertion(
         max_nodes=8,
     )
 
+    topo = None
     expected_anchors = context.get("expected_anchors")
     if expected_anchors:
         topo = match_topology(observed_anchors, expected_anchors)
@@ -54,6 +55,13 @@ def run_pre_assertion(
                 "passed": False,
                 "reason_code": "STRUCTURAL_ASSERTION_FAILED",
                 "topology_confidence": topo.confidence,
+                "core_anchor_confidence": topo.core_confidence,
+                "aux_anchor_confidence": topo.aux_confidence,
+                "geometry_confidence": topo.geometry_confidence,
+                "matched_core": topo.matched_core,
+                "matched_aux": topo.matched_aux,
+                "total_core": topo.total_core,
+                "total_aux": topo.total_aux,
                 "matched": topo.matched,
                 "total_expected": topo.total_expected,
                 "denoise_stable_ratio": denoise.get("stable_ratio"),
@@ -88,6 +96,13 @@ def run_pre_assertion(
     return {
         "passed": True,
         "reason_code": "OK",
+        "core_anchor_confidence": topo.core_confidence if topo is not None else 1.0,
+        "aux_anchor_confidence": topo.aux_confidence if topo is not None else 1.0,
+        "geometry_confidence": topo.geometry_confidence if topo is not None else 1.0,
+        "matched_core": topo.matched_core if topo is not None else 0,
+        "matched_aux": topo.matched_aux if topo is not None else 0,
+        "total_core": topo.total_core if topo is not None else 0,
+        "total_aux": topo.total_aux if topo is not None else 0,
         "denoise_stable_ratio": denoise.get("stable_ratio"),
         "skeleton_signature": observed_skeleton.signature,
     }
