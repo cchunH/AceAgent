@@ -33,3 +33,6 @@
 
 10. [guiagent-blueprint-fidelity-review-v1.md](./guiagent-blueprint-fidelity-review-v1.md)  
    原始 GUIAgent 蓝图一致性复盘（流程复刻映射、向量库接入评估、功能优先计划）。
+
+11. [code-doc-alignment-priority-review-v3.md](./code-doc-alignment-priority-review-v3.md)  
+   最新代码-文档对齐审查与“功能完整可用”优先级重排（P0/P1/P2）。

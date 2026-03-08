@@ -8,6 +8,7 @@
 - 评估输入：
   - 代码：`guiagent_v2/runtime/*`, `run.py`, `test/*`
   - 文档：`integration-blueprint-v1.md`, `implementation-gap-and-reuse-plan-v2.md`, `session-runtime-api-contract-v1.md`
+  - 补充：最新优先级重排见 `code-doc-alignment-priority-review-v3.md`
 
 ## 1. 当前实现结论（最新基线）
 

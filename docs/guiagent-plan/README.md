@@ -51,6 +51,9 @@ docs/guiagent-plan/
 10. [guiagent-blueprint-fidelity-review-v1.md](./01-global-analysis/guiagent-blueprint-fidelity-review-v1.md)  
    原始 GUIAgent 蓝图一致性复盘（流程复刻、偏移检查、向量检索接入建议）。
 
+11. [code-doc-alignment-priority-review-v3.md](./01-global-analysis/code-doc-alignment-priority-review-v3.md)  
+   最新代码-文档对齐审查与“功能完整可用”优先级重排（聚焦 v2 独立闭环阻断项）。
+
 ## 2) 分阶段实施（02-phase-0）
 
 1. [phase0-execution-checklist.md](./02-phase-0/phase0-execution-checklist.md)  
