@@ -103,6 +103,7 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 - `handover`
 - `step_end`
 - `task_end`
+- `blueprint_sync`（v2 mobile 分支）
 
 社区对标后的规划补充（未落地代码）：
 - 未来会增加执行通道字段：`channel=mobile_native|web_skill`

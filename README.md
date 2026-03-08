@@ -236,6 +236,7 @@ while True:
 - `web_plan`
 - `web_step_start`
 - `web_step_end`
+- `blueprint_sync`
 
 可选运行参数（v2）：
 - `--v2_skip_legacy`

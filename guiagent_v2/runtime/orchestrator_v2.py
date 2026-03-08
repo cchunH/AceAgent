@@ -710,6 +710,7 @@ def run_single_task_with_runtime(
                     adb_path=str(getattr(runtime_config.paths, "ADB_PATH", "adb")),
                     mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
                     perception_provider=perception_provider,
+                    blueprint_repo=blueprint_repo,
                 )
                 _emit_and_track(
                     bus,
@@ -758,6 +759,7 @@ def run_single_task_with_runtime(
                 adb_path=str(getattr(runtime_config.paths, "ADB_PATH", "adb")),
                 mobile_wait_ms=int(max(0, int(mobile_wait_ms))),
                 perception_provider=perception_provider,
+                blueprint_repo=blueprint_repo,
             )
 
     should_delegate_legacy = not (runtime_mode == "guiagent_v2" and bool(v2_skip_legacy))

@@ -1,5 +1,8 @@
+import os
+import tempfile
 import unittest
 
+from guiagent_v2.blueprint_hub import BlueprintRepository
 from guiagent_v2.runtime.context_compaction import ContextCompactor
 from guiagent_v2.runtime.default_hooks import post_state_check_hook, semantic_pre_assertion_hook
 from guiagent_v2.runtime.guard_policy import GuardPolicy
@@ -505,6 +508,52 @@ class TestV2Executor(unittest.TestCase):
 
         self.assertEqual(result.status, "SUCCESS")
         self.assertGreaterEqual(calls["count"], 2)
+
+    def test_run_probe_syncs_blueprint_after_mobile_step(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+        calls = {"count": 0}
+
+        def _perception_provider():
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return {
+                    "perception_infos": [{"text": "Home", "coordinates": [120, 80]}],
+                    "screen_width": 1080,
+                    "screen_height": 2340,
+                }
+            return {
+                "perception_infos": [{"text": "Search", "coordinates": [520, 120]}],
+                "screen_width": 1080,
+                "screen_height": 2340,
+            }
+
+        with tempfile.TemporaryDirectory() as td:
+            repo = BlueprintRepository(os.path.join(td, "blueprints.json"))
+            result = run_probe_step(
+                instruction="在手机里等待一下",
+                run_id="r-blueprint",
+                task_id="t-blueprint",
+                session_id="sess-blueprint",
+                step_id=7,
+                chain_mode="guiagent_v2",
+                emit_event=events.append,
+                hooks=_build_hooks(),
+                router=WebSkillRouter(),
+                guard_policy=GuardPolicy(),
+                web_skill=web_skill,
+                perception_provider=_perception_provider,
+                blueprint_repo=repo,
+            )
+
+            self.assertEqual(result.status, "SUCCESS")
+            saved = repo.get_blueprint(result.intent_key, app_state="global:DEFAULT")
+            self.assertIsNotNone(saved)
+            self.assertTrue(saved.get("anchors"))
+
+        blueprint_events = [e for e in events if e.get("event_type") == "blueprint_sync"]
+        self.assertTrue(blueprint_events)
+        self.assertEqual(blueprint_events[-1].get("status"), "SUCCESS")
 
 
 if __name__ == "__main__":

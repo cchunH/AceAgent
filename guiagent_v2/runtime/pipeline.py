@@ -38,6 +38,7 @@ class StepPipeline:
                 "error": None,
                 "action_name": str(request.action.get("name", "")),
                 "latency_ms": 0,
+                "context": dict(context),
             }
 
         exec_detail = {
@@ -68,6 +69,9 @@ class StepPipeline:
                     "reason_code": reason_code,
                 }
                 result.recovery_level = "L2"
+                if isinstance(exec_detail, dict):
+                    exec_detail = dict(exec_detail)
+                    exec_detail["context"] = dict(context)
                 return request.to_dict(), result, exec_detail
 
         if post_context_provider is not None:
@@ -86,6 +90,9 @@ class StepPipeline:
         )
         result.assertion_result = {**dict(result.assertion_result or {}), **dict(pre_assertion or {})}
         result.post_check = post_check
+        if isinstance(exec_detail, dict):
+            exec_detail = dict(exec_detail)
+            exec_detail["context"] = dict(context)
         return request.to_dict(), result, exec_detail
 
     def run_shadow_step(

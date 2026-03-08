@@ -7,8 +7,10 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from guiagent_v2.intent_contract import map_legacy_action_to_request
+from guiagent_v2.state_engine import build_static_skeleton
 from .action_registry import ActionRegistry
 from .agent_browser_skill import AgentBrowserSkill
+from .blueprint_sync import upsert_blueprint_from_observation
 from .context_compaction import ContextCompactor
 from .guard_policy import GuardPolicy
 from .hooks import HookManager
@@ -242,6 +244,52 @@ def _choose_better_anchor_result(primary: dict[str, Any], candidate: dict[str, A
     return candidate if c_score > p_score else primary
 
 
+def _resolve_blueprint_context(
+    *,
+    blueprint_repo: Any,
+    request_intent_key: str,
+    step_context: dict[str, Any],
+    screen_width: int,
+    screen_height: int,
+) -> dict[str, Any] | None:
+    if blueprint_repo is None:
+        return None
+    selected_blueprint = blueprint_repo.get_blueprint(
+        request_intent_key,
+        app_state="global:DEFAULT",
+    )
+    fast_match_hint = None
+    if selected_blueprint is None:
+        observed_skeleton = build_static_skeleton(
+            frames=[list(step_context.get("perception_infos_pre", []))],
+            screen_size=(int(screen_width), int(screen_height)),
+            min_presence_ratio=1.0,
+            max_nodes=8,
+        )
+        candidates = blueprint_repo.match_by_skeleton(
+            observed_skeleton=observed_skeleton.to_dict(),
+            app_state="global:DEFAULT",
+            top_k=1,
+        )
+        if candidates:
+            top = candidates[0]
+            if float(top.get("score", 0.0)) >= 0.55:
+                selected_blueprint = blueprint_repo.get_blueprint(
+                    str(top.get("intent_key", "")),
+                    app_state="global:DEFAULT",
+                )
+                fast_match_hint = {
+                    "matched_intent_key": top.get("intent_key"),
+                    "matched_score": top.get("score"),
+                    "signature_hit": top.get("signature_hit"),
+                }
+    if selected_blueprint is not None:
+        step_context["expected_anchors"] = list(selected_blueprint.get("anchors", []))
+        step_context["expected_skeleton"] = selected_blueprint.get("static_skeleton")
+        step_context["post_expectations"] = list(selected_blueprint.get("post_expectations", []))
+    return fast_match_hint
+
+
 def run_probe_step(
     instruction: str,
     run_id: str,
@@ -269,6 +317,7 @@ def run_probe_step(
     adb_path: str = "adb",
     mobile_wait_ms: int = 1000,
     perception_provider: PerceptionProvider | None = None,
+    blueprint_repo: Any | None = None,
 ) -> V2ProbeResult:
     loop_detector = loop_detector or LoopDetector()
     context_compactor = context_compactor or ContextCompactor()
@@ -362,6 +411,18 @@ def run_probe_step(
         "task_type": route_context.get("task_type"),
     }
     request = map_legacy_action_to_request(action_obj, context=request_context)
+    fast_match_hint = None
+    if blueprint_repo is not None:
+        try:
+            fast_match_hint = _resolve_blueprint_context(
+                blueprint_repo=blueprint_repo,
+                request_intent_key=request.intent_key,
+                step_context=step_context,
+                screen_width=int(step_context.get("screen_width", screen_width)),
+                screen_height=int(step_context.get("screen_height", screen_height)),
+            )
+        except Exception:
+            fast_match_hint = None
     state_machine = ProbeStateMachine()
 
     def _transition_state(
@@ -1233,6 +1294,7 @@ def run_probe_step(
             "recovery_level": recovery_level,
             "s2_takeover": status != "SUCCESS",
             **final_route_info,
+            **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
         }
     )
     _emit(
@@ -1246,6 +1308,7 @@ def run_probe_step(
             "intent_key": request.intent_key,
             "post_check": post_check,
             **final_route_info,
+            **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
         }
     )
 
@@ -1273,6 +1336,7 @@ def run_probe_step(
                 "intent_key": request.intent_key,
                 "reason_code": reason_code,
                 **final_route_info,
+                **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
             }
         )
         _transition_state(
@@ -1289,6 +1353,65 @@ def run_probe_step(
             route_payload=final_route_info,
         )
 
+    if blueprint_repo is not None and str(final_route_info.get("channel", "")) == "mobile_native":
+        effective_context = dict(step_context or {})
+        adapter_call = exec_result.get("adapter_call", {})
+        if isinstance(adapter_call, dict):
+            context_after = adapter_call.get("context")
+            if isinstance(context_after, dict):
+                effective_context.update(context_after)
+        outcome_code = "A"
+        if final_status != "SUCCESS":
+            assertion_passed = bool(assertion_result.get("passed", False))
+            post_check_passed = bool(post_check.get("passed", False))
+            if assertion_passed and not post_check_passed:
+                outcome_code = "B"
+            elif not assertion_passed and post_check_passed:
+                outcome_code = "C"
+            else:
+                outcome_code = "B"
+        try:
+            synced_blueprint = upsert_blueprint_from_observation(
+                repo=blueprint_repo,
+                intent_key=request.intent_key,
+                screen_width=int(effective_context.get("screen_width", screen_width)),
+                screen_height=int(effective_context.get("screen_height", screen_height)),
+                perception_infos_pre=list(effective_context.get("perception_infos_pre", [])),
+                perception_infos_post=list(effective_context.get("perception_infos_post", [])),
+                action_outcome=outcome_code,
+                post_check_result=post_check,
+            )
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "blueprint_sync",
+                    "status": "SUCCESS",
+                    "intent_key": request.intent_key,
+                    "blueprint_version": str(synced_blueprint.get("version", "")),
+                    **final_route_info,
+                    **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
+                }
+            )
+        except Exception as exc:
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "blueprint_sync",
+                    "status": "FAILED",
+                    "intent_key": request.intent_key,
+                    "reason_code": "BLUEPRINT_SYNC_ERROR",
+                    "error": str(exc),
+                    **final_route_info,
+                    **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
+                }
+            )
+
     _emit(
         {
             "run_id": run_id,
@@ -1303,6 +1426,7 @@ def run_probe_step(
             "post_check": post_check,
             "recovery_level": recovery_level,
             **final_route_info,
+            **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
         }
     )
 
