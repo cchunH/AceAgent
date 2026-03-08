@@ -38,6 +38,9 @@ def _run_with_mode(runtime_mode: str, **kwargs):
         kwargs.pop("mobile_wait_ms", None)
         kwargs.pop("v2_max_steps", None)
         kwargs.pop("v2_use_live_perception", None)
+        kwargs.pop("blueprint_vector_backend", None)
+        kwargs.pop("blueprint_vector_plugin", None)
+        kwargs.pop("blueprint_embedding_dim", None)
         return run_single_task(**kwargs)
     kwargs["runtime_mode"] = runtime_mode
     return run_single_task_with_runtime(**kwargs)
@@ -152,6 +155,24 @@ def main():
         action="store_true",
         default=False,
         help="Enable live Perceptor snapshots for guiagent_v2 pre/post step context.",
+    )
+    parser.add_argument(
+        "--blueprint_vector_backend",
+        type=str,
+        default=None,
+        help="Blueprint vector backend: memory|custom (default from env GUIAGENT_BLUEPRINT_VECTOR_BACKEND).",
+    )
+    parser.add_argument(
+        "--blueprint_vector_plugin",
+        type=str,
+        default=None,
+        help="Custom blueprint vector plugin spec '<module>:<factory>' when backend=custom.",
+    )
+    parser.add_argument(
+        "--blueprint_embedding_dim",
+        type=int,
+        default=None,
+        help="Embedding dimension for blueprint vector retrieval (default from env GUIAGENT_BLUEPRINT_EMBEDDING_DIM).",
     )
     parser.add_argument(
         "--watchdog_policy_path",
@@ -328,6 +349,9 @@ def main():
                 mobile_wait_ms=args.mobile_wait_ms,
                 v2_max_steps=args.v2_max_steps,
                 v2_use_live_perception=args.v2_use_live_perception,
+                blueprint_vector_backend=args.blueprint_vector_backend,
+                blueprint_vector_plugin=args.blueprint_vector_plugin,
+                blueprint_embedding_dim=args.blueprint_embedding_dim,
             )
         except Exception as e:
             print(f"Failed when doing task: {args.instruction}")
@@ -413,6 +437,9 @@ def main():
                 mobile_wait_ms=args.mobile_wait_ms,
                 v2_max_steps=args.v2_max_steps,
                 v2_use_live_perception=args.v2_use_live_perception,
+                blueprint_vector_backend=args.blueprint_vector_backend,
+                blueprint_vector_plugin=args.blueprint_vector_plugin,
+                blueprint_embedding_dim=args.blueprint_embedding_dim,
             )
             print("\n\nDONE:", task["instruction"])
             print("IMPORTANT: Please reset the device as needed before running the next task!")

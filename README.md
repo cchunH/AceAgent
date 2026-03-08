@@ -247,6 +247,9 @@ while True:
 - `--mobile_wait_ms`
 - `--v2_max_steps`
 - `--v2_use_live_perception`
+- `--blueprint_vector_backend`
+- `--blueprint_vector_plugin`
+- `--blueprint_embedding_dim`
 - `--watchdog_policy_path`
 - `--watchdog_policy_reload_interval`
 - `--session_id`
@@ -259,6 +262,11 @@ while True:
 - `--session_runtime_lockfile_path`
 - `--session_runtime_allow_port_fallback`
 - `--session_runtime_audit_log_path`
+
+向量后端环境变量（用于蓝图快速匹配）：
+- `GUIAGENT_BLUEPRINT_VECTOR_BACKEND`（默认 `memory`）
+- `GUIAGENT_BLUEPRINT_VECTOR_PLUGIN`（当 backend=`custom` 时使用，格式 `<module>:<factory>`）
+- `GUIAGENT_BLUEPRINT_EMBEDDING_DIM`（默认 `32`）
 
 ## 工作流程详解
 

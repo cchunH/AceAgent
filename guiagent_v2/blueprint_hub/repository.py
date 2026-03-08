@@ -46,16 +46,19 @@ class BlueprintRepository:
         vector_index: VectorIndexAdapter | None = None,
         embedding_fn: Callable[[str, int], list[float]] | None = None,
         embedding_dim: int | None = None,
+        source: str | None = None,
         rebuild: bool = False,
     ) -> dict[str, Any]:
         with self._lock:
             if vector_index is not None:
                 self._vector_index = vector_index
-                self._vector_backend_source = "vector_custom"
+                self._vector_backend_source = str(source or "vector_custom")
             if embedding_fn is not None:
                 self._embedding_fn = embedding_fn
             if embedding_dim is not None:
                 self._embedding_dim = max(1, int(embedding_dim))
+            if source is not None and vector_index is None:
+                self._vector_backend_source = str(source)
             self._vector_index_ready = False
         if rebuild:
             return self.rebuild_vector_index()

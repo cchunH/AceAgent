@@ -68,6 +68,10 @@ python run.py \
 `--runtime_mode guiagent_v2`：
 - 与 `guiagent_v2_shadow` 共用当前骨架，预留后续真实 v2 执行逻辑接管。
 - 可选开启 `--v2_use_live_perception`，将 `Perceptor` 的实时 pre/post 感知注入 v2 step pipeline。
+- 可选配置蓝图向量后端：
+  - `--blueprint_vector_backend memory|custom`
+  - `--blueprint_vector_plugin <module>:<factory>`（backend=custom）
+  - `--blueprint_embedding_dim <int>`
 
 ## 4. 日志与文件产物
 
@@ -140,6 +144,10 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 - `BlueprintRepository(file_path, vector_index=None, embedding_fn=None, embedding_dim=32)`
 - 可通过 `configure_vector_backend(...)` 替换向量索引适配器或 embedding 函数
 - 兼容默认行为：不传参数时仍使用内置 `InMemoryVectorIndex + deterministic_text_embedding`
+- 运行期环境变量：
+  - `GUIAGENT_BLUEPRINT_VECTOR_BACKEND`
+  - `GUIAGENT_BLUEPRINT_VECTOR_PLUGIN`
+  - `GUIAGENT_BLUEPRINT_EMBEDDING_DIM`
 
 ## 5. 关键参数建议
 

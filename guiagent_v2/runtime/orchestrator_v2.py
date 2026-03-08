@@ -1,3 +1,4 @@
+import importlib
 import json
 import os
 import re
@@ -123,6 +124,144 @@ def _build_live_perception_provider(
         }
 
     return _provider
+
+
+def _load_vector_backend_plugin(plugin_spec: str) -> dict[str, Any]:
+    spec = str(plugin_spec or "").strip()
+    if not spec or ":" not in spec:
+        raise ValueError("blueprint_vector_plugin must be '<module>:<factory>'")
+    module_name, factory_name = spec.split(":", 1)
+    module_name = module_name.strip()
+    factory_name = factory_name.strip()
+    if not module_name or not factory_name:
+        raise ValueError("blueprint_vector_plugin must be '<module>:<factory>'")
+    module = importlib.import_module(module_name)
+    factory = getattr(module, factory_name)
+    payload = factory()
+
+    vector_index = None
+    embedding_fn = None
+    source = "vector_custom"
+    if isinstance(payload, dict):
+        vector_index = payload.get("vector_index")
+        embedding_fn = payload.get("embedding_fn")
+        source = str(payload.get("source", source) or source)
+    elif isinstance(payload, tuple):
+        if len(payload) >= 1:
+            vector_index = payload[0]
+        if len(payload) >= 2:
+            embedding_fn = payload[1]
+        if len(payload) >= 3:
+            source = str(payload[2] or source)
+    else:
+        vector_index = payload
+
+    if vector_index is None:
+        raise ValueError("custom vector plugin must return vector_index")
+    return {
+        "vector_index": vector_index,
+        "embedding_fn": embedding_fn,
+        "source": source,
+    }
+
+
+def _build_blueprint_repository(
+    *,
+    log_dir: str,
+    vector_backend: str | None = None,
+    vector_plugin: str | None = None,
+    embedding_dim: int | None = None,
+) -> tuple[BlueprintRepository, dict[str, Any]]:
+    repo = BlueprintRepository(os.path.join(log_dir, "blueprints.json"))
+    backend = str(
+        vector_backend
+        if vector_backend is not None
+        else os.getenv("GUIAGENT_BLUEPRINT_VECTOR_BACKEND", "memory")
+    ).strip().lower() or "memory"
+    plugin_spec = str(
+        vector_plugin
+        if vector_plugin is not None
+        else os.getenv("GUIAGENT_BLUEPRINT_VECTOR_PLUGIN", "")
+    ).strip()
+    resolved_dim = _safe_int(
+        embedding_dim if embedding_dim is not None else os.getenv("GUIAGENT_BLUEPRINT_EMBEDDING_DIM", "32"),
+        32,
+    )
+    if resolved_dim <= 0:
+        resolved_dim = 32
+
+    info: dict[str, Any] = {
+        "status": "SUCCESS",
+        "backend": backend,
+        "plugin": plugin_spec or None,
+        "embedding_dim": int(resolved_dim),
+    }
+
+    memory_aliases = {"memory", "in_memory", "default"}
+    if backend in memory_aliases:
+        backend_info = repo.configure_vector_backend(
+            embedding_dim=resolved_dim,
+            source="vector_mock",
+            rebuild=False,
+        )
+        info["applied"] = backend_info
+        return repo, info
+
+    if backend == "custom":
+        if not plugin_spec:
+            backend_info = repo.configure_vector_backend(
+                embedding_dim=resolved_dim,
+                source="vector_mock",
+                rebuild=False,
+            )
+            info.update(
+                {
+                    "status": "FAILED",
+                    "reason_code": "BLUEPRINT_VECTOR_PLUGIN_MISSING",
+                    "applied": backend_info,
+                }
+            )
+            return repo, info
+        try:
+            loaded = _load_vector_backend_plugin(plugin_spec)
+            backend_info = repo.configure_vector_backend(
+                vector_index=loaded.get("vector_index"),
+                embedding_fn=loaded.get("embedding_fn"),
+                embedding_dim=resolved_dim,
+                source=str(loaded.get("source", "vector_custom")),
+                rebuild=False,
+            )
+            info["applied"] = backend_info
+            return repo, info
+        except Exception as exc:
+            backend_info = repo.configure_vector_backend(
+                embedding_dim=resolved_dim,
+                source="vector_mock",
+                rebuild=False,
+            )
+            info.update(
+                {
+                    "status": "FAILED",
+                    "reason_code": "BLUEPRINT_VECTOR_PLUGIN_LOAD_FAILED",
+                    "error": str(exc),
+                    "applied": backend_info,
+                }
+            )
+            return repo, info
+
+    backend_info = repo.configure_vector_backend(
+        embedding_dim=resolved_dim,
+        source="vector_mock",
+        rebuild=False,
+    )
+    info.update(
+        {
+            "status": "FAILED",
+            "reason_code": "BLUEPRINT_VECTOR_BACKEND_UNSUPPORTED",
+            "applied": backend_info,
+        }
+    )
+    return repo, info
 
 
 def _emit_and_track(
@@ -601,6 +740,9 @@ def run_single_task_with_runtime(
     mobile_wait_ms=1000,
     v2_max_steps=4,
     v2_use_live_perception=False,
+    blueprint_vector_backend=None,
+    blueprint_vector_plugin=None,
+    blueprint_embedding_dim=None,
 ):
     future_tasks = future_tasks or []
     runtime_config = _load_runtime_config()
@@ -622,7 +764,12 @@ def run_single_task_with_runtime(
         default_chain_mode=chain_mode,
         strict_schema=bool(strict_event_schema),
     )
-    blueprint_repo = BlueprintRepository(os.path.join(log_dir, "blueprints.json"))
+    blueprint_repo, blueprint_backend_info = _build_blueprint_repository(
+        log_dir=log_dir,
+        vector_backend=blueprint_vector_backend,
+        vector_plugin=blueprint_vector_plugin,
+        embedding_dim=blueprint_embedding_dim,
+    )
     router = WebSkillRouter()
     if guard_policy_path:
         guard_policy = GuardPolicy.from_policy_file(
@@ -648,6 +795,26 @@ def run_single_task_with_runtime(
             "event_type": "task_start",
             "status": "RUNNING",
             "intent_key": "global:TASK:START",
+            **({"session_id": runtime_session_id} if runtime_session_id else {}),
+        },
+        watchdog_manager=watchdog_manager,
+    )
+    _emit_and_track(
+        bus,
+        {
+            "run_id": run_id,
+            "task_id": task_id,
+            "step_id": 0,
+            "chain_mode": chain_mode,
+            "event_type": "blueprint_backend_config",
+            "status": str(blueprint_backend_info.get("status", "SUCCESS")).upper(),
+            "intent_key": "global:BLUEPRINT:VECTOR_BACKEND",
+            "blueprint_backend": blueprint_backend_info.get("backend"),
+            "blueprint_plugin": blueprint_backend_info.get("plugin"),
+            "blueprint_embedding_dim": blueprint_backend_info.get("embedding_dim"),
+            "blueprint_backend_info": blueprint_backend_info.get("applied", {}),
+            "reason_code": blueprint_backend_info.get("reason_code"),
+            "error": blueprint_backend_info.get("error"),
             **({"session_id": runtime_session_id} if runtime_session_id else {}),
         },
         watchdog_manager=watchdog_manager,
