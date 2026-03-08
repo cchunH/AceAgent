@@ -1,193 +1,160 @@
-# GUIAgent 路线深度评估与推进计划 v2
+# GUIAgent 路线深度评估与推进计划 v3
 
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.0`
+- 版本：`v3.0`
 - 更新时间：`2026-03-08`
 - 评估输入：
   - 代码：`guiagent_v2/runtime/*`, `run.py`, `test/*`
-  - 文档：`integration-blueprint-v1.md`, `implementation-gap-and-reuse-plan-v2.md`, `post-r3-gap-review-and-next-plan-v1.md`
+  - 文档：`integration-blueprint-v1.md`, `implementation-gap-and-reuse-plan-v2.md`, `session-runtime-api-contract-v1.md`
 
-## 1. 当前实现结论（基线）
+## 1. 当前实现结论（最新基线）
 
-1. 主链骨架已成型  
-- `orchestrator_v2 -> WebSkillRouter -> GuardPolicy -> ActionRegistry -> EventBus/StatusAPI/Watchdog` 已形成闭环。
+1. 主链运行时已形成可扩展骨架
+- `orchestrator_v2 -> WebSkillRouter -> GuardPolicy -> ActionRegistry -> v2_executor` 已稳定串联。
 
-2. 控制面已达“本地生产可用”级别  
-- `SessionRuntime + SessionRuntimeServer` 已具备本地 HTTP IPC、token 鉴权、lockfile 多实例治理、控制面审计、基础持久化恢复。
+2. Web 子任务闭环已进入“可用 v1.5”
+- 已具备 `web_plan -> web_step -> adapter_call -> replan -> fallback`。
+- 已落地 `WebReplanPolicy`（按失败/恢复反馈动态调节重规划预算）。
 
-3. 社区复用主线已落地到位  
-- `agent-browser` 以 `AgentBrowserSkill` 旁路接入，且移动端主链约束仍保持。
+3. 控制面已具备查询与治理基础能力
+- `SessionRuntimeServer` 提供 `status/timeline/audit/metrics/metrics-timeseries`。
+- 已有 token 鉴权、审计、lockfile 多实例治理、会话索引恢复。
 
-4. 测试覆盖稳定  
+4. 策略治理已补齐关键门禁
+- `GuardPolicy` 支持文件热加载 + web 域名 allow/deny（`web_domain_allowlist/web_domain_denylist`）。
+
+5. 回归基线稳定
 - 本地执行：`python3 -m unittest discover -s test -p 'test_*.py'`
-- 结果：`Ran 93 tests ... OK`
+- 结果：`Ran 112 tests ... OK`
 
 ## 2. 深度评估（多维）
 
 ## 2.1 架构维度
 
 优点：
-- 模块边界相对清晰：`router/policy/registry/executor/watchdog/session-runtime` 分层成立。
-- `runtime_mode` 保留 legacy 回退，重构风险可控。
+- 模块边界已经形成，复用点清晰。
+- `runtime_mode` 与 `v2_skip_legacy` 保证了增量改造可控。
 
 问题：
-- `orchestrator_v2.py` 同时承担 legacy 翻译、事件发射、watchdog 接线、任务主流程，职责过重。
-- `v2_executor.py` 仍以启发式动作推断为核心，尚未形成真正的任务级规划与重规划。
+- `orchestrator_v2.py` 仍承担较多桥接职责（legacy 翻译 + 事件编排 + 守护接线）。
+- `v2_executor.py` 已增强，但仍是执行器内聚合过多策略逻辑。
 
 ## 2.2 Agent 决策链维度
 
 优点：
-- 决策链顺序明确：`route -> guard -> dispatch -> assert/post_check -> handover`。
-- `GuardPolicy` 已支持文件化策略与热加载。
+- 决策顺序明确：`route -> guard -> execute -> verify -> handover`。
+- web 失败路径具备多层兜底（replan + fallback action）。
 
 问题：
-- `guard=confirm` 目前仅触发 `handover`，未形成“待确认 -> 继续执行”的闭环协议。
-- `web_plan` 生成规则偏静态（open/snapshot 组合），缺少失败后重规划机制。
+- `guard=confirm` 仍主要转为 handover，缺“确认后继续”协议闭环。
+- 缺统一的“人工确认事件模型 + 控制面回写动作”。
 
 ## 2.3 鲁棒性与治理维度
 
 优点：
-- `event_schema + watchdog_policy(escalation + cross_task_aggregation)` 已建立治理基线。
-- 控制面写操作审计完整，便于追责与排障。
+- 事件 schema、watchdog、control-plane audit、metrics 已贯通。
+- timeseries 指标可以支持后续状态看板。
 
 问题：
-- `event_schema` 当前仅“标记无效”，缺 strict fail-fast 模式（CI/测试环境）。
-- `watchdogs/manager.py` 中跨任务聚合告警未走统一 `_allow_alert` 门控，聚合告警风暴风险仍在。
+- watchdog 仍缺导出聚合统计的标准接口（仅事件层可查）。
+- 状态查询仍依赖内存时间线，长期运行后的归档/冷热分层未完成。
 
-## 2.4 可观测性与运维维度
+## 2.4 运行与可观测维度
 
 优点：
-- `status/timeline/audit` 查询链路可用，支持分页与时间范围过滤。
-- `session_id` 已贯穿主链与控制面。
+- 指标面已覆盖 web 关键链路，并支持时间窗口查询。
+- 审计过滤与分页能力可用于运维排障。
 
 问题：
-- `status_api.py` 时间线全内存累计，缺 TTL/分段归档策略。
-- `/runtime/audit` 依赖内存聚合视图，长期运行下查询成本与内存占用风险上升。
+- 尚未提供前端消费友好的“稳定字段面板模型”（当前主要是事件流视角）。
+- 缺跨实例统一指标视图（当前为单进程内聚合）。
 
 ## 2.5 工程可演进维度
 
 优点：
-- 单测覆盖面较完整，核心模块基本都有测试。
-- 策略文件化与可热加载为后续前端控制面打下基础。
+- 新能力均同步了测试与文档，工程节奏健康。
+- 关键策略和门禁已外置，可持续迭代。
 
 问题：
-- Web 侧能力仍是“可用 v1”，与蓝图中的“复杂任务闭环执行”存在能力差距。
-- 还未形成稳定的“阶段性 DoD 指标板”，跨迭代质量判断依赖人工阅读日志。
+- 复用链路（agent-browser）与移动端主链之间仍缺“能力边界自动验证”。
+- 端到端回归场景（真实任务脚本）还偏少。
 
 ## 3. 文档与代码一致性审查
 
 一致：
-1. `integration-blueprint-v1` 中已落地项与代码基本一致（路由、门禁、事件、会话 IPC、审计）。
-2. `implementation-gap-and-reuse-plan-v2` 对“已落地/部分落地/未落地”划分总体准确。
+1. `integration-blueprint-v1` 与代码状态基本一致（含 metrics-timeseries、WebReplanPolicy、域名门禁）。
+2. `implementation-gap-and-reuse-plan-v2` 的“运行指标”与“domain policy”差距项已更新。
 
-需更新：
-1. 下一阶段计划需把“聚合告警节流一致性”和“状态面内存治理”提升到 P0/P1，不应只放在泛化治理项中。
-2. 计划文档应从 `R3/R4` 过渡到新的 `R5+` 序列，避免迭代编号断层与目标漂移。
+仍需补强：
+1. 增加“确认流（confirm workflow）”专章与 API 合同。
+2. 增加“长期数据治理（归档/分层/导出）”实施文档。
 
-## 4. 更新后的推进计划（R5-R8）
+## 4. 更新后的推进计划（R9-R12）
 
-## R5（P0，2-3 天）：治理硬化冲刺
-
-目标：
-- 先把“可跑”提升到“可长期跑”。
-
-任务：
-1. 事件契约 strict 模式  
-- 模块：`event_bus.py`, `event_schema.py`
-- 动作：新增 `strict_schema` 开关；测试/CI 开启后遇无效事件直接失败。
-
-2. 聚合告警统一门控  
-- 模块：`watchdogs/manager.py`
-- 动作：`cross_task_aggregation` 产物也走 `_allow_alert` 或等价门控。
-
-3. 状态面内存治理 v1  
-- 模块：`status_api.py`
-- 动作：加入可配置时间线上限或 TTL 淘汰。
-
-验收：
-1. schema 无效事件在 strict 模式下为 0。
-2. 聚合告警无重复风暴。
-3. 长任务压测后内存增长可控。
-
-## R6（P0，4-6 天）：Web 执行链升级
+## R9（P0，2-3 天）：确认流闭环
 
 目标：
-- 从启发式多步 v1 升级到“可重规划”执行器。
+- 把 `guard=confirm` 从“仅交接”升级为“可确认后继续执行”。
 
 任务：
-1. 引入轻量 WebPlanner  
-- 模块：`v2_executor.py`（或拆分 `web_planner.py`）
-- 动作：目标 -> 步骤 -> 检查点；失败后局部重规划。
+1. 新增确认态模型与事件：`pending_confirm/confirm_approved/confirm_rejected`。
+2. 控制面新增确认接口（按 `run_id/task_id/step_id` 定位）。
+3. 执行器支持“挂起 -> 恢复继续”最小闭环。
 
-2. 回退策略升级  
-- 模块：`v2_executor.py`
-- 动作：从固定 `Wait` 回退改为“保留上下文的 mobile_native 恢复动作”。
+退出条件：
+- 高风险动作可进入确认队列并被恢复执行。
 
-3. 步骤级证据链  
-- 模块：`v2_executor.py`, `agent_browser_skill.py`
-- 动作：统一输出 step-level trace id 与最小证据字段。
-
-验收：
-1. Web 子任务 3-5 步场景完成率高于当前基线。
-2. 失败可解释性（原因码+步骤位点）显著提升。
-
-## R7（P1，3-5 天）：控制面数据面增强
+## R10（P0，4-6 天）：Web 执行链 v2
 
 目标：
-- 让控制面面向长期运行。
+- 从启发式重规划走向“证据驱动”的重规划。
 
 任务：
-1. 审计归档与滚动切片  
-- 模块：`session_runtime_server.py`, `status_api.py`
+1. 拆分 `web_planner` 与 `web_executor`，减少 `v2_executor` 职责。
+2. 引入更稳定的失败分类（UI/网络/权限/后端）。
+3. 把 `snapshot/diff` 证据纳入重规划输入。
 
-2. 查询聚合索引（按 run/session/task）  
-- 模块：`status_api.py`
+退出条件：
+- 复杂网页 3-5 步任务成功率和可解释性都高于当前基线。
 
-3. 前端接入友好字段冻结 v1.1  
-- 模块：`event_schema.py`, 文档 `session-runtime-api-contract-v1.md`
-
-验收：
-1. 长周期查询延迟稳定。
-2. 归档后历史数据可追溯。
-
-## R8（P1-P2，5-7 天）：跨节点会话治理
+## R11（P1，3-5 天）：状态面长期治理
 
 目标：
-- 从单机可控走向多实例协同。
+- 让控制面从“可查询”升级到“可长期运行”。
 
 任务：
-1. 会话 ownership 与租约心跳  
-- 模块：`session_runtime.py`, `session_runtime_server.py`
+1. 时间线归档与滚动切片（按 run/session）。
+2. 内存索引 + 文件归档联合查询。
+3. 输出 watchdog/metrics 聚合摘要接口。
 
-2. 服务发现/实例注册  
-- 模块：`session_runtime_server.py`（先本地 registry，再外部化）
+退出条件：
+- 长周期运行下内存增长可控，历史查询不退化。
 
-3. 冲突恢复协议  
-- 模块：同上
+## R12（P1，3-4 天）：回归矩阵与发布门禁
 
-验收：
-1. 多实例下不出现 session 漂移。
-2. 故障实例退出后可自动接管。
+目标：
+- 建立稳定的改造节奏门槛。
 
-## 5. Git 推进规范（本轮更新）
+任务：
+1. 固化 6-10 条端到端回归场景（移动主链 + web 子任务 + fallback）。
+2. 增加“移动主链不被 web 侵入”的自动检查。
+3. 在 README/运维文档补发布检查单。
 
-1. 每个迭代单独 checkpoint 标签  
-- 示例：`checkpoint/R5-start`, `checkpoint/R5-done`
+退出条件：
+- 每轮改造具备统一质量门禁，可快速判断是否可合入。
 
-2. 提交粒度  
-- 每项能力按“代码 + 测试 + 文档”单独 commit，避免混改。
+## 5. Git 推进规范（继续执行）
 
-3. 提交前固定检查  
+1. 每阶段打 checkpoint 标签（如 `checkpoint/R9-start`, `checkpoint/R9-done`）。
+2. 每项能力按“代码+测试+文档”同提交，禁止只改其一。
+3. 每次提交前固定执行：
 - `python3 -m unittest discover -s test -p 'test_*.py'`
-- 关键路径 smoke（`legacy` 与 `guiagent_v2 --v2_skip_legacy`）
-
-4. 回滚策略  
-- 禁止跨迭代混合提交；异常时按最近 checkpoint 回退。
+4. 保持 `legacy` 可回退，不做无回滚的跨阶段混改。
 
 ## 6. 执行建议
 
-1. 先做 `R5`，再进入 `R6`。  
-2. 在 `R5` 完成前，不建议继续扩大新模块面。  
-3. `R6` 完成后再启动下一轮社区复用扩展，避免“能力先增、治理滞后”。
+1. 下一步优先做 R9（确认流），这是当前治理闭环最大的功能缺口。
+2. R10 与 R11 可并行设计，但代码落地建议串行，先执行链再数据治理。
+3. R12 必须在下一轮大改前完成，否则后续迭代风险会快速累积。
