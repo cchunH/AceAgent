@@ -94,6 +94,9 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     confirm_rejected_events = [e for e in events if e.get("event_type") == "confirm_rejected"]
     confirm_timeout_events = [e for e in events if e.get("event_type") == "confirm_timeout"]
     post_check_events = [e for e in events if e.get("event_type") == "post_check"]
+    anchor_gate_events = [e for e in events if e.get("event_type") == "anchor_gate"]
+    anchor_retry_events = [e for e in events if e.get("event_type") == "anchor_micro_retry"]
+    anchor_retry_result_events = [e for e in anchor_retry_events if "anchor_retry_applied" in e]
 
     success_tasks = [e for e in task_end_events if str(e.get("status", "")).upper() == "SUCCESS"]
     latencies = [int(e.get("latency_ms", 0)) for e in step_end_events if e.get("latency_ms") is not None]
@@ -106,6 +109,28 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     total_web_steps = len(web_step_end_events)
     total_pending_confirms = len(pending_confirm_events)
     total_resolved_confirms = len(confirm_approved_events) + len(confirm_rejected_events)
+    total_anchor_gates = len(anchor_gate_events)
+    total_anchor_retry_results = len(anchor_retry_result_events)
+    anchor_gate_allow_count = sum(
+        1 for event in anchor_gate_events if str(event.get("anchor_gate_decision", "")).lower() == "allow"
+    )
+    anchor_gate_retry_count = sum(
+        1 for event in anchor_gate_events if str(event.get("anchor_gate_decision", "")).lower() == "retry"
+    )
+    anchor_gate_deny_count = sum(
+        1 for event in anchor_gate_events if str(event.get("anchor_gate_decision", "")).lower() == "deny"
+    )
+    anchor_retry_applied_count = sum(
+        1 for event in anchor_retry_result_events if bool(event.get("anchor_retry_applied", False))
+    )
+    anchor_retry_success_count = sum(
+        1 for event in anchor_retry_result_events if str(event.get("status", "")).upper() == "SUCCESS"
+    )
+    anchor_retry_recovered_count = sum(
+        1
+        for event in anchor_retry_result_events
+        if bool(event.get("anchor_retry_applied", False)) and str(event.get("status", "")).upper() == "SUCCESS"
+    )
     denoise_values: list[float] = []
     skeleton_values: list[float] = []
     core_anchor_values: list[float] = []
@@ -237,6 +262,18 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         "fast_match_hit_rate": (fast_match_hits / fast_match_total) if fast_match_total else 0.0,
         "fast_match_score_p50": median(fast_match_scores) if fast_match_scores else 0.0,
         "fast_match_score_p95": _percentile(fast_match_scores, 0.95) if fast_match_scores else 0.0,
+        "anchor_gate_allow_rate": (anchor_gate_allow_count / total_anchor_gates) if total_anchor_gates else 0.0,
+        "anchor_gate_retry_rate": (anchor_gate_retry_count / total_anchor_gates) if total_anchor_gates else 0.0,
+        "anchor_gate_deny_rate": (anchor_gate_deny_count / total_anchor_gates) if total_anchor_gates else 0.0,
+        "anchor_micro_retry_applied_rate": (
+            anchor_retry_applied_count / total_anchor_retry_results
+        ) if total_anchor_retry_results else 0.0,
+        "anchor_micro_retry_success_rate": (
+            anchor_retry_success_count / total_anchor_retry_results
+        ) if total_anchor_retry_results else 0.0,
+        "anchor_micro_retry_recovered_rate": (
+            anchor_retry_recovered_count / total_anchor_retry_results
+        ) if total_anchor_retry_results else 0.0,
         "counts": {
             "events": len(events),
             "task_end": total_tasks,
@@ -255,6 +292,15 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
             "confirm_timeout": len(confirm_timeout_events),
             "fast_match_total": fast_match_total,
             "fast_match_hits": fast_match_hits,
+            "anchor_gate": total_anchor_gates,
+            "anchor_gate_allow": anchor_gate_allow_count,
+            "anchor_gate_retry": anchor_gate_retry_count,
+            "anchor_gate_deny": anchor_gate_deny_count,
+            "anchor_micro_retry": len(anchor_retry_events),
+            "anchor_micro_retry_result": total_anchor_retry_results,
+            "anchor_micro_retry_applied": anchor_retry_applied_count,
+            "anchor_micro_retry_success": anchor_retry_success_count,
+            "anchor_micro_retry_recovered": anchor_retry_recovered_count,
         },
     }
 

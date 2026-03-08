@@ -246,6 +246,9 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
             self.assertIn("aux_anchor_confidence_avg", metrics)
             self.assertIn("geometry_confidence_avg", metrics)
             self.assertIn("fast_match_hit_rate", metrics)
+            self.assertIn("anchor_gate_allow_rate", metrics)
+            self.assertIn("anchor_gate_retry_rate", metrics)
+            self.assertIn("anchor_micro_retry_recovered_rate", metrics)
 
     def test_compute_metrics_from_events(self):
         rows = [
@@ -295,6 +298,61 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
         self.assertEqual(metrics["pending_confirm_count"], 1)
         self.assertEqual(metrics["confirm_approved_count"], 1)
         self.assertIn("skeleton_confidence_p50", metrics)
+
+    def test_compute_metrics_anchor_strategy(self):
+        rows = [
+            {
+                "run_id": "r-anchor",
+                "task_id": "t-anchor",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "anchor_gate",
+                "status": "HANDOVER",
+                "intent_key": "global:TAP:SEARCH",
+                "anchor_gate_decision": "retry",
+            },
+            {
+                "run_id": "r-anchor",
+                "task_id": "t-anchor",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "anchor_micro_retry",
+                "status": "RUNNING",
+                "intent_key": "global:TAP:SEARCH",
+                "anchor_retry_attempt": 1,
+            },
+            {
+                "run_id": "r-anchor",
+                "task_id": "t-anchor",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "anchor_micro_retry",
+                "status": "SUCCESS",
+                "intent_key": "global:TAP:SEARCH",
+                "anchor_retry_attempt": 1,
+                "anchor_retry_applied": True,
+            },
+            {
+                "run_id": "r-anchor",
+                "task_id": "t-anchor",
+                "step_id": 2,
+                "chain_mode": "guiagent_v2",
+                "event_type": "anchor_gate",
+                "status": "HANDOVER",
+                "intent_key": "global:TAP:PAY",
+                "anchor_gate_decision": "deny",
+            },
+        ]
+        metrics = compute_metrics_from_events(rows)
+        self.assertEqual(metrics["counts"]["anchor_gate"], 2)
+        self.assertEqual(metrics["counts"]["anchor_gate_retry"], 1)
+        self.assertEqual(metrics["counts"]["anchor_gate_deny"], 1)
+        self.assertEqual(metrics["counts"]["anchor_micro_retry_result"], 1)
+        self.assertEqual(metrics["counts"]["anchor_micro_retry_applied"], 1)
+        self.assertAlmostEqual(metrics["anchor_gate_retry_rate"], 0.5)
+        self.assertAlmostEqual(metrics["anchor_gate_deny_rate"], 0.5)
+        self.assertAlmostEqual(metrics["anchor_micro_retry_applied_rate"], 1.0)
+        self.assertAlmostEqual(metrics["anchor_micro_retry_recovered_rate"], 1.0)
 
     def test_compute_timeseries_from_events(self):
         rows = [

@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.32`
+- 版本：`v1.33`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -68,6 +68,7 @@
 52. 断言与后检链路已输出主辅锚点分路评分：`core_anchor_confidence/aux_anchor_confidence/geometry_confidence`，并纳入 `runtime metrics`。
 53. `flow_audit` 增加低置信度审查：步骤成功但主锚点/几何置信度过低会输出 `WARN`，用于提前暴露潜在误触风险。
 54. `v2_executor` 已增加锚点门控与辅锚点微重试（`anchor_gate/anchor_micro_retry`），并通过 `pipeline` 透传 `pre_assertion` 置信度避免后检场景误阻断。
+55. `runtime metrics` 与 `runtime_summary` 已补锚点策略成效统计（`anchor_gate_*`、`anchor_micro_retry_*`、`anchor_strategy`），支持门控/微重试收益量化。
 
 尚未落地：
 1. `watchdog` 深化生产化（下载/安全扩展插件、聚合统计导出）。

@@ -118,6 +118,7 @@ class TestRuntimeReportingAndSync(unittest.TestCase):
             out = write_runtime_summary(td, event_path, repo)
             self.assertTrue(os.path.exists(out["summary_path"]))
             self.assertIn("metrics", out["summary"])
+            self.assertIn("anchor_strategy", out["summary"])
             self.assertIn("flow_audit", out["summary"])
 
 

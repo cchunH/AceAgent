@@ -5,8 +5,8 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v0.2`
-- 更新时间：`2026-03-07`
+- 版本：`v0.3`
+- 更新时间：`2026-03-08`
 - 适用阶段：`Phase 0`
 
 ## 1. 日志格式
@@ -165,6 +165,22 @@ fast_match score 的 P50/P95
 - `rebuilt_count`
 - `skipped_count`
 - `total_blueprints`
+
+### 2.10 Anchor Gate / Micro-Retry（新增）
+
+定义：
+```text
+anchor_gate_allow/retry/deny 占比 + micro_retry 的 applied/success/recovered 占比
+```
+
+字段来源：
+- `event_type=anchor_gate`：`anchor_gate_decision`
+- `event_type=anchor_micro_retry`：`anchor_retry_applied` 与 `status`
+
+解读：
+- `anchor_gate_deny_rate` 高：主锚点稳定性不足，容易触发阻断。
+- `anchor_gate_retry_rate` 高且 `anchor_micro_retry_recovered_rate` 低：辅锚点重试收益不足，需优化辅助定位策略。
+- `anchor_micro_retry_applied_rate` 与 `anchor_micro_retry_success_rate` 可用于评估“重试是否有效”。
 
 ## 3. 报告模板（每次 PoC 固定输出）
 

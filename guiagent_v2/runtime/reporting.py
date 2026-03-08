@@ -14,6 +14,26 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _build_anchor_strategy_summary(metrics: dict[str, Any]) -> dict[str, Any]:
+    counts = dict(metrics.get("counts", {}) or {})
+    return {
+        "gate_count": int(counts.get("anchor_gate", 0) or 0),
+        "allow_count": int(counts.get("anchor_gate_allow", 0) or 0),
+        "retry_count": int(counts.get("anchor_gate_retry", 0) or 0),
+        "deny_count": int(counts.get("anchor_gate_deny", 0) or 0),
+        "retry_result_count": int(counts.get("anchor_micro_retry_result", 0) or 0),
+        "retry_applied_count": int(counts.get("anchor_micro_retry_applied", 0) or 0),
+        "retry_success_count": int(counts.get("anchor_micro_retry_success", 0) or 0),
+        "retry_recovered_count": int(counts.get("anchor_micro_retry_recovered", 0) or 0),
+        "allow_rate": float(metrics.get("anchor_gate_allow_rate", 0.0) or 0.0),
+        "retry_rate": float(metrics.get("anchor_gate_retry_rate", 0.0) or 0.0),
+        "deny_rate": float(metrics.get("anchor_gate_deny_rate", 0.0) or 0.0),
+        "retry_applied_rate": float(metrics.get("anchor_micro_retry_applied_rate", 0.0) or 0.0),
+        "retry_success_rate": float(metrics.get("anchor_micro_retry_success_rate", 0.0) or 0.0),
+        "retry_recovered_rate": float(metrics.get("anchor_micro_retry_recovered_rate", 0.0) or 0.0),
+    }
+
+
 def write_runtime_summary(
     log_dir: str,
     event_log_path: str,
@@ -24,6 +44,7 @@ def write_runtime_summary(
         "generated_at": _utc_now_iso(),
         "event_log": event_log_path,
         "metrics": metrics,
+        "anchor_strategy": _build_anchor_strategy_summary(metrics),
         "flow_audit": audit_flow_from_jsonl(event_log_path),
         "blueprint_count": len(blueprint_repo.list_blueprints()) if blueprint_repo else 0,
     }
