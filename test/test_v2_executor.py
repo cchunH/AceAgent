@@ -662,6 +662,74 @@ class TestV2Executor(unittest.TestCase):
         topology_events = [e for e in events if e.get("event_type") == "topology_projection"]
         self.assertTrue(topology_events)
         self.assertIn(topology_events[-1].get("transform_mode"), {"identity", "scale_translate", "affine6"})
+        self.assertIn(topology_events[-1].get("projection_mode"), {"affine_norm", "scale"})
+        self.assertTrue(str(topology_events[-1].get("projection_guard_reason", "")).strip())
+
+    def test_run_probe_topology_projection_guard_blocks_bad_affine(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+
+        def _perception_provider():
+            return {
+                "perception_infos": [
+                    {"text": "Search", "coordinates": [80, 60]},
+                    {"text": "Home", "coordinates": [900, 2200]},
+                ],
+                "screen_width": 1080,
+                "screen_height": 2340,
+            }
+
+        with tempfile.TemporaryDirectory() as td:
+            repo = BlueprintRepository(os.path.join(td, "blueprints.json"))
+            repo.save_blueprint(
+                {
+                    "intent_key": "global:WAIT:UNSPECIFIED_TARGET",
+                    "app_state": "global:DEFAULT",
+                    "version": "v0.1.0",
+                    "reference_screen": {"width": 1080, "height": 2340},
+                    "anchors": [
+                        {
+                            "id": "a1",
+                            "text": "Search",
+                            "role": "CORE",
+                            "zone": "top",
+                            "norm_bbox": {"x": 0.9, "y": 0.9, "w": 0.0, "h": 0.0},
+                        },
+                        {
+                            "id": "a2",
+                            "text": "Home",
+                            "role": "CORE",
+                            "zone": "bottom",
+                            "norm_bbox": {"x": 0.1, "y": 0.1, "w": 0.0, "h": 0.0},
+                        },
+                    ],
+                    "post_expectations": [],
+                    "metadata": {},
+                }
+            )
+            run_probe_step(
+                instruction="在手机里等待一下",
+                run_id="r-topology-block",
+                task_id="t-topology-block",
+                session_id="sess-topology-block",
+                step_id=10,
+                chain_mode="guiagent_v2",
+                emit_event=events.append,
+                hooks=_build_hooks(),
+                router=WebSkillRouter(),
+                guard_policy=GuardPolicy(),
+                web_skill=web_skill,
+                perception_provider=_perception_provider,
+                blueprint_repo=repo,
+            )
+        topology_events = [e for e in events if e.get("event_type") == "topology_projection"]
+        self.assertTrue(topology_events)
+        last = topology_events[-1]
+        self.assertEqual(last.get("projection_mode"), "scale")
+        self.assertIn(
+            last.get("projection_guard_reason"),
+            {"INSUFFICIENT_ANCHOR_PAIRS", "AFFINE_FIT_ERROR_HIGH", "CORE_CONFIDENCE_LOW", "NO_AFFINE_TRANSFORM"},
+        )
 
 
 if __name__ == "__main__":

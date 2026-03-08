@@ -34,6 +34,21 @@ def _build_anchor_strategy_summary(metrics: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _build_topology_projection_summary(metrics: dict[str, Any]) -> dict[str, Any]:
+    counts = dict(metrics.get("counts", {}) or {})
+    return {
+        "projection_event_count": int(counts.get("topology_projection", 0) or 0),
+        "affine_count": int(counts.get("topology_projection_affine", 0) or 0),
+        "scale_count": int(counts.get("topology_projection_scale", 0) or 0),
+        "guard_block_count": int(counts.get("topology_projection_guard_block", 0) or 0),
+        "affine_rate": float(metrics.get("topology_projection_affine_rate", 0.0) or 0.0),
+        "scale_rate": float(metrics.get("topology_projection_scale_rate", 0.0) or 0.0),
+        "guard_block_rate": float(metrics.get("topology_projection_guard_block_rate", 0.0) or 0.0),
+        "fit_error_p50": float(metrics.get("topology_projection_fit_error_p50", 0.0) or 0.0),
+        "fit_error_p95": float(metrics.get("topology_projection_fit_error_p95", 0.0) or 0.0),
+    }
+
+
 def write_runtime_summary(
     log_dir: str,
     event_log_path: str,
@@ -45,6 +60,7 @@ def write_runtime_summary(
         "event_log": event_log_path,
         "metrics": metrics,
         "anchor_strategy": _build_anchor_strategy_summary(metrics),
+        "topology_projection": _build_topology_projection_summary(metrics),
         "flow_audit": audit_flow_from_jsonl(event_log_path),
         "blueprint_count": len(blueprint_repo.list_blueprints()) if blueprint_repo else 0,
         "blueprint_vector_backend": (

@@ -97,6 +97,7 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     anchor_gate_events = [e for e in events if e.get("event_type") == "anchor_gate"]
     anchor_retry_events = [e for e in events if e.get("event_type") == "anchor_micro_retry"]
     anchor_retry_result_events = [e for e in anchor_retry_events if "anchor_retry_applied" in e]
+    topology_projection_events = [e for e in events if e.get("event_type") == "topology_projection"]
 
     success_tasks = [e for e in task_end_events if str(e.get("status", "")).upper() == "SUCCESS"]
     latencies = [int(e.get("latency_ms", 0)) for e in step_end_events if e.get("latency_ms") is not None]
@@ -131,6 +132,24 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         for event in anchor_retry_result_events
         if bool(event.get("anchor_retry_applied", False)) and str(event.get("status", "")).upper() == "SUCCESS"
     )
+    topology_projection_total = len(topology_projection_events)
+    topology_projection_affine_count = sum(
+        1 for event in topology_projection_events if str(event.get("projection_mode", "")).lower() == "affine_norm"
+    )
+    topology_projection_scale_count = sum(
+        1 for event in topology_projection_events if str(event.get("projection_mode", "")).lower() == "scale"
+    )
+    topology_projection_guard_block_count = sum(
+        1 for event in topology_projection_events if str(event.get("projection_guard_reason", "OK")) != "OK"
+    )
+    topology_fit_errors: list[float] = []
+    for event in topology_projection_events:
+        if event.get("transform_fit_error") is None:
+            continue
+        try:
+            topology_fit_errors.append(float(event.get("transform_fit_error")))
+        except Exception:
+            pass
     denoise_values: list[float] = []
     skeleton_values: list[float] = []
     core_anchor_values: list[float] = []
@@ -305,6 +324,21 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         "anchor_micro_retry_recovered_rate": (
             anchor_retry_recovered_count / total_anchor_retry_results
         ) if total_anchor_retry_results else 0.0,
+        "topology_projection_affine_rate": (
+            topology_projection_affine_count / topology_projection_total
+        ) if topology_projection_total else 0.0,
+        "topology_projection_scale_rate": (
+            topology_projection_scale_count / topology_projection_total
+        ) if topology_projection_total else 0.0,
+        "topology_projection_guard_block_rate": (
+            topology_projection_guard_block_count / topology_projection_total
+        ) if topology_projection_total else 0.0,
+        "topology_projection_fit_error_p50": (
+            median(topology_fit_errors) if topology_fit_errors else 0.0
+        ),
+        "topology_projection_fit_error_p95": (
+            _percentile(topology_fit_errors, 0.95) if topology_fit_errors else 0.0
+        ),
         "counts": {
             "events": len(events),
             "task_end": total_tasks,
@@ -337,6 +371,10 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
             "anchor_micro_retry_applied": anchor_retry_applied_count,
             "anchor_micro_retry_success": anchor_retry_success_count,
             "anchor_micro_retry_recovered": anchor_retry_recovered_count,
+            "topology_projection": topology_projection_total,
+            "topology_projection_affine": topology_projection_affine_count,
+            "topology_projection_scale": topology_projection_scale_count,
+            "topology_projection_guard_block": topology_projection_guard_block_count,
         },
     }
 

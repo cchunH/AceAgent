@@ -5,7 +5,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v0.3`
+- 版本：`v0.4`
 - 更新时间：`2026-03-08`
 - 适用阶段：`Phase 0`
 
@@ -182,6 +182,24 @@ anchor_gate_allow/retry/deny 占比 + micro_retry 的 applied/success/recovered 
 - `anchor_gate_retry_rate` 高且 `anchor_micro_retry_recovered_rate` 低：辅锚点重试收益不足，需优化辅助定位策略。
 - `anchor_micro_retry_applied_rate` 与 `anchor_micro_retry_success_rate` 可用于评估“重试是否有效”。
 
+### 2.11 Topology Projection Guard（新增）
+
+定义：
+```text
+topology_projection_affine/scale 占比 + guard_block 占比 + fit_error P50/P95
+```
+
+字段来源：
+- `event_type=topology_projection`
+- `projection_mode=affine_norm|scale`
+- `projection_guard_reason=OK|INSUFFICIENT_ANCHOR_PAIRS|AFFINE_FIT_ERROR_HIGH|CORE_CONFIDENCE_LOW|NO_AFFINE_TRANSFORM`
+- `transform_fit_error`
+
+解读：
+- `topology_projection_affine_rate` 高：锚点几何质量足以支撑仿射迁移。
+- `topology_projection_guard_block_rate` 高：当前场景锚点质量不足，系统大量回退为缩放策略。
+- `topology_projection_fit_error_p95` 高：需要收紧蓝图锚点质量或调整多帧去噪参数。
+
 ## 3. 报告模板（每次 PoC 固定输出）
 
 1. 实验上下文  
@@ -214,3 +232,4 @@ anchor_gate_allow/retry/deny 占比 + micro_retry 的 applied/success/recovered 
 - 日志完整率：100%（关键字段不可缺失）
 - `Denoise Stable Ratio`：核心场景建议 `>= 0.55`
 - `Skeleton Match Confidence`：关键路径建议 `P50 >= 0.6`
+- `Topology Projection Guard Block Rate`：关键路径建议 `<= 0.25`

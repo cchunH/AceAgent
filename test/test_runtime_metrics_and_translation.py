@@ -249,6 +249,8 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
             self.assertIn("anchor_gate_allow_rate", metrics)
             self.assertIn("anchor_gate_retry_rate", metrics)
             self.assertIn("anchor_micro_retry_recovered_rate", metrics)
+            self.assertIn("topology_projection_affine_rate", metrics)
+            self.assertIn("topology_projection_guard_block_rate", metrics)
 
     def test_compute_metrics_from_events(self):
         rows = [
@@ -437,6 +439,42 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
         self.assertEqual(payload["series"][0]["event_count"], 2)
         self.assertEqual(payload["series"][1]["event_count"], 1)
         self.assertAlmostEqual(payload["series"][0]["metrics"]["task_success_rate"], 1.0)
+
+    def test_compute_metrics_topology_projection_breakdown(self):
+        rows = [
+            {
+                "run_id": "r-topo",
+                "task_id": "t-topo",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "topology_projection",
+                "status": "SUCCESS",
+                "intent_key": "global:TAP:SEARCH",
+                "projection_mode": "affine_norm",
+                "projection_guard_reason": "OK",
+                "transform_fit_error": 0.02,
+            },
+            {
+                "run_id": "r-topo",
+                "task_id": "t-topo",
+                "step_id": 2,
+                "chain_mode": "guiagent_v2",
+                "event_type": "topology_projection",
+                "status": "SUCCESS",
+                "intent_key": "global:TAP:HOME",
+                "projection_mode": "scale",
+                "projection_guard_reason": "AFFINE_FIT_ERROR_HIGH",
+                "transform_fit_error": 0.3,
+            },
+        ]
+        metrics = compute_metrics_from_events(rows)
+        self.assertEqual(metrics["counts"]["topology_projection"], 2)
+        self.assertEqual(metrics["counts"]["topology_projection_affine"], 1)
+        self.assertEqual(metrics["counts"]["topology_projection_scale"], 1)
+        self.assertEqual(metrics["counts"]["topology_projection_guard_block"], 1)
+        self.assertAlmostEqual(metrics["topology_projection_affine_rate"], 0.5)
+        self.assertAlmostEqual(metrics["topology_projection_scale_rate"], 0.5)
+        self.assertAlmostEqual(metrics["topology_projection_guard_block_rate"], 0.5)
 
 
 if __name__ == "__main__":

@@ -134,3 +134,4 @@
 12. A3 已推进 v0：`v2_executor` 移动端链路接入 `MobileDeviceExecutor`（`auto|shadow|device`），有 ADB 时执行真实动作，无 ADB 自动回退 shadow。
 13. A1/A3 衔接推进：`orchestrator_v2` 在 `v2_skip_legacy` 场景已支持多步任务骨架（指令拆步、`v2_max_steps`、handover 早停），并补回归测试。
 14. A2/S2 已推进：新增锚点约束仿射估计与执行投影接线（`anchor_transform + topology_matcher + pipeline`），并新增 `topology_projection` 事件与回归测试，开始替代“仅缩放”坐标迁移路径。
+15. A2/S2 已补门禁：新增仿射质量守护（`fit_error + pair_count + core_confidence`），低质量场景自动回退 `scale`，并纳入 `metrics/runtime_summary` 统计。

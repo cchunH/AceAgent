@@ -48,6 +48,9 @@ _ANCHOR_MICRO_RETRY_MAX = 1
 _BLUEPRINT_SKELETON_ACCEPT_SCORE = 0.55
 _BLUEPRINT_FUSED_ACCEPT_SCORE = 0.38
 _BLUEPRINT_VECTOR_STRONG_SCORE = 0.72
+_TOPOLOGY_AFFINE_MAX_FIT_ERROR = 0.12
+_TOPOLOGY_AFFINE_MIN_PAIR_COUNT = 2
+_TOPOLOGY_AFFINE_MIN_CORE_CONFIDENCE = 0.35
 
 
 @dataclass
@@ -461,6 +464,21 @@ def _build_runtime_topology_result(step_context: dict[str, Any]) -> dict[str, An
         "width": int(width),
         "height": int(height),
     }
+    affine_norm = dict(topo.affine_norm or {})
+    guard_reason = "OK"
+    if not affine_norm:
+        guard_reason = "NO_AFFINE_TRANSFORM"
+    elif int(topo.transform_pair_count) < _TOPOLOGY_AFFINE_MIN_PAIR_COUNT:
+        guard_reason = "INSUFFICIENT_ANCHOR_PAIRS"
+    elif float(topo.transform_fit_error) > _TOPOLOGY_AFFINE_MAX_FIT_ERROR:
+        guard_reason = "AFFINE_FIT_ERROR_HIGH"
+    elif float(topo.core_confidence) < _TOPOLOGY_AFFINE_MIN_CORE_CONFIDENCE:
+        guard_reason = "CORE_CONFIDENCE_LOW"
+
+    affine_enabled = guard_reason == "OK"
+    if not affine_enabled:
+        affine_norm = {}
+
     return {
         "reference_screen": reference_screen,
         "target_screen": target_screen,
@@ -469,9 +487,12 @@ def _build_runtime_topology_result(step_context: dict[str, Any]) -> dict[str, An
         "aux_confidence": float(topo.aux_confidence),
         "geometry_confidence": float(topo.geometry_confidence),
         "transform_mode": str(topo.transform_mode),
-        "affine_norm": dict(topo.affine_norm or {}),
+        "affine_norm": affine_norm,
         "transform_fit_error": float(topo.transform_fit_error),
         "transform_pair_count": int(topo.transform_pair_count),
+        "projection_mode": "affine_norm" if affine_enabled else "scale",
+        "projection_guard_reason": guard_reason,
+        "projection_affine_enabled": affine_enabled,
     }
 
 
@@ -678,6 +699,9 @@ def run_probe_step(
                 "transform_mode": topology_result.get("transform_mode"),
                 "transform_fit_error": topology_result.get("transform_fit_error"),
                 "transform_pair_count": topology_result.get("transform_pair_count"),
+                "projection_mode": topology_result.get("projection_mode"),
+                "projection_guard_reason": topology_result.get("projection_guard_reason"),
+                "projection_affine_enabled": topology_result.get("projection_affine_enabled"),
                 **route_info,
             }
         )

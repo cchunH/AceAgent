@@ -160,6 +160,8 @@
 - 已新增锚点约束仿射估计器（`state_engine/anchor_transform.py`）并接入拓扑匹配结果。  
 - 已将执行坐标投影从“仅屏幕缩放”升级为“优先 affine_norm，回退 scale”。  
 - 已新增回归：`test_pipeline_projection.py`、`test_topology_matcher_weighted.py` 仿射断言、`test_v2_executor.py` 拓扑投影事件断言。
+- 已新增投影质量门禁：当 `fit_error/锚点对数量/core_confidence` 不达标时，自动回退 `scale`，并输出 `projection_guard_reason`。
+- 已新增投影观测指标：`topology_projection_affine_rate/guard_block_rate/fit_error_p50,p95`，用于 S2 阈值收敛。
 
 3. 完成 S1 后立即打第一个 checkpoint tag，作为“可运行实测起点”。
 
