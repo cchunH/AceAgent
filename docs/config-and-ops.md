@@ -105,6 +105,9 @@ logs/<model>/unimind_agent/<run_name>/<task_id>/
 - `task_end`
 - `blueprint_sync`（v2 mobile 分支）
 
+`runtime_summary.json` 已包含：
+- `blueprint_vector_backend`（后端类型、embedding 维度、就绪状态）
+
 社区对标后的规划补充（未落地代码）：
 - 未来会增加执行通道字段：`channel=mobile_native|web_skill`
 - Web Skill 旁路事件：`skill_route`、`skill_fallback`

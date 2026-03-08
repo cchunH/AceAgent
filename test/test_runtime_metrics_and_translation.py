@@ -354,6 +354,56 @@ class TestRuntimeMetricsAndTranslation(unittest.TestCase):
         self.assertAlmostEqual(metrics["anchor_micro_retry_applied_rate"], 1.0)
         self.assertAlmostEqual(metrics["anchor_micro_retry_recovered_rate"], 1.0)
 
+    def test_compute_metrics_fast_match_source_breakdown(self):
+        rows = [
+            {
+                "run_id": "r-fast",
+                "task_id": "t-fast",
+                "step_id": 1,
+                "chain_mode": "guiagent_v2",
+                "event_type": "assertion",
+                "status": "SUCCESS",
+                "intent_key": "global:TAP:SEARCH",
+                "fast_match_hint": {
+                    "matched_intent_key": "global:TAP:SEARCH",
+                    "match_source": "vector",
+                    "vector_score": 0.82,
+                    "signature_hit": False,
+                },
+            },
+            {
+                "run_id": "r-fast",
+                "task_id": "t-fast",
+                "step_id": 2,
+                "chain_mode": "guiagent_v2",
+                "event_type": "assertion",
+                "status": "SUCCESS",
+                "intent_key": "global:TAP:SEARCH",
+                "fast_match_hint": {
+                    "matched_intent_key": "global:TAP:SEARCH",
+                    "match_source": "fused",
+                    "fused_score": 0.73,
+                    "signature_hit": True,
+                },
+            },
+            {
+                "run_id": "r-fast",
+                "task_id": "t-fast",
+                "step_id": 999999,
+                "chain_mode": "guiagent_v2",
+                "event_type": "task_end",
+                "status": "SUCCESS",
+                "intent_key": "global:TASK:END",
+            },
+        ]
+        metrics = compute_metrics_from_events(rows)
+        self.assertAlmostEqual(metrics["fast_match_hit_rate"], 1.0)
+        self.assertAlmostEqual(metrics["fast_match_signature_hit_rate"], 0.5)
+        self.assertAlmostEqual(metrics["fast_match_source_vector_rate"], 0.5)
+        self.assertAlmostEqual(metrics["fast_match_source_fused_rate"], 0.5)
+        self.assertEqual(metrics["counts"]["fast_match_source_vector"], 1)
+        self.assertEqual(metrics["counts"]["fast_match_source_fused"], 1)
+
     def test_compute_timeseries_from_events(self):
         rows = [
             {

@@ -139,6 +139,13 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     fast_match_scores: list[float] = []
     fast_match_hits = 0
     fast_match_total = 0
+    fast_match_signature_hits = 0
+    fast_match_source_counts = {
+        "skeleton": 0,
+        "vector": 0,
+        "fused": 0,
+        "unknown": 0,
+    }
     for event in assertion_events:
         result = dict(event.get("assertion_result", {}) or {})
         if result.get("denoise_stable_ratio") is not None:
@@ -168,14 +175,26 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
                 pass
         hint = event.get("fast_match_hint")
         if isinstance(hint, dict):
-            score = hint.get("matched_score")
+            score = hint.get("fused_score")
+            if score is None:
+                score = hint.get("matched_score")
+            if score is None:
+                score = hint.get("skeleton_score")
+            if score is None:
+                score = hint.get("vector_score")
             try:
                 fast_match_scores.append(float(score))
             except Exception:
                 pass
-            fast_match_total += 1
-            if bool(hint.get("signature_hit", False)):
+            if str(hint.get("matched_intent_key", "")).strip():
                 fast_match_hits += 1
+            if bool(hint.get("signature_hit", False)):
+                fast_match_signature_hits += 1
+            source = str(hint.get("match_source", "")).strip().lower() or "unknown"
+            if source not in fast_match_source_counts:
+                source = "unknown"
+            fast_match_source_counts[source] += 1
+            fast_match_total += 1
     for event in post_check_events:
         result = dict(event.get("post_check", {}) or {})
         if result.get("denoise_stable_ratio") is not None:
@@ -260,8 +279,20 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
             sum(geometry_values) / len(geometry_values)
         ) if geometry_values else 0.0,
         "fast_match_hit_rate": (fast_match_hits / fast_match_total) if fast_match_total else 0.0,
+        "fast_match_signature_hit_rate": (
+            fast_match_signature_hits / fast_match_total
+        ) if fast_match_total else 0.0,
         "fast_match_score_p50": median(fast_match_scores) if fast_match_scores else 0.0,
         "fast_match_score_p95": _percentile(fast_match_scores, 0.95) if fast_match_scores else 0.0,
+        "fast_match_source_skeleton_rate": (
+            fast_match_source_counts["skeleton"] / fast_match_total
+        ) if fast_match_total else 0.0,
+        "fast_match_source_vector_rate": (
+            fast_match_source_counts["vector"] / fast_match_total
+        ) if fast_match_total else 0.0,
+        "fast_match_source_fused_rate": (
+            fast_match_source_counts["fused"] / fast_match_total
+        ) if fast_match_total else 0.0,
         "anchor_gate_allow_rate": (anchor_gate_allow_count / total_anchor_gates) if total_anchor_gates else 0.0,
         "anchor_gate_retry_rate": (anchor_gate_retry_count / total_anchor_gates) if total_anchor_gates else 0.0,
         "anchor_gate_deny_rate": (anchor_gate_deny_count / total_anchor_gates) if total_anchor_gates else 0.0,
@@ -292,6 +323,11 @@ def compute_metrics_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
             "confirm_timeout": len(confirm_timeout_events),
             "fast_match_total": fast_match_total,
             "fast_match_hits": fast_match_hits,
+            "fast_match_signature_hits": fast_match_signature_hits,
+            "fast_match_source_skeleton": int(fast_match_source_counts["skeleton"]),
+            "fast_match_source_vector": int(fast_match_source_counts["vector"]),
+            "fast_match_source_fused": int(fast_match_source_counts["fused"]),
+            "fast_match_source_unknown": int(fast_match_source_counts["unknown"]),
             "anchor_gate": total_anchor_gates,
             "anchor_gate_allow": anchor_gate_allow_count,
             "anchor_gate_retry": anchor_gate_retry_count,

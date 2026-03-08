@@ -120,6 +120,7 @@ class TestRuntimeReportingAndSync(unittest.TestCase):
             self.assertIn("metrics", out["summary"])
             self.assertIn("anchor_strategy", out["summary"])
             self.assertIn("flow_audit", out["summary"])
+            self.assertIn("blueprint_vector_backend", out["summary"])
 
 
 if __name__ == "__main__":

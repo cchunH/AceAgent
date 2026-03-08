@@ -47,6 +47,9 @@ def write_runtime_summary(
         "anchor_strategy": _build_anchor_strategy_summary(metrics),
         "flow_audit": audit_flow_from_jsonl(event_log_path),
         "blueprint_count": len(blueprint_repo.list_blueprints()) if blueprint_repo else 0,
+        "blueprint_vector_backend": (
+            blueprint_repo.get_vector_backend_info() if blueprint_repo else None
+        ),
     }
 
     out_path = os.path.join(log_dir, "runtime_summary.json")
