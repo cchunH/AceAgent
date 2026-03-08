@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.24`
+- 版本：`v1.25`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -60,6 +60,7 @@
 44. 新增离线复盘质量评分门槛：`runtime.replay_quality.score_replay_sample`，`offline_replay` 已支持低质量样本过滤（`min_quality_score`）。
 45. `v2_executor` 已接入显式执行状态机（`executor_state_machine`），并输出 `executor_state` 迁移事件以支持流程级审查。
 46. 新增向量检索抽象 `VectorIndexAdapter`（`InMemoryVectorIndex` v0），`BlueprintRepository` 已支持 `rebuild_vector_index/match_by_vector`。
+47. `blueprint_sync` 已接入 Delta patch 策略（`blueprint_delta`），现按差分字段更新蓝图并记录 `rollback_to`，低稳定场景可抑制结构更新。
 
 尚未落地：
 1. `watchdog` 深化生产化（下载/安全扩展插件、聚合统计导出）。

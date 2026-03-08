@@ -35,6 +35,52 @@ class TestRuntimeReportingAndSync(unittest.TestCase):
             found = repo.get_blueprint("global:TAP:SEARCH_BAR", "global:DEFAULT")
             self.assertIsNotNone(found)
 
+    def test_upsert_blueprint_uses_delta_patch_for_existing(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = BlueprintRepository(os.path.join(td, "blueprints.json"))
+            first = upsert_blueprint_from_observation(
+                repo=repo,
+                intent_key="global:TAP:SEARCH_BAR",
+                screen_width=1080,
+                screen_height=2340,
+                perception_infos_pre=[
+                    {"text": "Search", "coordinates": (520, 110)},
+                    {"text": "Home", "coordinates": (100, 2250)},
+                ],
+                perception_infos_post=[
+                    {"text": "Search", "coordinates": (520, 110)},
+                    {"text": "Results", "coordinates": (320, 200)},
+                ],
+                action_outcome="A",
+                post_check_result={"passed": True, "reason_code": "STATE_TRANSITION_OK"},
+            )
+            version1 = first.get("version")
+            anchors1 = list(first.get("anchors", []))
+            skeleton1 = dict(first.get("static_skeleton", {}))
+
+            second = upsert_blueprint_from_observation(
+                repo=repo,
+                intent_key="global:TAP:SEARCH_BAR",
+                screen_width=1080,
+                screen_height=2340,
+                perception_infos_pre=[
+                    {"text": "Random Ad", "coordinates": (900, 300)},
+                    {"text": "Popup", "coordinates": (540, 1200)},
+                ],
+                perception_infos_post=[
+                    {"text": "Spinner", "coordinates": (520, 1100)},
+                    {"text": "Loading", "coordinates": (500, 1120)},
+                ],
+                action_outcome="C",
+                post_check_result={"passed": False, "reason_code": "ASSERTION_MISMATCH"},
+            )
+            self.assertEqual(second.get("version"), version1)
+            self.assertEqual(second.get("anchors", []), anchors1)
+            self.assertEqual(second.get("static_skeleton", {}), skeleton1)
+            metadata2 = dict(second.get("metadata", {}))
+            self.assertEqual(metadata2.get("last_patch_mode"), "delta")
+            self.assertIn("anchors", list(metadata2.get("last_patch_suppressed_fields", [])))
+
     def test_write_runtime_summary(self):
         with tempfile.TemporaryDirectory() as td:
             event_path = os.path.join(td, "events.jsonl")

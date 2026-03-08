@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.22`
+- 版本：`v2.23`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -146,6 +146,11 @@
 - 证据模块：`guiagent_v2/retrieval/vector_index.py`, `guiagent_v2/blueprint_hub/repository.py`
 - 现状：已提供 `InMemoryVectorIndex` 与 `deterministic_text_embedding`，并在 `BlueprintRepository` 暴露 `rebuild_vector_index/match_by_vector`。
 - 距离评估：`完成（v0，mock）`
+
+26. Delta 回灌策略（Blueprint Delta Patch）
+- 证据模块：`guiagent_v2/runtime/blueprint_delta.py`, `guiagent_v2/runtime/blueprint_sync.py`, `guiagent_v2/blueprint_hub/patch_model.py`
+- 现状：已支持差分字段更新、结构更新抑制（低稳定/失败场景）与版本回滚指针（`rollback_to`）。
+- 距离评估：`完成（v0）`
 
 ### 2.2 部分落地（需增强）
 

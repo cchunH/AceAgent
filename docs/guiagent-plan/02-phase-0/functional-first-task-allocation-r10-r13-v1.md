@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.3`
+- 版本：`v1.4`
 - 更新时间：`2026-03-08`
 - 关联主文档：`../01-global-analysis/guiagent-blueprint-fidelity-review-v1.md`
 
@@ -122,3 +122,4 @@
 执行进展（截至 2026-03-08）：
 1. A1 已落地 v0：`v2_executor` 接入 `executor_state_machine`，并输出 `executor_state` 迁移事件。
 2. C1 已落地 v0：新增 `VectorIndexAdapter` 抽象与 `InMemoryVectorIndex`，`BlueprintRepository` 支持 `match_by_vector`。
+3. B2 已落地 v0：`blueprint_sync` 由全量覆盖改为 Delta patch 优先（`plan_blueprint_delta + BlueprintPatch`），支持结构更新抑制与回滚指针。

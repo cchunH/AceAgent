@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from guiagent_v2.blueprint_hub import Blueprint, BlueprintRepository
+from guiagent_v2.blueprint_hub import Blueprint, BlueprintPatch, BlueprintRepository
 from guiagent_v2.state_engine import (
     build_static_skeleton,
     denoise_perception_frames,
     extract_anchors,
 )
+from .blueprint_delta import plan_blueprint_delta
 
 
 def _utc_now_iso() -> str:
@@ -47,21 +48,12 @@ def upsert_blueprint_from_observation(
     post_check_result = post_check_result or {}
 
     existing = repo.get_blueprint(intent_key, app_state=app_state)
-    if existing is None:
-        blueprint = Blueprint(
-            intent_key=intent_key,
-            app_state=app_state,
-            reference_screen={"width": int(screen_width), "height": int(screen_height)},
-        ).to_dict()
-    else:
-        blueprint = dict(existing)
-
     anchors = extract_anchors(
         perception_infos_pre,
         (int(screen_width), int(screen_height)),
         max_anchors=5,
     )
-    blueprint["anchors"] = [a.to_dict() for a in anchors]
+    anchor_dicts = [a.to_dict() for a in anchors]
     denoise = denoise_perception_frames(
         frames=[perception_infos_pre, perception_infos_post],
         screen_size=(int(screen_width), int(screen_height)),
@@ -74,24 +66,75 @@ def upsert_blueprint_from_observation(
         min_presence_ratio=0.5,
         max_nodes=8,
     )
-    blueprint["static_skeleton"] = skeleton.to_dict()
+    skeleton_dict = skeleton.to_dict()
+    metadata_update = {
+        "last_outcome": action_outcome,
+        "last_post_check_reason": post_check_result.get("reason_code", "UNKNOWN"),
+        "denoise_stable_ratio": round(float(denoise.get("stable_ratio", 0.0)), 4),
+        "denoise_frame_count": int(denoise.get("frame_count", 1)),
+        "dynamic_noise_count": len(list(denoise.get("dynamic_infos", []))),
+        "updated_at": _utc_now_iso(),
+    }
+    discovered = (
+        _collect_post_expectations(perception_infos_post, max_items=2)
+        if action_outcome == "A" and post_check_result.get("passed", False)
+        else []
+    )
 
-    metadata = dict(blueprint.get("metadata", {}))
-    metadata["last_outcome"] = action_outcome
-    metadata["last_post_check_reason"] = post_check_result.get("reason_code", "UNKNOWN")
-    metadata["denoise_stable_ratio"] = round(float(denoise.get("stable_ratio", 0.0)), 4)
-    metadata["denoise_frame_count"] = int(denoise.get("frame_count", 1))
-    metadata["dynamic_noise_count"] = len(list(denoise.get("dynamic_infos", [])))
-    metadata["updated_at"] = _utc_now_iso()
-    blueprint["metadata"] = metadata
+    if existing is None:
+        blueprint = Blueprint(
+            intent_key=intent_key,
+            app_state=app_state,
+            reference_screen={"width": int(screen_width), "height": int(screen_height)},
+        ).to_dict()
+        blueprint["anchors"] = anchor_dicts
+        blueprint["static_skeleton"] = skeleton_dict
+        metadata = dict(blueprint.get("metadata", {}))
+        metadata.update(metadata_update)
+        metadata["last_patch_mode"] = "full_create"
+        metadata["last_patch_changed_fields"] = ["reference_screen", "anchors", "static_skeleton"]
+        metadata["last_patch_suppressed_fields"] = []
+        metadata["last_patch_structural_update"] = True
+        blueprint["metadata"] = metadata
+        if discovered:
+            existing_expectations = list(blueprint.get("post_expectations", []))
+            for item in discovered:
+                if item not in existing_expectations:
+                    existing_expectations.append(item)
+            blueprint["post_expectations"] = existing_expectations[:5]
+        repo.save_blueprint(blueprint)
+        return blueprint
 
-    if action_outcome == "A" and post_check_result.get("passed", False):
-        existing_expectations = list(blueprint.get("post_expectations", []))
-        discovered = _collect_post_expectations(perception_infos_post, max_items=2)
-        for item in discovered:
-            if item not in existing_expectations:
-                existing_expectations.append(item)
-        blueprint["post_expectations"] = existing_expectations[:5]
+    stable_ratio = float(denoise.get("stable_ratio", 0.0))
+    allow_structural_update = bool(
+        action_outcome == "A"
+        and post_check_result.get("passed", False)
+        and stable_ratio >= 0.35
+    )
+    plan = plan_blueprint_delta(
+        existing=dict(existing),
+        observed_anchors=anchor_dicts,
+        observed_skeleton=skeleton_dict,
+        discovered_expectations=discovered,
+        reference_screen={"width": int(screen_width), "height": int(screen_height)},
+        metadata_update=metadata_update,
+        allow_structural_update=allow_structural_update,
+    )
+    if not plan.delta:
+        return dict(existing)
 
-    repo.save_blueprint(blueprint)
-    return blueprint
+    patch = BlueprintPatch(
+        target_intent_key=intent_key,
+        target_state=app_state,
+        version=plan.next_version,
+        delta=plan.delta,
+        rollback_to=plan.rollback_to,
+    )
+    patch_result = repo.apply_patch(patch)
+    if str(patch_result.get("status")) != "SUCCESS":
+        fallback = dict(existing)
+        fallback.update(plan.delta)
+        fallback["version"] = plan.next_version
+        repo.save_blueprint(fallback)
+        return fallback
+    return repo.get_blueprint(intent_key, app_state=app_state) or dict(existing)
