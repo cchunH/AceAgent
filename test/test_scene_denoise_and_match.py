@@ -60,6 +60,36 @@ class TestSceneDenoiseAndMatch(unittest.TestCase):
         self.assertEqual(matched[0]["intent_key"], "global:TAP:SEARCH_BAR")
         self.assertGreaterEqual(matched[0]["score"], 0.8)
 
+    def test_denoise_clusters_jittered_positions(self):
+        frames = [
+            [{"text": "Search", "coordinates": (520, 110)}],
+            [{"text": "Search", "coordinates": (525, 114)}],
+            [{"text": "Search", "coordinates": (518, 109)}],
+        ]
+        result = denoise_perception_frames(frames, (1080, 2340), min_presence_ratio=0.66)
+        stable = result["stable_infos"]
+        self.assertTrue(stable)
+        self.assertEqual(stable[0]["text"], "Search")
+        x, y = stable[0]["coordinates"]
+        self.assertGreaterEqual(x, 518)
+        self.assertLessEqual(x, 525)
+        self.assertGreaterEqual(y, 109)
+        self.assertLessEqual(y, 114)
+
+    def test_denoise_counts_presence_once_per_frame(self):
+        frames = [
+            [
+                {"text": "Search", "coordinates": (520, 110)},
+                {"text": "Search", "coordinates": (521, 111)},
+            ],
+            [
+                {"text": "Search", "coordinates": (520, 110)},
+            ],
+        ]
+        result = denoise_perception_frames(frames, (1080, 2340), min_presence_ratio=0.9)
+        stable_texts = {str(item.get("text", "")).strip() for item in result["stable_infos"]}
+        self.assertIn("Search", stable_texts)
+
 
 if __name__ == "__main__":
     unittest.main()
