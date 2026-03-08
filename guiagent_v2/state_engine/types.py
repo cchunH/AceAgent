@@ -1,4 +1,4 @@
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
@@ -37,6 +37,7 @@ class StaticSkeleton:
     stable_ratio: float
     frame_count: int
     sample_count: int
+    dynamic_slots: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

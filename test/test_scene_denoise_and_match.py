@@ -90,6 +90,19 @@ class TestSceneDenoiseAndMatch(unittest.TestCase):
         stable_texts = {str(item.get("text", "")).strip() for item in result["stable_infos"]}
         self.assertIn("Search", stable_texts)
 
+    def test_static_skeleton_contains_dynamic_slots(self):
+        skeleton = build_static_skeleton(
+            frames=[
+                [{"text": "Search", "coordinates": (520, 110)}, {"text": "Toast", "coordinates": (500, 900)}],
+                [{"text": "Search", "coordinates": (521, 111)}],
+            ],
+            screen_size=(1080, 2340),
+            min_presence_ratio=0.6,
+        )
+        data = skeleton.to_dict()
+        self.assertIn("dynamic_slots", data)
+        self.assertTrue(isinstance(data["dynamic_slots"], list))
+
 
 if __name__ == "__main__":
     unittest.main()

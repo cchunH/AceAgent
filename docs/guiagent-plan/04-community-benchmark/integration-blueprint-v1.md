@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v1.26`
+- 版本：`v1.27`
 - 更新时间：`2026-03-08`
 - 目标：把社区标杆能力映射为 `guiagent_v2` 的可实施改造路径
 - 说明：当前文档同时包含“目标蓝图 + 已落地进展”
@@ -62,6 +62,7 @@
 46. 新增向量检索抽象 `VectorIndexAdapter`（`InMemoryVectorIndex` v0），`BlueprintRepository` 已支持 `rebuild_vector_index/match_by_vector`。
 47. `blueprint_sync` 已接入 Delta patch 策略（`blueprint_delta`），现按差分字段更新蓝图并记录 `rollback_to`，低稳定场景可抑制结构更新。
 48. 已补“离线回灌 -> 在线检索”最小闭环回归样例（`test_offline_replay`），保证回灌产物可被检索层消费。
+49. `state_engine` 的 `StaticSkeleton` 已补充 `dynamic_slots` 摘要，用于记录动态噪声槽位，增强后续回灌与匹配策略可解释性。
 
 尚未落地：
 1. `watchdog` 深化生产化（下载/安全扩展插件、聚合统计导出）。

@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.24`
+- 版本：`v2.25`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -155,6 +155,11 @@
 27. 回灌最小闭环回归（Offline -> Retrieval）
 - 证据模块：`test/test_offline_replay.py`, `guiagent_v2/runtime/offline_replay.py`, `guiagent_v2/blueprint_hub/repository.py`
 - 现状：已覆盖“离线重建后通过 `match_by_vector` 命中”的最小闭环回归样例。
+- 距离评估：`完成（v0）`
+
+28. 状态骨架动态槽位摘要（Dynamic Slots）
+- 证据模块：`guiagent_v2/state_engine/static_skeleton.py`, `guiagent_v2/state_engine/types.py`
+- 现状：`StaticSkeleton` 增加 `dynamic_slots`，用于结构化记录动态噪声区域。
 - 距离评估：`完成（v0）`
 
 ### 2.2 部分落地（需增强）

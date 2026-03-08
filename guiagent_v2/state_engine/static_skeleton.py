@@ -27,6 +27,42 @@ def _signature(keys: list[str]) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
 
 
+def _dynamic_slots(dynamic_infos: list[dict[str, Any]], screen_size: tuple[int, int], max_slots: int = 6) -> list[dict[str, Any]]:
+    width = max(1.0, float(int(screen_size[0])))
+    height = max(1.0, float(int(screen_size[1])))
+    slots: list[dict[str, Any]] = []
+    for item in dynamic_infos or []:
+        if not isinstance(item, dict):
+            continue
+        coords = item.get("coordinates")
+        if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+            continue
+        x = float(coords[0])
+        y = float(coords[1])
+        text = str(item.get("text", "")).strip()
+        zone = "middle"
+        ratio = y / height if height > 0 else 0.5
+        if ratio <= 0.15:
+            zone = "top"
+        elif ratio >= 0.85:
+            zone = "bottom"
+        slot_key = f"{zone}:{text.lower()}" if text else f"{zone}:icon"
+        slots.append(
+            {
+                "key": slot_key,
+                "zone": zone,
+                "text": text,
+                "norm_pos": {
+                    "x": round(max(0.0, min(1.0, x / width)), 4),
+                    "y": round(max(0.0, min(1.0, y / height)), 4),
+                },
+                "stability": float(item.get("_stability", 0.0)),
+            }
+        )
+    slots.sort(key=lambda item: item.get("stability", 0.0))
+    return slots[: max(1, int(max_slots))]
+
+
 def build_static_skeleton(
     frames: list[list[dict[str, Any]]],
     screen_size: tuple[int, int],
@@ -40,6 +76,7 @@ def build_static_skeleton(
         max_items=max_nodes * 2,
     )
     stable_infos = denoised.get("stable_infos", [])
+    dynamic_infos = denoised.get("dynamic_infos", [])
     anchors = extract_anchors(stable_infos, screen_size, max_anchors=max_nodes)
     nodes = [a.to_dict() for a in anchors]
     keys = [_node_key(node) for node in nodes]
@@ -49,6 +86,7 @@ def build_static_skeleton(
         stable_ratio=float(denoised.get("stable_ratio", 0.0)),
         frame_count=int(denoised.get("frame_count", 1)),
         sample_count=len(stable_infos),
+        dynamic_slots=_dynamic_slots(dynamic_infos, screen_size=screen_size, max_slots=min(6, max_nodes)),
     )
 
 
