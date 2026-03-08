@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 
+from guiagent_v2.blueprint_hub import BlueprintRepository
 from guiagent_v2.runtime.offline_replay import rebuild_blueprints_from_steps
 
 
@@ -46,6 +47,15 @@ class TestOfflineReplay(unittest.TestCase):
             self.assertGreaterEqual(result["rebuilt_count"], 1)
             self.assertTrue(os.path.exists(blueprints_path))
             self.assertIn("replay_quality_score_p50", result)
+
+            repo = BlueprintRepository(blueprints_path)
+            matched = repo.match_by_vector(
+                "tap search and show results",
+                app_state="global:DEFAULT",
+                top_k=1,
+            )
+            self.assertTrue(matched)
+            self.assertEqual(matched[0]["intent_key"], "global:TAP:UNSPECIFIED_TARGET")
 
     def test_rebuild_blueprints_skips_low_quality_samples(self):
         with tempfile.TemporaryDirectory() as td:
