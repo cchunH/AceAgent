@@ -54,6 +54,9 @@ docs/guiagent-plan/
 11. [code-doc-alignment-priority-review-v3.md](./01-global-analysis/code-doc-alignment-priority-review-v3.md)  
    最新代码-文档对齐审查与“功能完整可用”优先级重排（聚焦 v2 独立闭环阻断项）。
 
+12. [blueprint-implementation-status-and-stable-validation-plan-v1.md](./01-global-analysis/blueprint-implementation-status-and-stable-validation-plan-v1.md)  
+   最新蓝图执行现状、可用性评估、稳定实测版本（beta1）阶段计划与版本冻结策略。
+
 ## 2) 分阶段实施（02-phase-0）
 
 1. [phase0-execution-checklist.md](./02-phase-0/phase0-execution-checklist.md)  

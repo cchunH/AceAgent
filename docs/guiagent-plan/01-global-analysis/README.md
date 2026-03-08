@@ -36,3 +36,6 @@
 
 11. [code-doc-alignment-priority-review-v3.md](./code-doc-alignment-priority-review-v3.md)  
    最新代码-文档对齐审查与“功能完整可用”优先级重排（P0/P1/P2）。
+
+12. [blueprint-implementation-status-and-stable-validation-plan-v1.md](./blueprint-implementation-status-and-stable-validation-plan-v1.md)  
+   蓝图执行现状审计、可用性评估、稳定实测版本（beta）分阶段计划与版本冻结策略。
