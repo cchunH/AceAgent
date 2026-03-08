@@ -152,3 +152,27 @@
 - 补多帧时序去噪与回归样本。
 
 3. 完成 S1 后立即打第一个 checkpoint tag，作为“可运行实测起点”。
+
+## 9. S1 当前落地产物（已执行）
+
+1. 预检查脚本  
+- `scripts/blueprint_preflight.py`
+- 能输出 `PASS/WARN/FAIL` 与详细检查项，支持保存 JSON 报告。
+
+2. 预检查核心模块  
+- `guiagent_v2/runtime/preflight.py`
+- 已覆盖：Python/torch/adb/目录可写/蓝图向量后端插件配置检查。
+
+3. 稳定实测任务模板  
+- `docs/guiagent-plan/02-phase-0/stable-validation-tasks-v1.json`
+
+4. 稳定实测运行手册  
+- `docs/guiagent-plan/02-phase-0/stable-validation-runbook-v1.md`
+
+5. 回归保障  
+- `test/test_runtime_preflight.py`
+
+6. 本机预检查结果（2026-03-08）
+- 结论：`overall_status=FAIL`
+- 关键阻塞：`module:torch` 缺失
+- 警告项：`adb`、`transformers` 缺失（当前机器）

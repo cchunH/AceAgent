@@ -36,3 +36,9 @@
 
 11. [anchor-selection-and-aux-anchor-thinking-v1.md](./anchor-selection-and-aux-anchor-thinking-v1.md)  
    主辅锚点选择与辅助锚点作用思考（辅助定位、消歧、抗噪、恢复引导）。
+
+12. [stable-validation-runbook-v1.md](./stable-validation-runbook-v1.md)  
+   稳定实测运行手册（S1 前置检查、shadow/device 实测顺序、结果检查与故障定位）。
+
+13. [stable-validation-tasks-v1.json](./stable-validation-tasks-v1.json)  
+   稳定实测最小任务集模板（5 个基线任务）。

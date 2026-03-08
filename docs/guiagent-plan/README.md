@@ -89,6 +89,12 @@ docs/guiagent-plan/
 10. [anchor-selection-and-aux-anchor-thinking-v1.md](./02-phase-0/anchor-selection-and-aux-anchor-thinking-v1.md)  
    主辅锚点选择与辅助锚点作用思考文档（进入下一任务前的策略梳理）。
 
+11. [stable-validation-runbook-v1.md](./02-phase-0/stable-validation-runbook-v1.md)  
+   稳定实测运行手册（S1 前置检查、shadow/device 实测顺序、结果检查与故障定位）。
+
+12. [stable-validation-tasks-v1.json](./02-phase-0/stable-validation-tasks-v1.json)  
+   稳定实测最小任务集模板（5 个基线任务）。
+
 ## 3) 治理规范（03-governance）
 
 1. [documentation-standard-v1.md](./03-governance/documentation-standard-v1.md)  
