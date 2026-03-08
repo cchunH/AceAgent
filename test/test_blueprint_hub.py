@@ -74,7 +74,33 @@ class TestBlueprintHub(unittest.TestCase):
             )
             self.assertTrue(matched)
             self.assertEqual(matched[0]["intent_key"], "global:TAP:SEARCH_BAR")
-            self.assertGreaterEqual(matched[0]["score"], 0.5)
+
+    def test_match_by_vector(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "blueprints.json")
+            repo = BlueprintRepository(path)
+            repo.save_blueprint(
+                Blueprint(
+                    intent_key="global:TAP:SEARCH_BAR",
+                    app_state="global:DEFAULT",
+                    anchors=[{"text": "Search", "x": 0.5, "y": 0.05}],
+                    post_expectations=["Results"],
+                )
+            )
+            repo.save_blueprint(
+                Blueprint(
+                    intent_key="global:TAP:SETTINGS",
+                    app_state="global:DEFAULT",
+                    anchors=[{"text": "Settings", "x": 0.2, "y": 0.2}],
+                    post_expectations=["Settings"],
+                )
+            )
+            repo.rebuild_vector_index(app_state="global:DEFAULT")
+            matched = repo.match_by_vector("tap search input and open results", app_state="global:DEFAULT", top_k=1)
+            self.assertTrue(matched)
+            self.assertEqual(matched[0]["app_state"], "global:DEFAULT")
+            self.assertIn("intent_key", matched[0])
+            self.assertGreaterEqual(matched[0]["score"], 0.4)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from typing import Any
 
 from .patch_model import Blueprint, BlueprintPatch
 from guiagent_v2.state_engine import build_blueprint_match_index, match_blueprint_fast
+from guiagent_v2.retrieval import InMemoryVectorIndex, deterministic_text_embedding
 
 
 def _make_key(intent_key: str, app_state: str) -> str:
@@ -22,12 +23,15 @@ class BlueprintRepository:
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         self._store: dict[str, dict[str, Any]] = {}
         self._match_index_cache: dict[str, list[dict[str, Any]]] | None = None
+        self._vector_index = InMemoryVectorIndex()
+        self._vector_index_ready = False
         self._load()
 
     def _load(self) -> None:
         if not os.path.exists(self.file_path):
             self._store = {}
             self._match_index_cache = None
+            self._vector_index_ready = False
             return
         try:
             with open(self.file_path, "r", encoding="utf-8") as f:
@@ -36,6 +40,7 @@ class BlueprintRepository:
         except Exception:
             self._store = {}
         self._match_index_cache = None
+        self._vector_index_ready = False
 
     def _save(self) -> None:
         tmp = f"{self.file_path}.tmp"
@@ -43,6 +48,7 @@ class BlueprintRepository:
             json.dump(self._store, f, ensure_ascii=False, indent=2)
         os.replace(tmp, self.file_path)
         self._match_index_cache = None
+        self._vector_index_ready = False
 
     def get_blueprint(self, intent_key: str, app_state: str = "global:DEFAULT") -> dict[str, Any] | None:
         with self._lock:
@@ -123,3 +129,96 @@ class BlueprintRepository:
             app_state=app_state,
             top_k=top_k,
         )
+
+    def _compose_vector_text(self, blueprint: dict[str, Any]) -> str:
+        intent_key = str(blueprint.get("intent_key", "")).strip()
+        anchors = blueprint.get("anchors", [])
+        anchor_texts: list[str] = []
+        if isinstance(anchors, list):
+            for item in anchors:
+                if not isinstance(item, dict):
+                    continue
+                text = str(item.get("text", "")).strip()
+                if text:
+                    anchor_texts.append(text)
+        post_expectations = blueprint.get("post_expectations", [])
+        exp_values = []
+        if isinstance(post_expectations, list):
+            exp_values = [str(item).strip() for item in post_expectations if str(item).strip()]
+        parts = [intent_key]
+        if anchor_texts:
+            parts.append("anchors:" + " ".join(anchor_texts[:8]))
+        if exp_values:
+            parts.append("expect:" + " ".join(exp_values[:8]))
+        return " | ".join([p for p in parts if p])
+
+    def rebuild_vector_index(self, app_state: str | None = None) -> dict[str, Any]:
+        with self._lock:
+            snapshot = [dict(v) for v in self._store.values()]
+        target_state = str(app_state).strip() if app_state is not None else None
+
+        self._vector_index.clear()
+        indexed = 0
+        for item in snapshot:
+            state = str(item.get("app_state", "global:DEFAULT"))
+            if target_state and state != target_state:
+                continue
+            intent_key = str(item.get("intent_key", "")).strip()
+            if not intent_key:
+                continue
+            item_id = _make_key(intent_key, state)
+            vector_text = self._compose_vector_text(item)
+            vector = deterministic_text_embedding(vector_text, dim=32)
+            self._vector_index.upsert(
+                item_id,
+                vector,
+                metadata={
+                    "intent_key": intent_key,
+                    "app_state": state,
+                    "vector_text": vector_text,
+                },
+            )
+            indexed += 1
+
+        with self._lock:
+            self._vector_index_ready = True
+        return {
+            "status": "SUCCESS",
+            "indexed_count": indexed,
+            "app_state": target_state or "ALL",
+        }
+
+    def match_by_vector(
+        self,
+        query_text: str,
+        app_state: str = "global:DEFAULT",
+        top_k: int = 3,
+    ) -> list[dict[str, Any]]:
+        if not str(query_text or "").strip():
+            return []
+        with self._lock:
+            ready = bool(self._vector_index_ready)
+        if not ready:
+            self.rebuild_vector_index()
+
+        state = str(app_state).strip() or "global:DEFAULT"
+        query_vector = deterministic_text_embedding(str(query_text), dim=32)
+        hits = self._vector_index.search(query_vector, top_k=max(1, int(top_k)) * 4)
+
+        rows: list[dict[str, Any]] = []
+        for hit in hits:
+            metadata = dict(hit.metadata or {})
+            if str(metadata.get("app_state", "")) != state:
+                continue
+            rows.append(
+                {
+                    "intent_key": str(metadata.get("intent_key", "")),
+                    "app_state": str(metadata.get("app_state", state)),
+                    "score": float(hit.score),
+                    "item_id": hit.item_id,
+                    "source": "vector_mock",
+                }
+            )
+            if len(rows) >= max(1, int(top_k)):
+                break
+        return rows
