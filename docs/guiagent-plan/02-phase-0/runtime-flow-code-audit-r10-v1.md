@@ -78,6 +78,7 @@
 - `test_replay_quality.py`
 - `test_offline_replay.py`（低质量样本过滤）
 - `test_v2_executor.py`（状态事件存在性）
+- `flow_audit` 规则已增强：对“步骤成功但 `core_anchor_confidence/geometry_confidence` 偏低”给出 `WARN`。
 
 ## 7. 当前缺口（不阻塞可运行）
 
@@ -102,4 +103,3 @@
 
 3. 保持范围收敛：
 - 群智联邦分发继续后置，不进入当前迭代。
-

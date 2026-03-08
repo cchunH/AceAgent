@@ -87,6 +87,43 @@ def _audit_single_task(run_id: str, task_id: str, events: list[dict[str, Any]]) 
                     )
                 )
 
+        assertion_event = next((item for item in bucket if str(item.get("event_type", "")) == "assertion"), None)
+        if isinstance(assertion_event, dict):
+            assertion_result = dict(assertion_event.get("assertion_result", {}) or {})
+            if bool(assertion_result.get("passed", False)):
+                core_value = assertion_result.get("core_anchor_confidence")
+                if core_value is not None:
+                    try:
+                        core_conf = float(core_value)
+                        if core_conf < 0.45:
+                            issues.append(
+                                _issue(
+                                    "WARN",
+                                    "low_core_anchor_confidence",
+                                    "Step assertion passed but core anchor confidence is low",
+                                    step_id=sid,
+                                    core_anchor_confidence=core_conf,
+                                )
+                            )
+                    except Exception:
+                        pass
+                geom_value = assertion_result.get("geometry_confidence")
+                if geom_value is not None:
+                    try:
+                        geom_conf = float(geom_value)
+                        if geom_conf < 0.4:
+                            issues.append(
+                                _issue(
+                                    "WARN",
+                                    "low_geometry_confidence",
+                                    "Step assertion passed but geometry confidence is low",
+                                    step_id=sid,
+                                    geometry_confidence=geom_conf,
+                                )
+                            )
+                    except Exception:
+                        pass
+
     if "web_plan" in type_set:
         if "web_step_start" not in type_set:
             issues.append(
@@ -188,4 +225,3 @@ def audit_flow_from_jsonl(jsonl_path: str) -> dict[str, Any]:
                 continue
             events.append(json.loads(line))
     return audit_flow_from_events(events)
-

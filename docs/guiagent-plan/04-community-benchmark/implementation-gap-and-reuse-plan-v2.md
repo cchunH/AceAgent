@@ -3,7 +3,7 @@
 ## 文档元信息
 
 - 状态：`active`
-- 版本：`v2.28`
+- 版本：`v2.29`
 - 更新时间：`2026-03-08`
 - 目的：对齐 `integration-blueprint-v1` 与当前代码实现，给出下一阶段可执行复用计划
 - 关联：全局新计划见 `../01-global-analysis/post-r4-deep-assessment-and-next-plan-v2.md`
@@ -175,6 +175,11 @@
 31. 主辅锚点分路评分观测（Core/Aux/Geometry Confidence）
 - 证据模块：`guiagent_v2/action_engine/assertion_guard.py`, `guiagent_v2/action_engine/post_check.py`, `guiagent_v2/runtime/metrics.py`
 - 现状：断言与后检均输出主辅锚点与几何置信度，`runtime metrics` 增加对应聚合指标。
+- 距离评估：`完成（v0）`
+
+32. 低置信度流程审查（Flow Audit Warning）
+- 证据模块：`guiagent_v2/runtime/flow_audit.py`, `test/test_flow_audit.py`
+- 现状：流程审查可识别“步骤通过但主锚点/几何置信度偏低”的潜在风险并输出 `WARN`。
 - 距离评估：`完成（v0）`
 
 ### 2.2 部分落地（需增强）

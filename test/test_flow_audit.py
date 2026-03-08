@@ -60,7 +60,38 @@ class TestFlowAudit(unittest.TestCase):
         issues = audit["tasks"][0]["issues"]
         self.assertTrue(any(item["code"] == "web_plan_without_web_step_end" for item in issues))
 
+    def test_audit_warns_for_low_core_confidence_even_when_passed(self):
+        events = [
+            {"run_id": "r4", "task_id": "t4", "step_id": 0, "event_type": "task_start"},
+            {"run_id": "r4", "task_id": "t4", "step_id": 1, "event_type": "step_start"},
+            {"run_id": "r4", "task_id": "t4", "step_id": 1, "event_type": "guard_decision"},
+            {
+                "run_id": "r4",
+                "task_id": "t4",
+                "step_id": 1,
+                "event_type": "assertion",
+                "assertion_result": {
+                    "passed": True,
+                    "core_anchor_confidence": 0.2,
+                    "geometry_confidence": 0.3,
+                },
+            },
+            {
+                "run_id": "r4",
+                "task_id": "t4",
+                "step_id": 1,
+                "event_type": "post_check",
+                "post_check": {"passed": True},
+            },
+            {"run_id": "r4", "task_id": "t4", "step_id": 1, "event_type": "step_end", "status": "SUCCESS"},
+            {"run_id": "r4", "task_id": "t4", "step_id": 999999, "event_type": "task_end", "status": "SUCCESS"},
+        ]
+        audit = audit_flow_from_events(events)
+        self.assertEqual(audit["overall_status"], "WARN")
+        issues = audit["tasks"][0]["issues"]
+        self.assertTrue(any(item["code"] == "low_core_anchor_confidence" for item in issues))
+        self.assertTrue(any(item["code"] == "low_geometry_confidence" for item in issues))
+
 
 if __name__ == "__main__":
     unittest.main()
-
