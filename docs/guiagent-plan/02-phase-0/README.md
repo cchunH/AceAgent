@@ -45,3 +45,6 @@
 
 14. [stable-validation-thresholds-v1.json](./stable-validation-thresholds-v1.json)  
    稳定实测门禁阈值模板（供 `blueprint_validation_gate.py` 读取）。
+
+15. [readiness-gate-execution-report-20260309.md](./readiness-gate-execution-report-20260309.md)  
+   Readiness Gate 执行记录（基础链路 + 模型链路），用于判定是否可进入实测阶段。

@@ -21,8 +21,12 @@ from .guard_policy import GuardPolicy
 from .hooks import HookManager
 from .loop_detector import LoopDetector
 from .mobile_device_executor import MobileDeviceExecutor
+from .model_assertion_repair import repair_assertion_with_model
+from .model_intent_parser import parse_probe_instruction_with_model
+from .model_web_replan import build_replan_after_failure_with_model
 from .pipeline import StepPipeline
 from .executor_state_machine import ProbeState, ProbeStateMachine
+from .v2_model_settings import V2ModelSettings
 from .web_skill_router import WebSkillRouter
 from .web_planner import WebPlanStep, build_initial_web_plan, build_replan_after_failure
 from .web_replan_policy import WebReplanPolicy
@@ -32,11 +36,13 @@ EventEmitter = Callable[[dict[str, Any]], None]
 ConfirmationRegistrar = Callable[[dict[str, Any]], dict[str, Any] | None]
 ConfirmationWaiter = Callable[[str, float, float], dict[str, Any] | None]
 PerceptionProvider = Callable[..., dict[str, Any] | None]
-_URL_PATTERN = re.compile(r"https?://[^\s]+", re.IGNORECASE)
+_URL_PATTERN = re.compile(r"(?:https?://[^\s]+|about:[^\s]+)", re.IGNORECASE)
 _WEB_HINTS = (
     "http://",
     "https://",
+    "about:",
     "网页",
+    "浏览器",
     "website",
     "browser",
     "web",
@@ -547,6 +553,7 @@ def run_probe_step(
     perception_provider: PerceptionProvider | None = None,
     blueprint_repo: Any | None = None,
     replay_gate_config: dict[str, Any] | None = None,
+    model_settings: V2ModelSettings | None = None,
     screenshot_log_dir: str | None = None,
     capture_action_screenshot: bool = True,
 ) -> V2ProbeResult:
@@ -584,7 +591,65 @@ def run_probe_step(
                 compaction_event["session_id"] = runtime_session_id
             emit_event(compaction_event)
 
+    model_settings = model_settings or V2ModelSettings()
     action_obj, route_context = infer_probe_action(instruction)
+    if bool(model_settings.enable_intent_parser) and str(model_settings.intent_parser_model).strip():
+        try:
+            parse_result = parse_probe_instruction_with_model(
+                instruction=instruction,
+                model=str(model_settings.intent_parser_model),
+                model_type=str(model_settings.api_type or "").strip() or None,
+                api_url=str(model_settings.api_url or "").strip() or None,
+                api_key=str(model_settings.api_key or "").strip() or None,
+                extra_body=model_settings.extra_body,
+                temperature=float(model_settings.temperature),
+            )
+            if parse_result.get("ok", False):
+                action_obj = dict(parse_result.get("action_obj", action_obj))
+                route_context = dict(parse_result.get("route_context", route_context))
+                _emit(
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": step_id,
+                        "chain_mode": chain_mode,
+                        "event_type": "model_intent_parse",
+                        "status": "SUCCESS",
+                        "intent_key": "global:MODEL_INTENT_PARSE:APPLIED",
+                        "model_name": str(model_settings.intent_parser_model),
+                        "model_confidence": parse_result.get("confidence"),
+                        "parsed_action": dict(action_obj),
+                    }
+                )
+            else:
+                _emit(
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": step_id,
+                        "chain_mode": chain_mode,
+                        "event_type": "model_intent_parse",
+                        "status": "FAILED",
+                        "intent_key": "global:MODEL_INTENT_PARSE:FALLBACK",
+                        "model_name": str(model_settings.intent_parser_model),
+                        "reason_code": str(parse_result.get("error", "MODEL_INTENT_PARSE_FAILED")),
+                    }
+                )
+        except Exception as exc:
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "model_intent_parse",
+                    "status": "FAILED",
+                    "intent_key": "global:MODEL_INTENT_PARSE:ERROR",
+                    "model_name": str(model_settings.intent_parser_model),
+                    "reason_code": "MODEL_INTENT_PARSE_EXCEPTION",
+                    "error": str(exc),
+                }
+            )
 
     def _default_snapshot(pre: bool) -> dict[str, Any]:
         infos = [{"text": "__probe_pre__", "coordinates": (1, 1)}] if pre else [{"text": "__probe_post__", "coordinates": (1, 1)}]
@@ -1287,13 +1352,87 @@ def run_probe_step(
             )
             if policy_decision.allow and remaining_steps > 0:
                 replan_attempt += 1
-                replan_strategy, replanned_steps = build_replan_after_failure(
-                    failed_step=plan_step,
-                    failed_reason=failed_reason,
-                    route_context=route_context,
-                    remaining_steps=remaining_steps,
-                    revision=replan_attempt,
-                )
+                replan_strategy = ""
+                replanned_steps: list[WebPlanStep] = []
+                if bool(model_settings.enable_web_replan) and str(model_settings.web_replan_model).strip():
+                    try:
+                        model_replan = build_replan_after_failure_with_model(
+                            instruction=instruction,
+                            failed_reason=failed_reason,
+                            failed_task=dict(plan_step.task),
+                            route_context=route_context,
+                            remaining_steps=remaining_steps,
+                            revision=replan_attempt,
+                            model=str(model_settings.web_replan_model),
+                            model_type=str(model_settings.api_type or "").strip() or None,
+                            api_url=str(model_settings.api_url or "").strip() or None,
+                            api_key=str(model_settings.api_key or "").strip() or None,
+                            extra_body=model_settings.extra_body,
+                            temperature=float(model_settings.temperature),
+                        )
+                        if model_replan.get("ok", False):
+                            replan_strategy = str(model_replan.get("strategy", "model_replan"))
+                            replanned_steps = list(model_replan.get("steps", []))
+                            _emit(
+                                {
+                                    "run_id": run_id,
+                                    "task_id": task_id,
+                                    "step_id": step_id,
+                                    "chain_mode": chain_mode,
+                                    "event_type": "model_web_replan",
+                                    "status": "SUCCESS",
+                                    "intent_key": request.intent_key,
+                                    "web_plan_id": web_plan_id,
+                                    "model_name": str(model_settings.web_replan_model),
+                                    "web_replan_attempt": replan_attempt,
+                                    "model_replan_strategy": replan_strategy,
+                                    "model_replanned_steps_count": len(replanned_steps),
+                                    **route_info,
+                                }
+                            )
+                        else:
+                            _emit(
+                                {
+                                    "run_id": run_id,
+                                    "task_id": task_id,
+                                    "step_id": step_id,
+                                    "chain_mode": chain_mode,
+                                    "event_type": "model_web_replan",
+                                    "status": "FAILED",
+                                    "intent_key": request.intent_key,
+                                    "web_plan_id": web_plan_id,
+                                    "model_name": str(model_settings.web_replan_model),
+                                    "web_replan_attempt": replan_attempt,
+                                    "reason_code": str(model_replan.get("error", "MODEL_WEB_REPLAN_FAILED")),
+                                    **route_info,
+                                }
+                            )
+                    except Exception as exc:
+                        _emit(
+                            {
+                                "run_id": run_id,
+                                "task_id": task_id,
+                                "step_id": step_id,
+                                "chain_mode": chain_mode,
+                                "event_type": "model_web_replan",
+                                "status": "FAILED",
+                                "intent_key": request.intent_key,
+                                "web_plan_id": web_plan_id,
+                                "model_name": str(model_settings.web_replan_model),
+                                "web_replan_attempt": replan_attempt,
+                                "reason_code": "MODEL_WEB_REPLAN_EXCEPTION",
+                                "error": str(exc),
+                                **route_info,
+                            }
+                        )
+                if not replanned_steps:
+                    replan_strategy, replanned_steps = build_replan_after_failure(
+                        failed_step=plan_step,
+                        failed_reason=failed_reason,
+                        route_context=route_context,
+                        remaining_steps=remaining_steps,
+                        revision=replan_attempt,
+                    )
                 if replanned_steps:
                     pending_steps = list(replanned_steps) + pending_steps
                     pending_recovery_reasons.append(failed_reason)
@@ -1609,6 +1748,74 @@ def run_probe_step(
             exec_result["assertion_result"] = assertion_result
             exec_result["post_check"] = post_check
             exec_result["recovery_level"] = recovery_level
+
+    if bool(model_settings.enable_assertion_repair) and str(model_settings.assertion_repair_model).strip():
+        current_reason = str(assertion_result.get("reason_code", "")).strip().upper()
+        complex_reasons = {
+            "SKELETON_ASSERTION_FAILED",
+            "STRUCTURAL_ASSERTION_FAILED",
+            "ASSERTION_MISMATCH",
+            "POST_EXPECTATION_MISMATCH",
+        }
+        if not bool(assertion_result.get("passed", False)) and current_reason in complex_reasons:
+            try:
+                repair = repair_assertion_with_model(
+                    instruction=instruction,
+                    action_name=str(action_obj.get("name", "")),
+                    assertion_result=assertion_result,
+                    post_check=post_check,
+                    step_context=step_context,
+                    model=str(model_settings.assertion_repair_model),
+                    model_type=str(model_settings.api_type or "").strip() or None,
+                    api_url=str(model_settings.api_url or "").strip() or None,
+                    api_key=str(model_settings.api_key or "").strip() or None,
+                    extra_body=model_settings.extra_body,
+                    temperature=float(model_settings.temperature),
+                )
+                decision = str(repair.get("decision", "keep")).lower()
+                _emit(
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": step_id,
+                        "chain_mode": chain_mode,
+                        "event_type": "assertion_repair",
+                        "status": "SUCCESS" if repair.get("ok", False) else "FAILED",
+                        "intent_key": request.intent_key,
+                        "model_name": str(model_settings.assertion_repair_model),
+                        "assertion_repair_decision": decision,
+                        "assertion_repair_reason": repair.get("reason_code"),
+                        "assertion_repair_note": repair.get("note"),
+                        **final_route_info,
+                    }
+                )
+                if repair.get("ok", False) and decision == "accept":
+                    assertion_result = dict(assertion_result)
+                    assertion_result["passed"] = True
+                    assertion_result["reason_code"] = str(repair.get("reason_code", "ASSERTION_REPAIRED_ACCEPT"))
+                    if bool(post_check.get("passed", False)):
+                        status = "SUCCESS"
+                        recovery_level = "NONE"
+                        exec_result["status"] = "SUCCESS"
+                        exec_result["recovery_level"] = "NONE"
+                    exec_result["assertion_result"] = assertion_result
+            except Exception as exc:
+                _emit(
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": step_id,
+                        "chain_mode": chain_mode,
+                        "event_type": "assertion_repair",
+                        "status": "FAILED",
+                        "intent_key": request.intent_key,
+                        "model_name": str(model_settings.assertion_repair_model),
+                        "assertion_repair_decision": "keep",
+                        "reason_code": "MODEL_ASSERTION_REPAIR_EXCEPTION",
+                        "error": str(exc),
+                        **final_route_info,
+                    }
+                )
     _transition_state(
         ProbeState.VERIFYING,
         "enter_assertion_post_check",

@@ -17,7 +17,25 @@ python3 scripts/blueprint_preflight.py \
 - `overall_status=PASS`：可进入实测。
 - `overall_status=WARN/FAIL`：先修复环境后再测。
 
-## 3. Shadow 基线实测（建议先做）
+## 3. Readiness Gate（推荐先跑）
+
+```bash
+source scripts/use_guiagent_v2_env.sh
+python3 scripts/guiagent_v2_readiness_gate.py --skip_setup --tests_scope targeted
+```
+
+可选（验证模型节点链路）：
+
+```bash
+source scripts/use_guiagent_v2_env.sh
+python3 scripts/guiagent_v2_readiness_gate.py --skip_setup --skip_tests --smoke_use_models --smoke_timeout_sec 300
+```
+
+判定标准：
+- `overall_status=PASS`：可以进入 shadow/device 实测。
+- `overall_status=FAIL`：先修复 `checks` 里的失败项再继续。
+
+## 4. Shadow 基线实测（建议先做）
 
 ```bash
 python3 run.py \
@@ -31,7 +49,7 @@ python3 run.py \
 可选：保留默认动作截图（推荐）；如需关闭可加 `--v2_disable_action_screenshots`。
 可选：通过 `--guard_policy_path` 传入策略文件，调节 `replay_gate` 阈值（建议仅在实测标定阶段调整）。
 
-## 4. Device 模式实测（通过 Shadow 后）
+## 5. Device 模式实测（通过 Shadow 后）
 
 ```bash
 python3 run.py \
@@ -53,7 +71,7 @@ python3 scripts/blueprint_stable_entry.py \
   --mobile_execution_mode shadow
 ```
 
-## 5. 结果检查
+## 6. 结果检查
 
 1. 日志目录：
 - `logs/<model>/unimind_agent/<run_name>/<task_id>/`
@@ -72,7 +90,7 @@ python3 scripts/blueprint_stable_entry.py \
 - `snapshot_*` / `mobile_action_screenshot_*`
 - `blueprint_sync_*` / `replay_gate_*`（status API 与 runtime_summary 统计）
 
-## 6. 失败定位顺序
+## 7. 失败定位顺序
 
 1. `preflight` 失败：先修环境（`torch/adb/权限`）。
 2. `step_start -> step_end` 缺失：先查执行链。
@@ -80,7 +98,7 @@ python3 scripts/blueprint_stable_entry.py \
 4. `blueprint_sync` 失败：查回灌输入与 repo 写入路径。
 5. `replay_gate_block_rate` 过高：查 `replay_quality_score` 与 `replay_gate` 阈值配置是否过严。
 
-## 7. 自动门禁评估（新增）
+## 8. 自动门禁评估（新增）
 
 在 shadow/device 运行后，对 `runtime_summary.json` 执行门禁评估：
 
@@ -104,7 +122,7 @@ python3 scripts/blueprint_validation_gate.py \
 - `replay_gate_block_rate <= 0.4`（初始建议值，需结合场景再标定）
 - `blueprint_sync_failed_rate <= 0.15`
 
-## 8. Replay Gate 策略示例（新增）
+## 9. Replay Gate 策略示例（新增）
 
 在 guard policy JSON 中加入：
 

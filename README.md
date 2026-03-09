@@ -268,6 +268,16 @@ while True:
 - `GUIAGENT_BLUEPRINT_VECTOR_PLUGIN`（当 backend=`custom` 时使用，格式 `<module>:<factory>`）
 - `GUIAGENT_BLUEPRINT_EMBEDDING_DIM`（默认 `32`）
 
+v2 Readiness Gate（进入实测前建议先跑）：
+- `source scripts/use_guiagent_v2_env.sh`
+- `python3 scripts/guiagent_v2_readiness_gate.py --skip_setup --tests_scope targeted`
+- 可选模型链路校验：`python3 scripts/guiagent_v2_readiness_gate.py --skip_setup --skip_tests --smoke_use_models --smoke_timeout_sec 300`
+
+结构化模型节点稳定性环境变量（`scripts/use_guiagent_v2_env.sh` 已默认导出）：
+- `GUIAGENT_V2_FORCE_DISABLE_THINKING_FOR_STRUCTURED=1`
+- `GUIAGENT_V2_FORCE_JSON_RESPONSE_FOR_STRUCTURED=1`
+- `GUIAGENT_V2_MODEL_NODE_TIMEOUT_SEC=35`
+
 ## 工作流程详解
 
 ### 1. 系统初始化流程
@@ -333,11 +343,17 @@ Notetaker记录重要信息
 
 ```bash
 # API提供商选择
-export BACKBONE_TYPE="SiliconFlow"  # 或 "OpenAI"
+export BACKBONE_TYPE="SiliconFlow"  # 或 "OpenAI" / "DashScope"
 
 # API密钥配置
 export SILICONFLOW_API_KEY="your_key_here"
 export OPENAI_API_KEY="your_key_here"
+export DASHSCOPE_API_KEY="your_key_here"
+
+# API端点（可选，OpenAI兼容）
+export OPENAI_API_URL="https://api.openai.com/v1/chat/completions"
+export DASHSCOPE_API_URL="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+export SILICONFLOW_API_URL="https://api.siliconflow.cn/v1/chat/completions"
 
 # 模型配置
 export PLANNER_MODEL="Qwen/Qwen2.5-VL-32B-Instruct"
@@ -346,6 +362,56 @@ export VERIFIER_MODEL="Qwen/Qwen2.5-VL-32B-Instruct"
 
 # ADB路径配置
 export ADB_PATH="/path/to/adb"
+```
+
+### GUIAgent v2 独立模型配置（不复用 legacy 角色名）
+
+`guiagent_v2` 已支持独立模型与独立 API 通道，覆盖节点：`指令解析`、`web replan`、`复杂断言修复`。
+
+```bash
+# v2 独立 API 通道（可与 legacy 完全隔离）
+export GUIAGENT_V2_API_TYPE="DashScope"  # OpenAI / DashScope / SiliconFlow
+export GUIAGENT_V2_API_URL="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+export GUIAGENT_V2_API_KEY="your_dashscope_key"
+
+# 可选：透传到 OpenAI 兼容请求体（示例：百炼思考模式）
+export GUIAGENT_V2_EXTRA_BODY_JSON='{"enable_thinking": true}'
+
+# v2 节点模型（独立命名）
+export GUIAGENT_V2_INTENT_PARSER_MODEL="qwen3.5-plus"
+export GUIAGENT_V2_WEB_REPLAN_MODEL="qwen3.5-plus"
+export GUIAGENT_V2_ASSERTION_REPAIR_MODEL="qwen3.5-plus"
+
+# 开关
+export GUIAGENT_V2_ENABLE_INTENT_PARSER=1
+export GUIAGENT_V2_ENABLE_WEB_REPLAN=1
+export GUIAGENT_V2_ENABLE_ASSERTION_REPAIR=1
+```
+
+运行示例（v2 全链 + 跳过 legacy）：
+
+```bash
+python run.py \
+  --runtime_mode guiagent_v2 \
+  --v2_skip_legacy \
+  --instruction "打开浏览器并搜索今天的天气" \
+  --v2_enable_model_intent_parser \
+  --v2_enable_model_web_replan \
+  --v2_enable_model_assertion_repair
+```
+
+### agent-browser 本地化集成（项目内）
+
+`guiagent_v2` 的 Web skill 现在会优先尝试项目内 `demo/agent-browser`，不可用时再回退全局 `agent-browser`。
+
+```bash
+# 一次性安装本地依赖并自检
+./scripts/setup_agent_browser_local.sh
+
+# 可选：显式指定项目内路径
+export AGENT_BROWSER_PROJECT_DIR="$(pwd)/demo/agent-browser"
+export AGENT_BROWSER_PREFER_LOCAL=1
+export AGENT_BROWSER_FORCE_NATIVE=1
 ```
 
 ### 配置文件结构
