@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -85,6 +86,43 @@ def _check_command(command: str, required: bool = True) -> CheckResult:
             else f"Optional command '{command}' is not found"
         ),
         detail={"command": command, "required": bool(required)},
+    )
+
+
+def _check_agent_browser_local_runtime() -> CheckResult:
+    root = Path(__file__).resolve().parents[2]
+    default_dir = root / "third_party" / "agent-browser"
+    if not default_dir.exists():
+        default_dir = root / "demo" / "agent-browser"
+    configured_dir = str(os.getenv("AGENT_BROWSER_PROJECT_DIR", str(default_dir))).strip()
+    local_dir = Path(configured_dir).expanduser()
+    local_bin = local_dir / "bin" / "agent-browser.js"
+    local_ready = local_bin.exists() and shutil.which("node")
+    global_ready = shutil.which("agent-browser")
+
+    if local_ready:
+        return CheckResult(
+            name="command:agent-browser-local",
+            status="PASS",
+            message=f"Local agent-browser runtime is available at {local_bin}",
+            detail={"project_dir": str(local_dir), "bin": str(local_bin)},
+        )
+    if global_ready:
+        return CheckResult(
+            name="command:agent-browser-local",
+            status="WARN",
+            message="Local agent-browser runtime missing; global command is available",
+            detail={"global_path": str(global_ready), "project_dir": str(local_dir), "bin": str(local_bin)},
+        )
+    return CheckResult(
+        name="command:agent-browser-local",
+        status="WARN",
+        message="agent-browser runtime not found (local/global). Web skill fallback may occur.",
+        detail={
+            "project_dir": str(local_dir),
+            "bin": str(local_bin),
+            "setup_hint": "Run scripts/setup_agent_browser_local.sh",
+        },
     )
 
 
@@ -229,6 +267,7 @@ def run_preflight(
         checks.append(_check_module("PIL", required=False))
 
     checks.append(_check_command("adb", required=require_adb))
+    checks.append(_check_agent_browser_local_runtime())
     checks.append(_check_writable_dir(log_root))
     checks.append(_check_writable_dir(screenshot_dir))
     checks.append(_check_writable_dir(temp_dir))

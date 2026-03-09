@@ -40,6 +40,17 @@ def _run_with_mode(runtime_mode: str, **kwargs):
         kwargs.pop("v2_use_live_perception", None)
         kwargs.pop("v2_capture_action_screenshots", None)
         kwargs.pop("v2_screenshot_subdir", None)
+        kwargs.pop("v2_enable_model_intent_parser", None)
+        kwargs.pop("v2_enable_model_web_replan", None)
+        kwargs.pop("v2_enable_model_assertion_repair", None)
+        kwargs.pop("v2_model_api_type", None)
+        kwargs.pop("v2_model_api_url", None)
+        kwargs.pop("v2_model_api_key", None)
+        kwargs.pop("v2_model_extra_body_json", None)
+        kwargs.pop("v2_intent_parser_model", None)
+        kwargs.pop("v2_web_replan_model", None)
+        kwargs.pop("v2_assertion_repair_model", None)
+        kwargs.pop("v2_model_temperature", None)
         kwargs.pop("blueprint_vector_backend", None)
         kwargs.pop("blueprint_vector_plugin", None)
         kwargs.pop("blueprint_embedding_dim", None)
@@ -169,6 +180,73 @@ def main():
         type=str,
         default="screenshots",
         help="Subdirectory under task log dir for guiagent_v2 screenshots.",
+    )
+    parser.add_argument(
+        "--v2_enable_model_intent_parser",
+        action="store_true",
+        default=None,
+        help="Enable v2 model-based instruction parsing node.",
+    )
+    parser.add_argument(
+        "--v2_enable_model_web_replan",
+        action="store_true",
+        default=None,
+        help="Enable v2 model-based web replan node.",
+    )
+    parser.add_argument(
+        "--v2_enable_model_assertion_repair",
+        action="store_true",
+        default=None,
+        help="Enable v2 model-based complex assertion repair node.",
+    )
+    parser.add_argument(
+        "--v2_model_api_type",
+        type=str,
+        default=None,
+        choices=["OpenAI", "DashScope", "SiliconFlow"],
+        help="Optional API provider override for v2 model nodes.",
+    )
+    parser.add_argument(
+        "--v2_model_api_url",
+        type=str,
+        default=None,
+        help="Optional API endpoint override for v2 model nodes.",
+    )
+    parser.add_argument(
+        "--v2_model_api_key",
+        type=str,
+        default=None,
+        help="Optional API key override for v2 model nodes.",
+    )
+    parser.add_argument(
+        "--v2_model_extra_body_json",
+        type=str,
+        default=None,
+        help="Optional extra JSON body for v2 model nodes, e.g. '{\"enable_thinking\": true}'.",
+    )
+    parser.add_argument(
+        "--v2_intent_parser_model",
+        type=str,
+        default=None,
+        help="Model name for v2 instruction parser node.",
+    )
+    parser.add_argument(
+        "--v2_web_replan_model",
+        type=str,
+        default=None,
+        help="Model name for v2 web replan node.",
+    )
+    parser.add_argument(
+        "--v2_assertion_repair_model",
+        type=str,
+        default=None,
+        help="Model name for v2 assertion repair node.",
+    )
+    parser.add_argument(
+        "--v2_model_temperature",
+        type=float,
+        default=None,
+        help="Temperature for v2 model nodes.",
     )
     parser.add_argument(
         "--blueprint_vector_backend",
@@ -365,6 +443,17 @@ def main():
                 v2_use_live_perception=args.v2_use_live_perception,
                 v2_capture_action_screenshots=not args.v2_disable_action_screenshots,
                 v2_screenshot_subdir=args.v2_screenshot_subdir,
+                v2_enable_model_intent_parser=args.v2_enable_model_intent_parser,
+                v2_enable_model_web_replan=args.v2_enable_model_web_replan,
+                v2_enable_model_assertion_repair=args.v2_enable_model_assertion_repair,
+                v2_model_api_type=args.v2_model_api_type,
+                v2_model_api_url=args.v2_model_api_url,
+                v2_model_api_key=args.v2_model_api_key,
+                v2_model_extra_body_json=args.v2_model_extra_body_json,
+                v2_intent_parser_model=args.v2_intent_parser_model,
+                v2_web_replan_model=args.v2_web_replan_model,
+                v2_assertion_repair_model=args.v2_assertion_repair_model,
+                v2_model_temperature=args.v2_model_temperature,
                 blueprint_vector_backend=args.blueprint_vector_backend,
                 blueprint_vector_plugin=args.blueprint_vector_plugin,
                 blueprint_embedding_dim=args.blueprint_embedding_dim,
@@ -455,6 +544,17 @@ def main():
                 v2_use_live_perception=args.v2_use_live_perception,
                 v2_capture_action_screenshots=not args.v2_disable_action_screenshots,
                 v2_screenshot_subdir=args.v2_screenshot_subdir,
+                v2_enable_model_intent_parser=args.v2_enable_model_intent_parser,
+                v2_enable_model_web_replan=args.v2_enable_model_web_replan,
+                v2_enable_model_assertion_repair=args.v2_enable_model_assertion_repair,
+                v2_model_api_type=args.v2_model_api_type,
+                v2_model_api_url=args.v2_model_api_url,
+                v2_model_api_key=args.v2_model_api_key,
+                v2_model_extra_body_json=args.v2_model_extra_body_json,
+                v2_intent_parser_model=args.v2_intent_parser_model,
+                v2_web_replan_model=args.v2_web_replan_model,
+                v2_assertion_repair_model=args.v2_assertion_repair_model,
+                v2_model_temperature=args.v2_model_temperature,
                 blueprint_vector_backend=args.blueprint_vector_backend,
                 blueprint_vector_plugin=args.blueprint_vector_plugin,
                 blueprint_embedding_dim=args.blueprint_embedding_dim,

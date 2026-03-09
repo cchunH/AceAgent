@@ -1,4 +1,5 @@
 import concurrent.futures
+import os
 import time
 from UniMind.utils.image_utils import encode_image_to_base64_data_uri
 import config
@@ -122,7 +123,17 @@ def track_usage(res_json, api_key):
         "completion_token_price": completion_token_price
     }
 
-def inference_chat(chat, model, api_url, token, usage_tracking_jsonl = None, max_tokens = 2048, temperature = 0.0):
+def inference_chat(
+    chat,
+    model,
+    api_url,
+    token,
+    usage_tracking_jsonl=None,
+    max_tokens=2048,
+    temperature=0.0,
+    extra_body=None,
+    request_timeout_sec=None,
+):
     if token is None:
         raise ValueError("API key is required")
     
@@ -137,6 +148,8 @@ def inference_chat(chat, model, api_url, token, usage_tracking_jsonl = None, max
         "max_tokens": max_tokens,
         'temperature': temperature
     }
+    if isinstance(extra_body, dict) and extra_body:
+        data.update(extra_body)
 
     if "claude" in model:
         if "47.88.8.18:8088" not in api_url:
@@ -174,15 +187,32 @@ def inference_chat(chat, model, api_url, token, usage_tracking_jsonl = None, max
     max_retry = 5
     sleep_sec = 3
 
+    resolved_timeout_sec = request_timeout_sec
+    if resolved_timeout_sec is None:
+        try:
+            resolved_timeout_sec = float(os.environ.get("MODEL_API_TIMEOUT_SEC", "90"))
+        except Exception:
+            resolved_timeout_sec = 90.0
+
     while True:
         try:
             if "claude" in model:
-                res = requests.post(api_url, headers=headers, data=json.dumps(data))
+                res = requests.post(
+                    api_url,
+                    headers=headers,
+                    data=json.dumps(data),
+                    timeout=resolved_timeout_sec,
+                )
                 res_json = res.json()
                 # print(res_json)
                 res_content = res_json['content'][0]['text']
             else:
-                res = requests.post(api_url, headers=headers, json=data)
+                res = requests.post(
+                    api_url,
+                    headers=headers,
+                    json=data,
+                    timeout=resolved_timeout_sec,
+                )
                 res_json = res.json()
                 # print(res_json)
                 res_content = res_json['choices'][0]['message']['content']
@@ -267,7 +297,17 @@ def process_image(image_path, query, caption_model=CAPTION_MODEL):
 
 
 
-def get_model_api_response(chat, model_type=BACKBONE_TYPE, model=None, temperature=0.0, max_tokens=2048):
+def get_model_api_response(
+    chat,
+    model_type=BACKBONE_TYPE,
+    model=None,
+    temperature=0.0,
+    max_tokens=2048,
+    api_url=None,
+    api_key=None,
+    extra_body=None,
+    request_timeout_sec=None,
+):
     
     # chat messages in openai format
     model = DEFAULT_MODEL if model is None else model
@@ -276,12 +316,23 @@ def get_model_api_response(chat, model_type=BACKBONE_TYPE, model=None, temperatu
     start_time = time.time()
     
     try:
-        if model_type == "OpenAI":
-            response = inference_chat(chat, model, config.api.url, config.api.key, usage_tracking_jsonl=config.paths.USAGE_TRACKING_JSONL, max_tokens=max_tokens, temperature=temperature)
-        elif model_type == "SiliconFlow":
-            response = inference_chat(chat, model, config.api.url, config.api.key, usage_tracking_jsonl=config.paths.USAGE_TRACKING_JSONL, max_tokens=max_tokens, temperature=temperature)
+        provider = model_type or BACKBONE_TYPE
+        resolved_url = api_url or config.api.get_url(provider)
+        resolved_key = api_key or config.api.get_key(provider)
+        if provider in {"OpenAI", "SiliconFlow", "DashScope"}:
+            response = inference_chat(
+                chat,
+                model,
+                resolved_url,
+                resolved_key,
+                usage_tracking_jsonl=config.paths.USAGE_TRACKING_JSONL,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                extra_body=extra_body,
+                request_timeout_sec=request_timeout_sec,
+            )
         else:
-            raise ValueError(f"Unknown model type: {model_type}")
+            raise ValueError(f"Unknown model type: {provider}")
         
         # 计算用时
         elapsed_time = time.time() - start_time

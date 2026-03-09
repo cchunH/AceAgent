@@ -13,3 +13,9 @@ README_submission.md
 screenshot/*
 .DS_Store
 testing.sh
+
+# local env/secrets
+.env
+.env.local
+.env.*.local
+.env.guiagent_v2.local

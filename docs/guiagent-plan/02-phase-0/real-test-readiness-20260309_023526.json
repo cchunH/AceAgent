@@ -1,0 +1,147 @@
+{
+  "overall_status": "FAIL",
+  "started_at": "2026-03-09T02:29:37",
+  "finished_at": "2026-03-09T02:35:26",
+  "run_name": "readiness_gate_v2_20260309_022937",
+  "log_root": "logs",
+  "checks": {
+    "setup_ok": true,
+    "preflight_ok": true,
+    "tests_ok": true,
+    "v2_model_config_ok": true,
+    "intent_parse_ok": false,
+    "agent_browser_ok": false,
+    "no_cli_not_found": true,
+    "step_end_ok": false
+  },
+  "preflight": {
+    "overall_status": "PASS",
+    "totals": {
+      "PASS": 10,
+      "WARN": 0,
+      "FAIL": 0
+    },
+    "checks": [
+      {
+        "name": "python_version",
+        "status": "PASS",
+        "message": "Python 3.12 detected",
+        "detail": {
+          "current": [
+            3,
+            12
+          ],
+          "required": [
+            3,
+            10
+          ]
+        }
+      },
+      {
+        "name": "module:torch",
+        "status": "PASS",
+        "message": "Module 'torch' is available",
+        "detail": {
+          "module": "torch"
+        }
+      },
+      {
+        "name": "module:transformers",
+        "status": "PASS",
+        "message": "Module 'transformers' is available",
+        "detail": {
+          "module": "transformers"
+        }
+      },
+      {
+        "name": "module:modelscope",
+        "status": "PASS",
+        "message": "Module 'modelscope' is available",
+        "detail": {
+          "module": "modelscope"
+        }
+      },
+      {
+        "name": "command:adb",
+        "status": "PASS",
+        "message": "Command 'adb' found at /usr/bin/adb",
+        "detail": {
+          "command": "adb",
+          "path": "/usr/bin/adb"
+        }
+      },
+      {
+        "name": "command:agent-browser-local",
+        "status": "PASS",
+        "message": "Local agent-browser runtime is available at /mnt/d/ProjectSpace/Uni-Mind/demo/agent-browser/bin/agent-browser.js",
+        "detail": {
+          "project_dir": "/mnt/d/ProjectSpace/Uni-Mind/demo/agent-browser",
+          "bin": "/mnt/d/ProjectSpace/Uni-Mind/demo/agent-browser/bin/agent-browser.js"
+        }
+      },
+      {
+        "name": "writable:logs",
+        "status": "PASS",
+        "message": "Directory 'logs' is writable",
+        "detail": {
+          "path": "logs"
+        }
+      },
+      {
+        "name": "writable:screenshot",
+        "status": "PASS",
+        "message": "Directory 'screenshot' is writable",
+        "detail": {
+          "path": "screenshot"
+        }
+      },
+      {
+        "name": "writable:temp",
+        "status": "PASS",
+        "message": "Directory 'temp' is writable",
+        "detail": {
+          "path": "temp"
+        }
+      },
+      {
+        "name": "vector_backend",
+        "status": "PASS",
+        "message": "Blueprint vector backend 'memory' is enabled",
+        "detail": {
+          "backend": "memory"
+        }
+      }
+    ]
+  },
+  "setup_result": {
+    "name": "setup_agent_browser_local",
+    "rc": 0,
+    "stdout_tail": "[setup] using agent-browser dir: /mnt/d/ProjectSpace/Uni-Mind/demo/agent-browser\n[setup] npm install --legacy-peer-deps (HUSKY=0)\n\n> agent-browser@0.16.3 postinstall\n> node scripts/postinstall.js\n\n✓ Native binary ready: agent-browser-linux-x64\n\n╔═══════════════════════════════════════════════════════════════════════════╗\n║ To download browser binaries, run:                                        ║\n║                                                                           ║\n║     npx playwright install chromium                                       ║\n║                                                                           ║\n║ On Linux, include system dependencies with:                               ║\n║                                                                           ║\n║     npx playwright install --with-deps chromium                           ║\n║                                                                           ║\n╚═══════════════════════════════════════════════════════════════════════════╝\n\n> agent-browser@0.16.3 prepare\n> husky\n\nHUSKY=0 skip install\nup to date, audited 444 packages in 11s\n\n115 packages are looking for funding\n  run `npm fund` for details\n\n2 moderate severity vulnerabilities\n\nTo address all issues, run:\n  npm audit fix\n\nRun `npm audit` for details.\n[setup] build daemon/runtime assets\n\n> agent-browser@0.16.3 build /mnt/d/ProjectSpace/Uni-Mind/demo/agent-browser\n> tsc\n\n[setup] install playwright chromium runtime (may retry on slow network)\n[setup] smoke check: agent-browser --version\nagent-browser 0.16.3\n[setup] smoke check: agent-browser --native open about:blank\n[setup] done. To force runtime local path:\nexport AGENT_BROWSER_PROJECT_DIR='/mnt/d/ProjectSpace/Uni-Mind/demo/agent-browser'\nexport AGENT_BROWSER_PREFER_LOCAL=1\nexport AGENT_BROWSER_FORCE_NATIVE=1\n",
+    "stderr_tail": "",
+    "timed_out": false
+  },
+  "tests_result": {
+    "name": "unittest",
+    "rc": 0,
+    "stdout_tail": "### Using BACKBONE_TYPE: SiliconFlow\n### Model Configuration:\n  - Planner: Qwen/Qwen2.5-VL-32B-Instruct\n  - Executor: Qwen/Qwen2.5-VL-32B-Instruct\n  - Verifier: Qwen/Qwen2.5-VL-32B-Instruct\n  - Notetaker: Qwen/Qwen2.5-VL-32B-Instruct\n  - Evolution Engine: Qwen/Qwen2.5-32B-Instruct\n  - JSON Repair: Qwen/Qwen3-8B\n  - Perceptor Caption Model: Pro/Qwen/Qwen2.5-VL-7B-Instruct\n### GUIAgentV2 Model Configuration:\n  - API Type: SiliconFlow\n  - API URL: https://api.siliconflow.cn/v1/chat/completions\n  - Intent Parser: Qwen/Qwen2.5-VL-32B-Instruct (enabled=False)\n  - Web Replan: Qwen/Qwen2.5-32B-Instruct (enabled=False)\n  - Assertion Repair: Qwen/Qwen3-8B (enabled=False)\n",
+    "stderr_tail": "----------------------------------------------------------------------\nRan 186 tests in 29.498s\n\nOK\n",
+    "timed_out": false
+  },
+  "smoke_result": {
+    "name": "dashscope_v2_smoke",
+    "rc": 124,
+    "stdout_tail": "",
+    "stderr_tail": "",
+    "timed_out": true
+  },
+  "events_path": "logs/readiness_gate_v2_20260309_022937/20260309-023238/events.jsonl",
+  "event_summary": {
+    "has_v2_model_config": true,
+    "has_model_intent_parse_success": false,
+    "has_agent_browser_adapter_success": false,
+    "has_cli_not_found_error": false,
+    "has_step_end_success": false,
+    "has_task_end": false,
+    "event_count": 3
+  }
+}

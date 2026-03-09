@@ -7,7 +7,7 @@ from guiagent_v2.runtime.agent_browser_skill import AgentBrowserCLIAdapter, Agen
 
 class TestAgentBrowserCLIAdapter(unittest.TestCase):
     def test_execute_success_and_command_shape(self):
-        adapter = AgentBrowserCLIAdapter(executable="agent-browser", timeout_sec=1)
+        adapter = AgentBrowserCLIAdapter(executable="agent-browser", timeout_sec=1, force_native=False)
         completed = subprocess.CompletedProcess(
             args=[],
             returncode=0,

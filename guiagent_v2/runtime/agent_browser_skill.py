@@ -5,6 +5,7 @@ import os
 import shlex
 import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 
@@ -32,11 +33,38 @@ class WebAutomationAdapter:
         raise NotImplementedError
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _default_agent_browser_project_dir() -> Path:
+    preferred = _PROJECT_ROOT / "third_party" / "agent-browser"
+    if preferred.exists():
+        return preferred
+    return _PROJECT_ROOT / "demo" / "agent-browser"
+
+
+_DEFAULT_LOCAL_AGENT_BROWSER_DIR = _default_agent_browser_project_dir()
+_DEFAULT_LOCAL_AGENT_BROWSER_BIN = _DEFAULT_LOCAL_AGENT_BROWSER_DIR / "bin" / "agent-browser.js"
+
+
 @dataclass
 class AgentBrowserCLIAdapter(WebAutomationAdapter):
     """Run agent-browser as an external process and normalize responses."""
 
-    executable: str = "agent-browser"
+    executable: str = field(default_factory=lambda: str(os.environ.get("AGENT_BROWSER_EXECUTABLE", "")).strip())
+    project_dir: str = field(
+        default_factory=lambda: str(
+            os.environ.get("AGENT_BROWSER_PROJECT_DIR", str(_DEFAULT_LOCAL_AGENT_BROWSER_DIR))
+        ).strip()
+    )
+    prefer_local: bool = field(
+        default_factory=lambda: str(os.environ.get("AGENT_BROWSER_PREFER_LOCAL", "1")).strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
+    force_native: bool = field(
+        default_factory=lambda: str(os.environ.get("AGENT_BROWSER_FORCE_NATIVE", "1")).strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
     default_session: str = "default"
     timeout_sec: float = 20.0
     extra_env: dict[str, str] = field(default_factory=dict)
@@ -108,56 +136,106 @@ class AgentBrowserCLIAdapter(WebAutomationAdapter):
             "session_id": session_id,
         }
 
+    def _resolve_command_candidates(self, args: list[str], session_id: str) -> list[tuple[list[str], str | None, str]]:
+        prefix: list[str] = ["--native"] if bool(self.force_native) else []
+        suffix = [*prefix, "--json", "--session", session_id, *args]
+        candidates: list[tuple[list[str], str | None, str]] = []
+
+        explicit = str(self.executable or "").strip()
+        if explicit:
+            explicit_tokens = shlex.split(explicit)
+            candidates.append(([*explicit_tokens, *suffix], None, "explicit"))
+            return candidates
+
+        if self.prefer_local:
+            local_project_dir = Path(self.project_dir).expanduser().resolve()
+            local_bin = local_project_dir / "bin" / "agent-browser.js"
+            if local_bin.exists():
+                candidates.append((["node", str(local_bin), *suffix], str(local_project_dir), "local_node"))
+
+        candidates.append((["agent-browser", *suffix], None, "global"))
+        return candidates
+
     def _run_cli(self, args: list[str], session_id: str) -> dict[str, Any]:
-        command = [self.executable, "--json", "--session", session_id, *args]
         env = os.environ.copy()
         env.update(self.extra_env)
-        try:
-            completed = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_sec,
-                check=False,
-                env=env,
-            )
-        except FileNotFoundError:
-            return {
-                "success": False,
-                "error": "CLI_NOT_FOUND",
-                "data": None,
+        candidates = self._resolve_command_candidates(args=args, session_id=session_id)
+        first_missing: list[str] | None = None
+        first_timeout: list[str] | None = None
+        last_result: dict[str, Any] | None = None
+
+        for command, cwd, source in candidates:
+            try:
+                completed = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout_sec,
+                    check=False,
+                    env=env,
+                    cwd=cwd,
+                )
+            except FileNotFoundError:
+                if first_missing is None:
+                    first_missing = list(command)
+                continue
+            except subprocess.TimeoutExpired:
+                if first_timeout is None:
+                    first_timeout = list(command)
+                continue
+
+            parsed = self._parse_stdout(completed.stdout)
+            success = bool(parsed.get("success")) if parsed else completed.returncode == 0
+            error = None
+            data = None
+            if parsed:
+                error = parsed.get("error")
+                data = parsed.get("data")
+            if not success and not error:
+                error = completed.stderr.strip() or f"CLI_EXIT_{completed.returncode}"
+
+            result = {
+                "success": success,
+                "error": error,
+                "data": data,
                 "session_id": session_id,
                 "command": command,
+                "return_code": completed.returncode,
+                "stdout": completed.stdout.strip(),
+                "stderr": completed.stderr.strip(),
+                "adapter_source": source,
             }
-        except subprocess.TimeoutExpired:
+            last_result = result
+            if success:
+                return result
+            if source == "local_node" and "No binary found for" in str(result.get("stderr", "")):
+                continue
+            return result
+
+        if first_timeout is not None:
             return {
                 "success": False,
                 "error": "CLI_TIMEOUT",
                 "data": None,
                 "session_id": session_id,
-                "command": command,
+                "command": first_timeout,
             }
-
-        parsed = self._parse_stdout(completed.stdout)
-        success = bool(parsed.get("success")) if parsed else completed.returncode == 0
-        error = None
-        data = None
-        if parsed:
-            error = parsed.get("error")
-            data = parsed.get("data")
-
-        if not success and not error:
-            error = completed.stderr.strip() or f"CLI_EXIT_{completed.returncode}"
-
-        return {
-            "success": success,
-            "error": error,
-            "data": data,
+        if first_missing is not None:
+            return {
+                "success": False,
+                "error": "CLI_NOT_FOUND",
+                "data": None,
+                "session_id": session_id,
+                "command": first_missing,
+                "hint": "Run scripts/setup_agent_browser_local.sh to install local agent-browser runtime.",
+            }
+        return last_result or {
+            "success": False,
+            "error": "CLI_NOT_FOUND",
+            "data": None,
             "session_id": session_id,
-            "command": command,
-            "return_code": completed.returncode,
-            "stdout": completed.stdout.strip(),
-            "stderr": completed.stderr.strip(),
+            "command": ["agent-browser"],
+            "hint": "Run scripts/setup_agent_browser_local.sh to install local agent-browser runtime.",
         }
 
     @staticmethod

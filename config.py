@@ -41,7 +41,7 @@ class Paths:
 class API:
     """管理所有外部API的配置、密钥和端点"""
     # --- 主干模型提供商选择 ---
-    # 可选项: "SiliconFlow", "OpenAI"
+    # 可选项: "SiliconFlow", "OpenAI", "DashScope"
     # 这是控制所有模型来源的总开关，优先从环境变量读取
     BACKBONE_TYPE = os.environ.get("BACKBONE_TYPE", default="SiliconFlow")
     
@@ -49,24 +49,39 @@ class API:
     # 将密钥存储在字典中，便于管理和扩展
     _API_KEYS = {
         "OpenAI": os.environ.get("OPENAI_API_KEY", default=None),
+        "DashScope": os.environ.get("DASHSCOPE_API_KEY", default=None),
         "SiliconFlow": os.environ.get("SILICONFLOW_API_KEY", default="sk-fgxeqnapytlhmpyfnkpvlpkkpqzcfaoofyxdpuveuxuvsmvy") # 示例密钥
     }
 
     # --- API 端点管理 ---
     _API_URLS = {
-        "OpenAI": "https://api.openai.com/v1/chat/completions",
-        "SiliconFlow": "https://api.siliconflow.cn/v1/chat/completions"
+        "OpenAI": os.environ.get("OPENAI_API_URL", "https://api.openai.com/v1/chat/completions"),
+        "DashScope": os.environ.get(
+            "DASHSCOPE_API_URL",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        ),
+        "SiliconFlow": os.environ.get("SILICONFLOW_API_URL", "https://api.siliconflow.cn/v1/chat/completions"),
     }
+
+    def get_key(self, provider_type=None):
+        """按提供商类型读取密钥。provider_type为空时使用主干配置。"""
+        provider = provider_type or self.BACKBONE_TYPE
+        return self._API_KEYS.get(provider)
+
+    def get_url(self, provider_type=None):
+        """按提供商类型读取端点。provider_type为空时使用主干配置。"""
+        provider = provider_type or self.BACKBONE_TYPE
+        return self._API_URLS.get(provider)
 
     @property
     def key(self):
         """根据主干类型，获取当前应使用的API密钥"""
-        return self._API_KEYS.get(self.BACKBONE_TYPE)
+        return self.get_key(self.BACKBONE_TYPE)
 
     @property
     def url(self):
         """根据主干类型，获取当前应使用的API端点"""
-        return self._API_URLS.get(self.BACKBONE_TYPE)
+        return self.get_url(self.BACKBONE_TYPE)
 
 
 class Models:
@@ -96,12 +111,24 @@ class Models:
         "JSON_REPAIR": os.environ.get("JSON_REPAIR_MODEL", "Qwen/Qwen3-8B"),
         "DEFAULT": "Qwen/Qwen2.5-VL-32B-Instruct"
     }
+
+    _dashscope_models = {
+        "PLANNER": os.environ.get("PLANNER_MODEL", "qwen-vl-max"),
+        "EXECUTOR": os.environ.get("EXECUTOR_MODEL", "qwen-vl-max"),
+        "VERIFIER": os.environ.get("VERIFIER_MODEL", "qwen-vl-max"),
+        "NOTETAKER": os.environ.get("NOTETAKER_MODEL", "qwen3.5-plus"),
+        "EVOLUTION": os.environ.get("EVOLUTION_MODEL", "qwen3.5-plus"),
+        "JSON_REPAIR": os.environ.get("JSON_REPAIR_MODEL", "qwen3.5-plus"),
+        "DEFAULT": os.environ.get("DEFAULT_MODEL", "qwen-vl-max"),
+    }
     
     @property
     def _current_models(self):
         """根据API提供商，选择当前使用的模型集"""
         if self._api_provider == "SiliconFlow":
             return self._siliconflow_models
+        elif self._api_provider == "DashScope":
+            return self._dashscope_models
         elif self._api_provider == "OpenAI":
             return self._openai_models
         else:
@@ -167,6 +194,101 @@ class Models:
     # 在Models类中，实例化这个嵌套类，方便外部调用
     perceptor = Perceptor()
 
+    class GUIAgentV2:
+        """
+        GUIAgent v2 专用模型配置。
+        注意：该配置不复用 legacy 的角色命名，直接面向 v2 节点能力。
+        """
+
+        API_TYPE = os.environ.get("GUIAGENT_V2_API_TYPE", API.BACKBONE_TYPE)
+        _provider = API_TYPE
+
+        if _provider == "SiliconFlow":
+            INTENT_PARSER_MODEL = os.environ.get(
+                "GUIAGENT_V2_INTENT_PARSER_MODEL",
+                "Qwen/Qwen2.5-VL-32B-Instruct",
+            )
+            WEB_REPLAN_MODEL = os.environ.get(
+                "GUIAGENT_V2_WEB_REPLAN_MODEL",
+                "Qwen/Qwen2.5-32B-Instruct",
+            )
+            ASSERTION_REPAIR_MODEL = os.environ.get(
+                "GUIAGENT_V2_ASSERTION_REPAIR_MODEL",
+                "Qwen/Qwen3-8B",
+            )
+        elif _provider == "DashScope":
+            INTENT_PARSER_MODEL = os.environ.get(
+                "GUIAGENT_V2_INTENT_PARSER_MODEL",
+                "qwen3.5-plus",
+            )
+            WEB_REPLAN_MODEL = os.environ.get(
+                "GUIAGENT_V2_WEB_REPLAN_MODEL",
+                "qwen3.5-plus",
+            )
+            ASSERTION_REPAIR_MODEL = os.environ.get(
+                "GUIAGENT_V2_ASSERTION_REPAIR_MODEL",
+                "qwen3.5-plus",
+            )
+        else:
+            INTENT_PARSER_MODEL = os.environ.get(
+                "GUIAGENT_V2_INTENT_PARSER_MODEL",
+                "gpt-4o",
+            )
+            WEB_REPLAN_MODEL = os.environ.get(
+                "GUIAGENT_V2_WEB_REPLAN_MODEL",
+                "gpt-4o",
+            )
+            ASSERTION_REPAIR_MODEL = os.environ.get(
+                "GUIAGENT_V2_ASSERTION_REPAIR_MODEL",
+                "gpt-4o-mini",
+            )
+
+        if _provider == "DashScope":
+            _default_api_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+            _default_api_key = os.environ.get("DASHSCOPE_API_KEY")
+        elif _provider == "OpenAI":
+            _default_api_url = "https://api.openai.com/v1/chat/completions"
+            _default_api_key = os.environ.get("OPENAI_API_KEY")
+        elif _provider == "SiliconFlow":
+            _default_api_url = "https://api.siliconflow.cn/v1/chat/completions"
+            _default_api_key = os.environ.get("SILICONFLOW_API_KEY")
+        else:
+            _default_api_url = None
+            _default_api_key = None
+
+        API_URL = os.environ.get("GUIAGENT_V2_API_URL", _default_api_url)
+        API_KEY = os.environ.get("GUIAGENT_V2_API_KEY", _default_api_key)
+        EXTRA_BODY_JSON = os.environ.get("GUIAGENT_V2_EXTRA_BODY_JSON", None)
+
+        ENABLE_INTENT_PARSER = str(
+            os.environ.get("GUIAGENT_V2_ENABLE_INTENT_PARSER", "0")
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        ENABLE_WEB_REPLAN = str(
+            os.environ.get("GUIAGENT_V2_ENABLE_WEB_REPLAN", "0")
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        ENABLE_ASSERTION_REPAIR = str(
+            os.environ.get("GUIAGENT_V2_ENABLE_ASSERTION_REPAIR", "0")
+        ).strip().lower() in {"1", "true", "yes", "on"}
+
+        TEMPERATURE = float(os.environ.get("GUIAGENT_V2_MODEL_TEMPERATURE", "0.0"))
+
+        def to_dict(self):
+            return {
+                "api_type": self.API_TYPE,
+                "api_url": self.API_URL,
+                "api_key_configured": bool(str(self.API_KEY or "").strip()),
+                "extra_body_json": self.EXTRA_BODY_JSON,
+                "intent_parser_model": self.INTENT_PARSER_MODEL,
+                "web_replan_model": self.WEB_REPLAN_MODEL,
+                "assertion_repair_model": self.ASSERTION_REPAIR_MODEL,
+                "enable_intent_parser": bool(self.ENABLE_INTENT_PARSER),
+                "enable_web_replan": bool(self.ENABLE_WEB_REPLAN),
+                "enable_assertion_repair": bool(self.ENABLE_ASSERTION_REPAIR),
+                "temperature": float(self.TEMPERATURE),
+            }
+
+    v2 = GUIAgentV2()
+
 
 
 class AgentSettings:
@@ -198,3 +320,9 @@ print(f"  - Notetaker: {models.NOTETAKER}")
 print(f"  - Evolution Engine: {models.EVOLUTION}")
 print(f"  - JSON Repair: {models.JSON_REPAIR}")
 print(f"  - Perceptor Caption Model: {models.Perceptor.CAPTION_MODEL}")
+print("### GUIAgentV2 Model Configuration:")
+print(f"  - API Type: {models.v2.API_TYPE}")
+print(f"  - API URL: {models.v2.API_URL}")
+print(f"  - Intent Parser: {models.v2.INTENT_PARSER_MODEL} (enabled={models.v2.ENABLE_INTENT_PARSER})")
+print(f"  - Web Replan: {models.v2.WEB_REPLAN_MODEL} (enabled={models.v2.ENABLE_WEB_REPLAN})")
+print(f"  - Assertion Repair: {models.v2.ASSERTION_REPAIR_MODEL} (enabled={models.v2.ENABLE_ASSERTION_REPAIR})")

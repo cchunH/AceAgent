@@ -26,6 +26,7 @@ from .status_api import (
     wait_confirmation_decision,
 )
 from .v2_executor import run_probe_step
+from .v2_model_settings import build_v2_model_settings
 from .web_skill_router import WebSkillRouter
 from .watchdogs import WatchdogManager, build_default_watchdog_manager
 
@@ -784,6 +785,17 @@ def run_single_task_with_runtime(
     blueprint_vector_backend=None,
     blueprint_vector_plugin=None,
     blueprint_embedding_dim=None,
+    v2_enable_model_intent_parser=None,
+    v2_enable_model_web_replan=None,
+    v2_enable_model_assertion_repair=None,
+    v2_model_api_type=None,
+    v2_model_api_url=None,
+    v2_model_api_key=None,
+    v2_model_extra_body_json=None,
+    v2_intent_parser_model=None,
+    v2_web_replan_model=None,
+    v2_assertion_repair_model=None,
+    v2_model_temperature=None,
 ):
     future_tasks = future_tasks or []
     runtime_config = _load_runtime_config()
@@ -813,6 +825,20 @@ def run_single_task_with_runtime(
         vector_plugin=blueprint_vector_plugin,
         embedding_dim=blueprint_embedding_dim,
     )
+    v2_model_settings = build_v2_model_settings(
+        runtime_config,
+        enable_intent_parser=v2_enable_model_intent_parser,
+        enable_web_replan=v2_enable_model_web_replan,
+        enable_assertion_repair=v2_enable_model_assertion_repair,
+        api_type=v2_model_api_type,
+        api_url=v2_model_api_url,
+        api_key=v2_model_api_key,
+        extra_body=v2_model_extra_body_json,
+        intent_parser_model=v2_intent_parser_model,
+        web_replan_model=v2_web_replan_model,
+        assertion_repair_model=v2_assertion_repair_model,
+        temperature=v2_model_temperature,
+    )
     router = WebSkillRouter()
     if guard_policy_path:
         guard_policy = GuardPolicy.from_policy_file(
@@ -838,6 +864,21 @@ def run_single_task_with_runtime(
             "event_type": "task_start",
             "status": "RUNNING",
             "intent_key": "global:TASK:START",
+            **({"session_id": runtime_session_id} if runtime_session_id else {}),
+        },
+        watchdog_manager=watchdog_manager,
+    )
+    _emit_and_track(
+        bus,
+        {
+            "run_id": run_id,
+            "task_id": task_id,
+            "step_id": 0,
+            "chain_mode": chain_mode,
+            "event_type": "v2_model_config",
+            "status": "SUCCESS",
+            "intent_key": "global:MODEL:V2_CONFIG",
+            "v2_model_config": v2_model_settings.to_dict(),
             **({"session_id": runtime_session_id} if runtime_session_id else {}),
         },
         watchdog_manager=watchdog_manager,
@@ -923,6 +964,7 @@ def run_single_task_with_runtime(
                     perception_provider=perception_provider,
                     blueprint_repo=blueprint_repo,
                     replay_gate_config=guard_policy.get_replay_gate_config(),
+                    model_settings=v2_model_settings,
                     screenshot_log_dir=screenshot_log_dir,
                     capture_action_screenshot=bool(v2_capture_action_screenshots),
                 )
@@ -975,6 +1017,7 @@ def run_single_task_with_runtime(
                 perception_provider=perception_provider,
                 blueprint_repo=blueprint_repo,
                 replay_gate_config=guard_policy.get_replay_gate_config(),
+                model_settings=v2_model_settings,
                 screenshot_log_dir=screenshot_log_dir,
                 capture_action_screenshot=bool(v2_capture_action_screenshots),
             )
