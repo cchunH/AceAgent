@@ -48,3 +48,9 @@
 
 15. [readiness-gate-execution-report-20260309.md](./readiness-gate-execution-report-20260309.md)  
    Readiness Gate 执行记录（基础链路 + 模型链路），用于判定是否可进入实测阶段。
+
+16. [hierarchical-runtime-implementation-backlog-v1.md](./hierarchical-runtime-implementation-backlog-v1.md)  
+   分层运行机制实施 Backlog（P0/P1、代码落位、测试清单、里程碑与回退策略）。
+
+17. [stable-validation-complex-tasks-v1.json](./stable-validation-complex-tasks-v1.json)  
+   复杂任务稳定实测任务集（WLAN、微信会话发送、备忘录到地图导航）。

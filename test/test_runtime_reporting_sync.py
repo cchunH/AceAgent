@@ -129,6 +129,36 @@ class TestRuntimeReportingAndSync(unittest.TestCase):
             self.assertIn("replay_gate_reason", dict(updated.get("metadata", {})))
             self.assertTrue("anchors" in list(sync.get("suppressed_fields", [])) or "anchors" in list(dict(updated.get("metadata", {})).get("last_patch_suppressed_fields", [])))
 
+    def test_upsert_blueprint_stores_page_binding_metadata(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = BlueprintRepository(os.path.join(td, "blueprints.json"))
+            result = upsert_blueprint_from_observation_with_gate(
+                repo=repo,
+                intent_key="global:TAP:CHAT_SEND",
+                screen_width=1080,
+                screen_height=2340,
+                perception_infos_pre=[{"text": "微信会话", "coordinates": (200, 300)}],
+                perception_infos_post=[{"text": "发送成功", "coordinates": (600, 2200)}],
+                action_outcome="A",
+                post_check_result={"passed": True, "reason_code": "STATE_TRANSITION_OK"},
+                page_binding={
+                    "page_hint": "微信会话",
+                    "page_fingerprint_id": "pfid:expected",
+                    "runtime_page_fingerprint_id": "pfid:runtime",
+                    "match_threshold": 0.6,
+                    "page_fingerprint_score": 0.78,
+                    "fingerprint_match_score": 0.82,
+                    "fingerprint_id_matched": False,
+                },
+            )
+            updated = dict(result.get("blueprint", {}))
+            metadata = dict(updated.get("metadata", {}))
+            binding = dict(metadata.get("page_binding", {}))
+            self.assertEqual(binding.get("page_hint"), "微信会话")
+            self.assertEqual(binding.get("page_fingerprint_id"), "pfid:expected")
+            self.assertEqual(binding.get("runtime_page_fingerprint_id"), "pfid:runtime")
+            self.assertAlmostEqual(float(binding.get("match_threshold", 0.0)), 0.6)
+
     def test_write_runtime_summary(self):
         with tempfile.TemporaryDirectory() as td:
             event_path = os.path.join(td, "events.jsonl")

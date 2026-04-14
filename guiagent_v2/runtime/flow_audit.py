@@ -38,6 +38,39 @@ def _audit_single_task(run_id: str, task_id: str, events: list[dict[str, Any]]) 
         issues.append(_issue("ERROR", "missing_task_start", "Task missing task_start event"))
     if "task_end" not in type_set:
         issues.append(_issue("ERROR", "missing_task_end", "Task missing task_end event"))
+    else:
+        task_end_event = next(
+            (item for item in reversed(typed_events) if str(item.get("event_type", "")) == "task_end"),
+            None,
+        )
+        if isinstance(task_end_event, dict):
+            task_end_status = str(task_end_event.get("status", "")).upper()
+            if task_end_status != "SUCCESS":
+                issues.append(
+                    _issue(
+                        "ERROR",
+                        "task_end_not_success",
+                        "Task ended with non-success status",
+                        task_end_status=task_end_status or "UNKNOWN",
+                    )
+                )
+
+    if "intent_parse_guard" in type_set:
+        task_end_event = next(
+            (item for item in reversed(typed_events) if str(item.get("event_type", "")) == "task_end"),
+            None,
+        )
+        if isinstance(task_end_event, dict):
+            task_end_status = str(task_end_event.get("status", "")).upper()
+            if task_end_status == "SUCCESS":
+                issues.append(
+                    _issue(
+                        "ERROR",
+                        "intent_guard_with_success_end",
+                        "Task has intent_parse_guard but still ends SUCCESS",
+                        task_end_status=task_end_status,
+                    )
+                )
 
     step_events: dict[int, list[dict[str, Any]]] = {}
     for event in typed_events:

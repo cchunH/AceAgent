@@ -68,6 +68,60 @@ def _check_module(module_name: str, required: bool = True) -> CheckResult:
     )
 
 
+def _check_datasets_runtime_compat(required: bool = False) -> CheckResult:
+    """
+    Validate datasets symbols that modelscope-dependent runtime paths rely on.
+
+    We specifically probe:
+    - datasets.load.ALL_ALLOWED_EXTENSIONS
+    - datasets.LargeList
+    """
+    try:
+        datasets_mod = importlib.import_module("datasets")
+        load_mod = importlib.import_module("datasets.load")
+    except Exception as exc:
+        return CheckResult(
+            name="module:datasets_runtime_compat",
+            status="FAIL" if required else "WARN",
+            message="datasets runtime probe failed",
+            detail={"required": bool(required), "error": str(exc)},
+        )
+
+    has_allowed_ext = hasattr(load_mod, "ALL_ALLOWED_EXTENSIONS")
+    has_largelist = hasattr(datasets_mod, "LargeList")
+    ok = bool(has_allowed_ext and has_largelist)
+    version = str(getattr(datasets_mod, "__version__", "unknown"))
+
+    if ok:
+        return CheckResult(
+            name="module:datasets_runtime_compat",
+            status="PASS",
+            message=f"datasets runtime symbols are compatible (version={version})",
+            detail={
+                "version": version,
+                "ALL_ALLOWED_EXTENSIONS": bool(has_allowed_ext),
+                "LargeList": bool(has_largelist),
+            },
+        )
+
+    return CheckResult(
+        name="module:datasets_runtime_compat",
+        status="FAIL" if required else "WARN",
+        message=(
+            "datasets runtime symbols are incomplete"
+            if required
+            else "datasets runtime symbols are incomplete (optional path may fail)"
+        ),
+        detail={
+            "version": version,
+            "ALL_ALLOWED_EXTENSIONS": bool(has_allowed_ext),
+            "LargeList": bool(has_largelist),
+            "required": bool(required),
+            "hint": "Install a compatible datasets version, e.g. datasets>=2.21.0,<3",
+        },
+    )
+
+
 def _check_command(command: str, required: bool = True) -> CheckResult:
     path = shutil.which(str(command).strip())
     if path:
@@ -257,10 +311,12 @@ def run_preflight(
         else str(os.getenv("GUIAGENT_BLUEPRINT_VECTOR_PLUGIN", "")).strip()
     )
     checks: list[CheckResult] = []
+    has_modelscope = _module_available("modelscope")
     checks.append(_check_python_version())
     checks.append(_check_module("torch", required=True))
     checks.append(_check_module("transformers", required=False))
     checks.append(_check_module("modelscope", required=False))
+    checks.append(_check_datasets_runtime_compat(required=bool(has_modelscope)))
 
     if require_perception_stack:
         checks.append(_check_module("opencv-python", required=False))

@@ -181,6 +181,107 @@ class TestV2Executor(unittest.TestCase):
         self.assertIn("adapter_call", event_types)
         self.assertEqual(len(web_skill.calls), 0)
 
+    def test_run_probe_handover_when_page_hint_mismatch(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+
+        result = run_probe_step(
+            instruction="在手机里等待一下",
+            run_id="r-page-mismatch",
+            task_id="t-page-mismatch",
+            session_id="sess-page-mismatch",
+            step_id=1,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+            page_hint="微信会话页",
+        )
+
+        self.assertEqual(result.status, "HANDOVER")
+        gate_events = [e for e in events if e.get("event_type") == "page_hint_gate"]
+        self.assertTrue(gate_events)
+        self.assertEqual(gate_events[-1].get("status"), "HANDOVER")
+        self.assertLess(float(gate_events[-1].get("fingerprint_match_score", 1.0)), 0.55)
+        self.assertLess(float(gate_events[-1].get("page_fingerprint_score", 1.0)), 0.55)
+        handovers = [e for e in events if e.get("event_type") == "handover"]
+        self.assertTrue(handovers)
+        self.assertEqual(handovers[-1].get("reason_code"), "PAGE_HINT_MISMATCH")
+
+    def test_run_probe_allows_when_page_hint_matches(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+
+        def _perception_provider():
+            return {
+                "perception_infos": [{"text": "微信会话", "coordinates": [100, 120]}],
+                "screen_width": 1080,
+                "screen_height": 2340,
+                "keyboard": False,
+            }
+
+        result = run_probe_step(
+            instruction="在手机里等待一下",
+            run_id="r-page-match",
+            task_id="t-page-match",
+            session_id="sess-page-match",
+            step_id=1,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+            page_hint="微信会话",
+            perception_provider=_perception_provider,
+        )
+
+        self.assertIn(result.status, {"SUCCESS", "HANDOVER"})
+        gate_events = [e for e in events if e.get("event_type") == "page_hint_gate"]
+        self.assertTrue(gate_events)
+        self.assertEqual(gate_events[-1].get("status"), "SUCCESS")
+        self.assertGreaterEqual(float(gate_events[-1].get("fingerprint_match_score", 0.0)), 0.55)
+        self.assertGreaterEqual(float(gate_events[-1].get("page_fingerprint_score", 0.0)), 0.55)
+
+    def test_run_probe_handover_when_page_fingerprint_id_mismatch(self):
+        events = []
+        web_skill = _FakeWebSkill(success=True)
+
+        def _perception_provider():
+            return {
+                "perception_infos": [{"text": "微信会话", "coordinates": [100, 120]}],
+                "screen_width": 1080,
+                "screen_height": 2340,
+                "keyboard": False,
+            }
+
+        result = run_probe_step(
+            instruction="在手机里等待一下",
+            run_id="r-pfid-mismatch",
+            task_id="t-pfid-mismatch",
+            session_id="sess-pfid-mismatch",
+            step_id=2,
+            chain_mode="guiagent_v2",
+            emit_event=events.append,
+            hooks=_build_hooks(),
+            router=WebSkillRouter(),
+            guard_policy=GuardPolicy(),
+            web_skill=web_skill,
+            page_hint="微信会话",
+            page_fingerprint_id="pfid:force-mismatch",
+            perception_provider=_perception_provider,
+        )
+
+        self.assertEqual(result.status, "HANDOVER")
+        gate_events = [e for e in events if e.get("event_type") == "page_hint_gate"]
+        self.assertTrue(gate_events)
+        self.assertFalse(bool(gate_events[-1].get("fingerprint_id_matched", True)))
+        handovers = [e for e in events if e.get("event_type") == "handover"]
+        self.assertTrue(handovers)
+        self.assertEqual(handovers[-1].get("reason_code"), "PAGE_FINGERPRINT_ID_MISMATCH")
+
     def test_run_probe_web_success(self):
         events = []
         web_skill = _FakeWebSkill(success=True)
@@ -679,7 +780,7 @@ class TestV2Executor(unittest.TestCase):
                 }
             )
             result = run_probe_step(
-                instruction="请进入 checkout 页面",
+                instruction="请等待并进入 checkout 页面",
                 run_id="r-fastmatch",
                 task_id="t-fastmatch",
                 session_id="sess-fastmatch",

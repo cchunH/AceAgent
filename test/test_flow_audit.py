@@ -92,6 +92,21 @@ class TestFlowAudit(unittest.TestCase):
         self.assertTrue(any(item["code"] == "low_core_anchor_confidence" for item in issues))
         self.assertTrue(any(item["code"] == "low_geometry_confidence" for item in issues))
 
+    def test_audit_fail_when_intent_guard_but_task_success(self):
+        events = [
+            {"run_id": "r5", "task_id": "t5", "step_id": 0, "event_type": "task_start"},
+            {"run_id": "r5", "task_id": "t5", "step_id": 1, "event_type": "step_start"},
+            {"run_id": "r5", "task_id": "t5", "step_id": 1, "event_type": "intent_parse_guard", "status": "HANDOVER"},
+            {"run_id": "r5", "task_id": "t5", "step_id": 1, "event_type": "assertion"},
+            {"run_id": "r5", "task_id": "t5", "step_id": 1, "event_type": "post_check"},
+            {"run_id": "r5", "task_id": "t5", "step_id": 1, "event_type": "step_end", "status": "HANDOVER"},
+            {"run_id": "r5", "task_id": "t5", "step_id": 999999, "event_type": "task_end", "status": "SUCCESS"},
+        ]
+        audit = audit_flow_from_events(events)
+        self.assertEqual(audit["overall_status"], "FAIL")
+        issues = audit["tasks"][0]["issues"]
+        self.assertTrue(any(item["code"] == "intent_guard_with_success_end" for item in issues))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -39,3 +39,12 @@
 
 12. [blueprint-implementation-status-and-stable-validation-plan-v1.md](./blueprint-implementation-status-and-stable-validation-plan-v1.md)  
    蓝图执行现状审计、可用性评估、稳定实测版本（beta）分阶段计划与版本冻结策略。
+
+13. [hierarchical-blueprint-runtime-proposal-v1.md](./hierarchical-blueprint-runtime-proposal-v1.md)  
+   “页面指纹 + 图导航 + 三层任务 + 渐进披露”完整机制提案，以及与现有计划的差异对照与取舍矩阵。
+
+14. [hierarchical-runtime-implementation-form-v1.md](./hierarchical-runtime-implementation-form-v1.md)  
+   当前分层机制的实现形态说明（在线链路、门禁、回灌、审计、边界与使用建议）。
+
+15. [hierarchical-runtime-briefing-v1.md](./hierarchical-runtime-briefing-v1.md)  
+   五分钟汇报版（已实现能力、当前瓶颈、完成度评估与下一步三件事）。

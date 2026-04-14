@@ -61,6 +61,22 @@ python3 run.py \
   --run_name stable_validation_device_v1
 ```
 
+复杂任务回归一键入口（推荐用于 P0 收口验收）：
+
+```bash
+python3 scripts/blueprint_complex_validation_entry.py \
+  --tasks_json docs/guiagent-plan/02-phase-0/stable-validation-complex-tasks-v1.json \
+  --run_name stable_validation_complex_device_v1 \
+  --runtime_mode guiagent_v2 \
+  --mobile_execution_mode device \
+  --v2_use_live_perception \
+  --output_json /tmp/guiagent_complex_validation_report.json
+```
+
+该入口除常规 `validation_gate` 外，还会额外检查：
+- `model_task_plan` 是否成功且 `planned_subtasks_count` 达到阈值（默认 >=2）
+- `page_hint_gate` 事件是否出现（验证页面门禁链路已生效）
+
 一键入口（preflight + run + gate）：
 
 ```bash

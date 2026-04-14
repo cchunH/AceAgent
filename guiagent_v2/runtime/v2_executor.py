@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import time
 import uuid
+import hashlib
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -50,6 +51,28 @@ _WEB_HINTS = (
 )
 _BACK_HINTS = ("返回", "回退", "back")
 _HOME_HINTS = ("回到桌面", "返回桌面", "回桌面", "主页", "首页", "home screen", "go home")
+_WAIT_HINTS = ("等待", "稍等", "等一下", "wait", "sleep", "pause", "暂停")
+_COMPLEX_ACTION_HINTS = (
+    "微信",
+    "好友",
+    "联系人",
+    "发送",
+    "发给",
+    "发一个",
+    "消息",
+    "打开",
+    "点击",
+    "输入",
+    "搜索",
+    "进入",
+    "切换",
+    "然后",
+    "并且",
+    "并",
+    "设置",
+    "领取",
+    "导航",
+)
 _CORE_ANCHOR_MIN_CONFIDENCE = 0.45
 _AUX_ANCHOR_RETRY_THRESHOLD = 0.35
 _ANCHOR_MICRO_RETRY_MAX = 1
@@ -129,6 +152,116 @@ def infer_probe_action(instruction: str) -> tuple[dict[str, Any], dict[str, Any]
             "web_task": None,
         },
     )
+
+
+def _is_explicit_wait_instruction(text: str) -> bool:
+    raw = str(text or "").strip()
+    lower = raw.lower()
+    if any(h in raw for h in ("等待", "稍等", "等一下", "暂停")):
+        return True
+    if re.search(r"\b(wait|sleep|pause)\b", lower):
+        return True
+    return False
+
+
+def _is_complex_instruction(text: str) -> bool:
+    raw = str(text or "").strip()
+    if len(raw) < 6:
+        return False
+    return any(hint in raw for hint in _COMPLEX_ACTION_HINTS)
+
+
+def _page_hint_match_score(
+    page_hint: str,
+    perception_infos: list[dict[str, Any]],
+    fast_match_hint: dict[str, Any] | None,
+) -> float:
+    hint = str(page_hint or "").strip().lower()
+    if not hint:
+        return 1.0
+
+    score = 0.0
+    for item in list(perception_infos or []):
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text", "")).strip().lower()
+        if not text:
+            continue
+        if hint in text or text in hint:
+            score = max(score, 1.0)
+            break
+
+    if isinstance(fast_match_hint, dict):
+        matched_intent_key = str(fast_match_hint.get("matched_intent_key", "")).strip().lower()
+        if matched_intent_key and hint in matched_intent_key:
+            score = max(score, 0.7)
+        if bool(fast_match_hint.get("signature_hit", False)):
+            score = max(score, 0.6 if score < 0.6 else score)
+
+    return float(score)
+
+
+def _fuse_page_fingerprint_score(
+    *,
+    ocr_fast_score: float,
+    topology_result: dict[str, Any] | None,
+) -> dict[str, float]:
+    topo_conf = 0.0
+    core_conf = 0.0
+    geom_conf = 0.0
+    if isinstance(topology_result, dict):
+        try:
+            topo_conf = float(topology_result.get("confidence", 0.0) or 0.0)
+        except Exception:
+            topo_conf = 0.0
+        try:
+            core_conf = float(topology_result.get("core_confidence", 0.0) or 0.0)
+        except Exception:
+            core_conf = 0.0
+        try:
+            geom_conf = float(topology_result.get("geometry_confidence", 0.0) or 0.0)
+        except Exception:
+            geom_conf = 0.0
+
+    base = max(0.0, min(1.0, float(ocr_fast_score)))
+    topo = max(0.0, min(1.0, topo_conf))
+    core = max(0.0, min(1.0, core_conf))
+    geom = max(0.0, min(1.0, geom_conf))
+
+    # Conservative fusion: textual/intent evidence dominates; topology boosts confidence.
+    fused = (base * 0.65) + (topo * 0.20) + (core * 0.10) + (geom * 0.05)
+    fused = max(0.0, min(1.0, fused))
+    return {
+        "page_fingerprint_score": float(fused),
+        "page_hint_ocr_fast_score": float(base),
+        "page_hint_topology_confidence": float(topo),
+        "page_hint_core_confidence": float(core),
+        "page_hint_geometry_confidence": float(geom),
+    }
+
+
+def _build_runtime_page_fingerprint_id(
+    *,
+    perception_infos: list[dict[str, Any]],
+    screen_width: int,
+    screen_height: int,
+) -> str:
+    try:
+        skeleton = build_static_skeleton(
+            frames=[list(perception_infos or [])],
+            screen_size=(int(screen_width), int(screen_height)),
+            min_presence_ratio=1.0,
+            max_nodes=8,
+        )
+        signature = str(skeleton.signature or "").strip()
+        if signature:
+            digest = hashlib.sha1(signature.encode("utf-8")).hexdigest()[:16]
+            return f"pfid:{digest}"
+    except Exception:
+        pass
+    basis = f"{int(screen_width)}x{int(screen_height)}::{len(list(perception_infos or []))}"
+    digest = hashlib.sha1(basis.encode("utf-8")).hexdigest()[:16]
+    return f"pfid:{digest}"
 
 
 def build_default_action_registry(
@@ -556,6 +689,9 @@ def run_probe_step(
     model_settings: V2ModelSettings | None = None,
     screenshot_log_dir: str | None = None,
     capture_action_screenshot: bool = True,
+    page_hint: str | None = None,
+    page_fingerprint_id: str | None = None,
+    page_match_threshold: float | None = None,
 ) -> V2ProbeResult:
     loop_detector = loop_detector or LoopDetector()
     context_compactor = context_compactor or ContextCompactor()
@@ -651,6 +787,14 @@ def run_probe_step(
                 }
             )
 
+    action_name = str(action_obj.get("name", "")).strip().lower()
+    collapse_to_wait = (
+        action_name == "wait"
+        and not _is_explicit_wait_instruction(instruction)
+        and _is_complex_instruction(instruction)
+    )
+    collapse_reason_code = "INTENT_COLLAPSED_TO_WAIT"
+
     def _default_snapshot(pre: bool) -> dict[str, Any]:
         infos = [{"text": "__probe_pre__", "coordinates": (1, 1)}] if pre else [{"text": "__probe_post__", "coordinates": (1, 1)}]
         return {
@@ -709,6 +853,12 @@ def run_probe_step(
         "screenshot_post": post_seed.get("screenshot_path"),
         "screenshot_prefix": f"{task_id}",
     }
+    runtime_page_fingerprint_id = _build_runtime_page_fingerprint_id(
+        perception_infos=list(step_context.get("perception_infos_pre", []) or []),
+        screen_width=int(step_context.get("screen_width", screen_width)),
+        screen_height=int(step_context.get("screen_height", screen_height)),
+    )
+    step_context["runtime_page_fingerprint_id"] = runtime_page_fingerprint_id
     if pre_snapshot.get("screenshot_path"):
         _emit(
             {
@@ -774,6 +924,101 @@ def run_probe_step(
     topology_result = _build_runtime_topology_result(step_context)
     if topology_result is not None:
         step_context["topology_result"] = topology_result
+
+    resolved_page_hint = str(page_hint or "").strip()
+    expected_page_fingerprint_id = str(page_fingerprint_id or "").strip()
+    page_hint_threshold = float(page_match_threshold) if page_match_threshold is not None else 0.55
+    if resolved_page_hint or expected_page_fingerprint_id:
+        page_match_score = _page_hint_match_score(
+            resolved_page_hint,
+            list(step_context.get("perception_infos_pre", []) or []),
+            fast_match_hint,
+        )
+        fused = _fuse_page_fingerprint_score(
+            ocr_fast_score=page_match_score,
+            topology_result=topology_result,
+        )
+        page_fingerprint_score = float(fused.get("page_fingerprint_score", 0.0))
+        page_matched = bool(page_fingerprint_score >= page_hint_threshold)
+        fingerprint_id_matched = True
+        if expected_page_fingerprint_id:
+            fingerprint_id_matched = expected_page_fingerprint_id == runtime_page_fingerprint_id
+            page_matched = bool(page_matched and fingerprint_id_matched)
+        _emit(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": step_id,
+                "chain_mode": chain_mode,
+                "event_type": "page_hint_gate",
+                "status": "SUCCESS" if page_matched else "HANDOVER",
+                "intent_key": request.intent_key,
+                "page_hint": resolved_page_hint,
+                "expected_page_fingerprint_id": expected_page_fingerprint_id,
+                "runtime_page_fingerprint_id": runtime_page_fingerprint_id,
+                "fingerprint_id_matched": fingerprint_id_matched,
+                "fingerprint_match_score": page_match_score,
+                "page_fingerprint_score": page_fingerprint_score,
+                "page_hint_threshold": page_hint_threshold,
+                "matched": page_matched,
+                **fused,
+                **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
+            }
+        )
+        if not page_matched:
+            reason_code = "PAGE_HINT_MISMATCH"
+            if expected_page_fingerprint_id and not fingerprint_id_matched:
+                reason_code = "PAGE_FINGERPRINT_ID_MISMATCH"
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "handover",
+                    "status": "HANDOVER",
+                    "intent_key": request.intent_key,
+                    "reason_code": reason_code,
+                    "page_hint": resolved_page_hint,
+                    "expected_page_fingerprint_id": expected_page_fingerprint_id,
+                    "runtime_page_fingerprint_id": runtime_page_fingerprint_id,
+                    "fingerprint_id_matched": fingerprint_id_matched,
+                    "fingerprint_match_score": page_match_score,
+                    "page_fingerprint_score": page_fingerprint_score,
+                    "page_hint_threshold": page_hint_threshold,
+                    **fused,
+                }
+            )
+            _emit(
+                {
+                    "run_id": run_id,
+                    "task_id": task_id,
+                    "step_id": step_id,
+                    "chain_mode": chain_mode,
+                    "event_type": "step_end",
+                    "status": "HANDOVER",
+                    "intent_key": request.intent_key,
+                    "assertion_result": {"passed": False, "reason_code": reason_code},
+                    "post_check": {"passed": False, "reason_code": reason_code},
+                    "recovery_level": "L2",
+                    "page_hint": resolved_page_hint,
+                    "expected_page_fingerprint_id": expected_page_fingerprint_id,
+                    "runtime_page_fingerprint_id": runtime_page_fingerprint_id,
+                    "fingerprint_id_matched": fingerprint_id_matched,
+                    "fingerprint_match_score": page_match_score,
+                    "page_fingerprint_score": page_fingerprint_score,
+                    "page_hint_threshold": page_hint_threshold,
+                    **fused,
+                    **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
+                }
+            )
+            return V2ProbeResult(
+                status="HANDOVER",
+                intent_key=request.intent_key,
+                channel="mobile_native",
+                route_reason="page_hint_mismatch",
+            )
+
     state_machine = ProbeStateMachine()
 
     def _transition_state(
@@ -823,6 +1068,72 @@ def run_probe_step(
             **route_info,
         }
     )
+    if collapse_to_wait:
+        _transition_state(
+            ProbeState.HANDOVER,
+            "intent_collapsed_to_wait",
+            status="HANDOVER",
+            route_payload=route_info,
+        )
+        _emit(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": step_id,
+                "chain_mode": chain_mode,
+                "event_type": "intent_parse_guard",
+                "status": "HANDOVER",
+                "intent_key": request.intent_key,
+                "reason_code": collapse_reason_code,
+                "instruction": str(instruction or ""),
+                "parsed_action": dict(action_obj),
+                **route_info,
+            }
+        )
+        _emit(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": step_id,
+                "chain_mode": chain_mode,
+                "event_type": "handover",
+                "status": "HANDOVER",
+                "intent_key": request.intent_key,
+                "reason_code": collapse_reason_code,
+                **route_info,
+            }
+        )
+        _emit(
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": step_id,
+                "chain_mode": chain_mode,
+                "event_type": "step_end",
+                "status": "HANDOVER",
+                "intent_key": request.intent_key,
+                "assertion_result": {"passed": False, "reason_code": collapse_reason_code},
+                "post_check": {"passed": False, "reason_code": collapse_reason_code},
+                "recovery_level": "L2",
+                "screenshot_pre": step_context.get("screenshot_pre"),
+                "screenshot_post": step_context.get("screenshot_post"),
+                "action_screenshot": None,
+                **route_info,
+            }
+        )
+        _transition_state(
+            ProbeState.COMPLETED,
+            "handover_complete",
+            status="HANDOVER",
+            route_payload=route_info,
+        )
+        return V2ProbeResult(
+            status="HANDOVER",
+            intent_key=request.intent_key,
+            channel=route_info.get("channel", "mobile_native"),
+            route_reason=route_info.get("route_reason", "unknown"),
+        )
+
     if topology_result is not None:
         _emit(
             {
@@ -1934,6 +2245,19 @@ def run_probe_step(
                 replay_gate_min_score=replay_gate_min_score,
                 replay_gate_min_stable_ratio=replay_gate_min_stable_ratio,
                 replay_gate_min_skeleton_nodes=replay_gate_min_skeleton_nodes,
+                page_binding={
+                    "page_hint": resolved_page_hint,
+                    "page_fingerprint_id": expected_page_fingerprint_id,
+                    "runtime_page_fingerprint_id": runtime_page_fingerprint_id,
+                    "match_threshold": page_hint_threshold,
+                    "page_fingerprint_score": (
+                        page_fingerprint_score if "page_fingerprint_score" in locals() else 0.0
+                    ),
+                    "fingerprint_match_score": page_match_score if "page_match_score" in locals() else 0.0,
+                    "fingerprint_id_matched": (
+                        fingerprint_id_matched if "fingerprint_id_matched" in locals() else False
+                    ),
+                },
             )
             synced_blueprint = dict(sync_payload.get("blueprint", {}))
             sync_info = dict(sync_payload.get("sync", {}))
@@ -1958,6 +2282,9 @@ def run_probe_step(
                     "replay_gate_min_skeleton_nodes_cfg": replay_gate_min_skeleton_nodes,
                     "blueprint_changed_fields": list(sync_info.get("changed_fields", [])),
                     "blueprint_suppressed_fields": list(sync_info.get("suppressed_fields", [])),
+                    "page_hint": resolved_page_hint,
+                    "page_fingerprint_id": expected_page_fingerprint_id,
+                    "runtime_page_fingerprint_id": runtime_page_fingerprint_id,
                     **final_route_info,
                     **({"fast_match_hint": fast_match_hint} if fast_match_hint else {}),
                 }

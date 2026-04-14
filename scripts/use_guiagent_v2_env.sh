@@ -2,7 +2,18 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${ROOT_DIR}/.env.guiagent_v2.local"
+
+# Priority:
+# 1) GUIAGENT_ENV_FILE (explicit override)
+# 2) project .env (user requested default)
+# 3) .env.guiagent_v2.local (legacy fallback)
+if [[ -n "${GUIAGENT_ENV_FILE:-}" ]]; then
+  ENV_FILE="${GUIAGENT_ENV_FILE}"
+elif [[ -f "${ROOT_DIR}/.env" ]]; then
+  ENV_FILE="${ROOT_DIR}/.env"
+else
+  ENV_FILE="${ROOT_DIR}/.env.guiagent_v2.local"
+fi
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "env file not found: ${ENV_FILE}" >&2

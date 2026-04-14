@@ -16,6 +16,7 @@ DEFAULT_VALIDATION_THRESHOLDS: dict[str, Any] = {
     "replay_gate_min_samples": 3,
     "replay_gate_block_rate_max": 0.40,
     "blueprint_sync_failed_rate_max": 0.15,
+    "require_flow_audit_pass": 1,
 }
 
 
@@ -105,6 +106,59 @@ def evaluate_runtime_summary(
     cfg = _build_thresholds(thresholds)
     counts = dict(metrics.get("counts", {}) or {})
     checks: list[ValidationCheck] = []
+
+    flow_audit = dict(summary.get("flow_audit", {}) or {}) if isinstance(summary, dict) else {}
+    require_flow_audit_pass = bool(_safe_int(cfg.get("require_flow_audit_pass", 1), 1))
+    flow_status = str(flow_audit.get("overall_status", "")).strip().upper()
+    if flow_status:
+        if flow_status == "PASS":
+            checks.append(
+                ValidationCheck(
+                    name="flow_audit_status",
+                    status="PASS",
+                    message="flow_audit_status == PASS",
+                    value=None,
+                    threshold=None,
+                    operator="==",
+                    detail={"flow_audit_status": flow_status},
+                )
+            )
+        elif flow_status == "WARN":
+            checks.append(
+                ValidationCheck(
+                    name="flow_audit_status",
+                    status="WARN" if require_flow_audit_pass else "PASS",
+                    message="flow_audit_status == WARN",
+                    value=None,
+                    threshold=None,
+                    operator="==",
+                    detail={"flow_audit_status": flow_status, "require_flow_audit_pass": require_flow_audit_pass},
+                )
+            )
+        else:
+            checks.append(
+                ValidationCheck(
+                    name="flow_audit_status",
+                    status="FAIL" if require_flow_audit_pass else "WARN",
+                    message="flow_audit_status is not PASS",
+                    value=None,
+                    threshold=None,
+                    operator="==",
+                    detail={"flow_audit_status": flow_status, "require_flow_audit_pass": require_flow_audit_pass},
+                )
+            )
+    else:
+        checks.append(
+            ValidationCheck(
+                name="flow_audit_status",
+                status="WARN",
+                message="flow_audit_status missing",
+                value=None,
+                threshold=None,
+                operator="==",
+                detail={"flow_audit_status": "MISSING"},
+            )
+        )
 
     checks.append(
         _check_min(

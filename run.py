@@ -1,27 +1,67 @@
-from orchestrator import run_single_task
-from orchestrator import (
-    Perceptor,
-    DEFAULT_PERCEPTION_ARGS,
-    ADB_PATH,
-    INIT_HEURISTICS,
-    INIT_SKILLS,
-    DEFAULT_MODEL,
-)
+import os
+import json
+import shutil
+import time
+from pathlib import Path
+import importlib
+
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists() or not path.is_file():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("'").strip('"')
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def _bootstrap_env() -> None:
+    root = Path(__file__).resolve().parent
+    explicit = os.environ.get("UNIMIND_ENV_FILE", "").strip()
+    if explicit:
+        _load_env_file(Path(explicit).expanduser())
+        return
+    # Prefer .env as requested by user, then keep local fallback.
+    _load_env_file(root / ".env")
+    _load_env_file(root / ".env.guiagent_v2.local")
+
+
+_bootstrap_env()
+
 from guiagent_v2.runtime.orchestrator_v2 import run_single_task_with_runtime
 from guiagent_v2.runtime.session_runtime_server import (
     start_global_session_runtime_server,
     stop_global_session_runtime_server,
 )
 
-import torch
-import os
-import json
-import shutil
-import time
+_LEGACY_CACHE = None
+
+
+def _get_legacy_symbols():
+    global _LEGACY_CACHE
+    if _LEGACY_CACHE is not None:
+        return _LEGACY_CACHE
+    orchestrator = importlib.import_module("orchestrator")
+    _LEGACY_CACHE = {
+        "run_single_task": getattr(orchestrator, "run_single_task"),
+        "Perceptor": getattr(orchestrator, "Perceptor"),
+        "DEFAULT_PERCEPTION_ARGS": getattr(orchestrator, "DEFAULT_PERCEPTION_ARGS"),
+        "ADB_PATH": getattr(orchestrator, "ADB_PATH"),
+        "INIT_HEURISTICS": getattr(orchestrator, "INIT_HEURISTICS"),
+        "INIT_SKILLS": getattr(orchestrator, "INIT_SKILLS"),
+        "DEFAULT_MODEL": getattr(orchestrator, "DEFAULT_MODEL"),
+    }
+    return _LEGACY_CACHE
 
 
 def _run_with_mode(runtime_mode: str, **kwargs):
     if runtime_mode == "legacy":
+        legacy = _get_legacy_symbols()
         kwargs.pop("v2_skip_legacy", None)
         kwargs.pop("guard_policy_path", None)
         kwargs.pop("guard_policy_reload_interval", None)
@@ -54,9 +94,37 @@ def _run_with_mode(runtime_mode: str, **kwargs):
         kwargs.pop("blueprint_vector_backend", None)
         kwargs.pop("blueprint_vector_plugin", None)
         kwargs.pop("blueprint_embedding_dim", None)
-        return run_single_task(**kwargs)
+        return legacy["run_single_task"](**kwargs)
     kwargs["runtime_mode"] = runtime_mode
     return run_single_task_with_runtime(**kwargs)
+
+
+def _print_runtime_result(result):
+    if not isinstance(result, dict):
+        return
+
+    status = str(result.get("status", "UNKNOWN"))
+    reason_code = result.get("reason_code")
+    task_id = result.get("task_id")
+    log_dir = result.get("log_dir")
+    event_log = result.get("event_log")
+    runtime_summary = result.get("runtime_summary")
+    screenshot_log_dir = result.get("screenshot_log_dir")
+
+    print("\n=== Runtime Result ===")
+    print(f"status: {status}")
+    if reason_code:
+        print(f"reason_code: {reason_code}")
+    if task_id:
+        print(f"task_id: {task_id}")
+    if log_dir:
+        print(f"log_dir: {log_dir}")
+    if event_log:
+        print(f"event_log: {event_log}")
+    if runtime_summary:
+        print(f"runtime_summary: {runtime_summary}")
+    if screenshot_log_dir:
+        print(f"screenshot_log_dir: {screenshot_log_dir}")
 
 
 def main():
@@ -334,10 +402,16 @@ def main():
     )
 
     args = parser.parse_args()
-    torch.manual_seed(args.seed)
+    try:
+        import torch  # noqa: PLC0415
+
+        torch.manual_seed(args.seed)
+    except Exception:
+        pass
 
     if args.log_root is None:
-        args.log_root = f"logs/{DEFAULT_MODEL}/unimind_agent"
+        default_model = os.environ.get("EXECUTOR_MODEL", "default_model")
+        args.log_root = f"logs/{default_model}/unimind_agent"
 
     if args.start_session_runtime_server:
         session_state_path = args.session_runtime_state_path
@@ -383,7 +457,17 @@ def main():
     if args.instruction is not None and args.tasks_json is not None:
         raise ValueError("You cannot provide both instruction and tasks_json.")
 
-    default_perceptor_args = DEFAULT_PERCEPTION_ARGS
+    legacy = None
+    needs_legacy_import = (args.runtime_mode == "legacy") or bool(args.v2_use_live_perception)
+    if needs_legacy_import:
+        legacy = _get_legacy_symbols()
+
+    default_perceptor_args = (
+        legacy["DEFAULT_PERCEPTION_ARGS"] if legacy is not None else {}
+    )
+    init_heuristics = legacy["INIT_HEURISTICS"] if legacy is not None else ""
+    init_skills = legacy["INIT_SKILLS"] if legacy is not None else []
+    adb_path = legacy["ADB_PATH"] if legacy is not None else os.environ.get("ADB_PATH", "adb")
 
     if args.instruction is not None:
         if args.setting == "evolution":
@@ -394,10 +478,10 @@ def main():
 
             if not os.path.exists(persistent_heuristics_path):
                 with open(persistent_heuristics_path, "w", encoding="utf-8") as f:
-                    f.write(INIT_HEURISTICS)
+                    f.write(init_heuristics)
             if not os.path.exists(persistent_skills_path):
                 with open(persistent_skills_path, "w", encoding="utf-8") as f:
-                    json.dump(INIT_SKILLS, f, indent=4)
+                    json.dump(init_skills, f, indent=4)
         else:
             persistent_heuristics_path = None
             persistent_skills_path = None
@@ -405,8 +489,12 @@ def main():
         try:
             runtime_perceptor = None
             if args.v2_use_live_perception and args.runtime_mode in {"guiagent_v2_shadow", "guiagent_v2"}:
-                runtime_perceptor = Perceptor(ADB_PATH, perception_args=default_perceptor_args)
-            _run_with_mode(
+                if legacy is None:
+                    legacy = _get_legacy_symbols()
+                    default_perceptor_args = legacy["DEFAULT_PERCEPTION_ARGS"]
+                    adb_path = legacy["ADB_PATH"]
+                runtime_perceptor = legacy["Perceptor"](adb_path, perception_args=default_perceptor_args)
+            result = _run_with_mode(
                 args.runtime_mode,
                 instruction=args.instruction,
                 run_name=args.run_name,
@@ -458,6 +546,7 @@ def main():
                 blueprint_vector_plugin=args.blueprint_vector_plugin,
                 blueprint_embedding_dim=args.blueprint_embedding_dim,
             )
+            _print_runtime_result(result)
         except Exception as e:
             print(f"Failed when doing task: {args.instruction}")
             print("ERROR:", e)
@@ -466,7 +555,13 @@ def main():
     task_json = json.load(open(args.tasks_json, "r", encoding="utf-8"))
     tasks = task_json["tasks"] if "tasks" in task_json else task_json
 
-    perceptor = Perceptor(ADB_PATH, perception_args=default_perceptor_args)
+    perceptor = None
+    if args.runtime_mode == "legacy" or args.v2_use_live_perception:
+        if legacy is None:
+            legacy = _get_legacy_symbols()
+            default_perceptor_args = legacy["DEFAULT_PERCEPTION_ARGS"]
+            adb_path = legacy["ADB_PATH"]
+        perceptor = legacy["Perceptor"](adb_path, perception_args=default_perceptor_args)
     run_log_dir = f"{args.log_root}/{args.run_name}"
     os.makedirs(run_log_dir, exist_ok=True)
 
@@ -481,13 +576,13 @@ def main():
             shutil.copy(args.specified_heuristics_path, persistent_heuristics_path)
         elif not os.path.exists(persistent_heuristics_path):
             with open(persistent_heuristics_path, "w", encoding="utf-8") as f:
-                f.write(INIT_HEURISTICS)
+                f.write(init_heuristics)
 
         if args.specified_skills_path is not None:
             shutil.copy(args.specified_skills_path, persistent_skills_path)
         elif not os.path.exists(persistent_skills_path):
             with open(persistent_skills_path, "w", encoding="utf-8") as f:
-                json.dump(INIT_SKILLS, f, indent=4)
+                json.dump(init_skills, f, indent=4)
     else:
         raise ValueError("Invalid setting:", args.setting)
 
@@ -505,7 +600,7 @@ def main():
             task_id = args.tasks_json.split("/")[-1].split(".")[0] + f"_{args.setting}_{i}"
 
         try:
-            _run_with_mode(
+            result = _run_with_mode(
                 args.runtime_mode,
                 instruction=instruction,
                 future_tasks=future_tasks,
@@ -559,6 +654,7 @@ def main():
                 blueprint_vector_plugin=args.blueprint_vector_plugin,
                 blueprint_embedding_dim=args.blueprint_embedding_dim,
             )
+            _print_runtime_result(result)
             print("\n\nDONE:", task["instruction"])
             print("IMPORTANT: Please reset the device as needed before running the next task!")
             input("Press Enter to continue to next task ...")

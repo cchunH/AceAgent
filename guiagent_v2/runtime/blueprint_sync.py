@@ -98,6 +98,7 @@ def upsert_blueprint_from_observation_with_gate(
     replay_gate_min_score: float = _REPLAY_GATE_DEFAULT_MIN_SCORE,
     replay_gate_min_stable_ratio: float = _REPLAY_GATE_DEFAULT_MIN_STABLE_RATIO,
     replay_gate_min_skeleton_nodes: int = _REPLAY_GATE_DEFAULT_MIN_SKELETON_NODES,
+    page_binding: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     perception_infos_pre = perception_infos_pre or []
     perception_infos_post = perception_infos_post or []
@@ -161,6 +162,18 @@ def upsert_blueprint_from_observation_with_gate(
         "replay_gate_min_skeleton_nodes": int(replay_gate_min_skeleton_nodes),
         "updated_at": _utc_now_iso(),
     }
+    if isinstance(page_binding, dict):
+        binding = {
+            "page_hint": str(page_binding.get("page_hint", "")).strip(),
+            "page_fingerprint_id": str(page_binding.get("page_fingerprint_id", "")).strip(),
+            "runtime_page_fingerprint_id": str(page_binding.get("runtime_page_fingerprint_id", "")).strip(),
+            "match_threshold": float(page_binding.get("match_threshold", 0.55) or 0.55),
+            "page_fingerprint_score": float(page_binding.get("page_fingerprint_score", 0.0) or 0.0),
+            "fingerprint_match_score": float(page_binding.get("fingerprint_match_score", 0.0) or 0.0),
+            "fingerprint_id_matched": bool(page_binding.get("fingerprint_id_matched", False)),
+        }
+        if binding["page_hint"] or binding["page_fingerprint_id"]:
+            metadata_update["page_binding"] = binding
     structural_candidate = bool(
         action_outcome == "A"
         and post_check_result.get("passed", False)

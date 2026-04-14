@@ -18,6 +18,7 @@ from .event_bus import JSONLEventBus
 from .guard_policy import GuardPolicy
 from .hooks import HookManager
 from .loop_detector import LoopDetector
+from .model_task_planner import build_task_plan_with_model
 from .reporting import write_runtime_summary
 from .status_api import (
     configure_global_status_store,
@@ -78,6 +79,37 @@ def _split_instruction_into_steps(instruction: str, max_steps: int) -> list[str]
         if len(deduped) >= cap:
             break
     return deduped or [raw]
+
+
+def _plan_instruction_steps_with_model(
+    *,
+    instruction: str,
+    max_steps: int,
+    model_settings: Any,
+) -> dict[str, Any]:
+    model_name = str(getattr(model_settings, "intent_parser_model", "") or "").strip()
+    if not bool(getattr(model_settings, "enable_intent_parser", False)) or not model_name:
+        return {"ok": False, "reason": "DISABLED_OR_MODEL_MISSING", "steps": []}
+    return build_task_plan_with_model(
+        instruction=instruction,
+        max_steps=int(max_steps),
+        model=model_name,
+        model_type=str(getattr(model_settings, "api_type", "") or "").strip() or None,
+        api_url=str(getattr(model_settings, "api_url", "") or "").strip() or None,
+        api_key=str(getattr(model_settings, "api_key", "") or "").strip() or None,
+        extra_body=getattr(model_settings, "extra_body", None),
+        temperature=float(getattr(model_settings, "temperature", 0.0) or 0.0),
+    )
+
+
+def _safe_float_or_none(value: Any) -> float | None:
+    raw = str(value if value is not None else "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except Exception:
+        return None
 
 
 def _load_runtime_config():
@@ -915,11 +947,93 @@ def run_single_task_with_runtime(
                 screenshot_trace_dir=screenshot_log_dir,
             )
         if runtime_mode == "guiagent_v2" and bool(v2_skip_legacy):
-            step_instructions = _split_instruction_into_steps(instruction, max_steps=int(v2_max_steps))
+            planned_steps = _plan_instruction_steps_with_model(
+                instruction=str(instruction or ""),
+                max_steps=int(v2_max_steps),
+                model_settings=v2_model_settings,
+            )
+            planned_subtasks = []
+            if planned_steps.get("ok", False):
+                step_instructions = list(planned_steps.get("steps", []))
+                raw_subtasks = planned_steps.get("subtasks", [])
+                if isinstance(raw_subtasks, list):
+                    planned_subtasks = [dict(item) for item in raw_subtasks if isinstance(item, dict)]
+                _emit_and_track(
+                    bus,
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": 0,
+                        "chain_mode": chain_mode,
+                        "event_type": "model_task_plan",
+                        "status": "SUCCESS",
+                        "intent_key": "global:MODEL_TASK_PLAN:APPLIED",
+                        "model_name": str(v2_model_settings.intent_parser_model),
+                        "plan_confidence": planned_steps.get("plan_confidence"),
+                        "plan_reason": planned_steps.get("reason"),
+                        "planned_steps_count": len(step_instructions),
+                        "planned_steps": list(step_instructions),
+                        "planned_subtasks_count": len(planned_subtasks),
+                        "planned_subtasks": list(planned_subtasks),
+                        **({"session_id": runtime_session_id} if runtime_session_id else {}),
+                    },
+                    watchdog_manager=watchdog_manager,
+                )
+            else:
+                step_instructions = _split_instruction_into_steps(instruction, max_steps=int(v2_max_steps))
+                _emit_and_track(
+                    bus,
+                    {
+                        "run_id": run_id,
+                        "task_id": task_id,
+                        "step_id": 0,
+                        "chain_mode": chain_mode,
+                        "event_type": "model_task_plan",
+                        "status": "FAILED",
+                        "intent_key": "global:MODEL_TASK_PLAN:FALLBACK",
+                        "model_name": str(v2_model_settings.intent_parser_model),
+                        "reason_code": str(planned_steps.get("error") or planned_steps.get("reason") or "MODEL_TASK_PLAN_FALLBACK"),
+                        "planned_steps_count": len(step_instructions),
+                        "planned_steps": list(step_instructions),
+                        "planned_subtasks_count": 0,
+                        **({"session_id": runtime_session_id} if runtime_session_id else {}),
+                    },
+                    watchdog_manager=watchdog_manager,
+                )
             if not step_instructions:
                 step_instructions = [str(instruction or "").strip() or "Wait"]
 
-            for idx, step_instruction in enumerate(step_instructions, start=1):
+            step_items: list[dict[str, Any]] = []
+            if planned_subtasks and len(planned_subtasks) == len(step_instructions):
+                for idx, text in enumerate(step_instructions):
+                    sub = dict(planned_subtasks[idx] or {})
+                    step_items.append(
+                        {
+                            "instruction": str(text or "").strip() or "Wait",
+                            "subtask_key": str(sub.get("subtask_key", "")).strip(),
+                            "page_hint": str(sub.get("page_hint", "")).strip(),
+                            "page_fingerprint_id": str(sub.get("page_fingerprint_id", "")).strip(),
+                            "match_threshold": str(sub.get("match_threshold", "")).strip(),
+                            "goal_state": str(sub.get("goal_state", "")).strip(),
+                            "task_level": str(sub.get("task_level", "L2")).strip() or "L2",
+                        }
+                    )
+            else:
+                step_items = [
+                    {
+                        "instruction": str(text or "").strip() or "Wait",
+                        "subtask_key": "",
+                        "page_hint": "",
+                        "page_fingerprint_id": "",
+                        "match_threshold": "",
+                        "goal_state": "",
+                        "task_level": "L3",
+                    }
+                    for text in step_instructions
+                ]
+
+            for idx, step_item in enumerate(step_items, start=1):
+                step_instruction = str(step_item.get("instruction", "")).strip() or "Wait"
                 _emit_and_track(
                     bus,
                     {
@@ -931,7 +1045,13 @@ def run_single_task_with_runtime(
                         "status": "RUNNING",
                         "intent_key": "global:TASK:STEP",
                         "v2_step_instruction": step_instruction,
-                        "v2_step_total": len(step_instructions),
+                        "v2_step_total": len(step_items),
+                        "subtask_key": step_item.get("subtask_key", ""),
+                        "page_hint": step_item.get("page_hint", ""),
+                        "page_fingerprint_id": step_item.get("page_fingerprint_id", ""),
+                        "match_threshold": step_item.get("match_threshold", ""),
+                        "goal_state": step_item.get("goal_state", ""),
+                        "task_level": step_item.get("task_level", "L3"),
                         **({"session_id": runtime_session_id} if runtime_session_id else {}),
                     },
                     watchdog_manager=watchdog_manager,
@@ -967,6 +1087,9 @@ def run_single_task_with_runtime(
                     model_settings=v2_model_settings,
                     screenshot_log_dir=screenshot_log_dir,
                     capture_action_screenshot=bool(v2_capture_action_screenshots),
+                    page_hint=str(step_item.get("page_hint", "")).strip() or None,
+                    page_fingerprint_id=str(step_item.get("page_fingerprint_id", "")).strip() or None,
+                    page_match_threshold=_safe_float_or_none(step_item.get("match_threshold")),
                 )
                 _emit_and_track(
                     bus,
@@ -979,7 +1102,13 @@ def run_single_task_with_runtime(
                         "status": str(probe_result.status).upper(),
                         "intent_key": str(probe_result.intent_key or "global:TASK:STEP"),
                         "v2_step_instruction": step_instruction,
-                        "v2_step_total": len(step_instructions),
+                        "v2_step_total": len(step_items),
+                        "subtask_key": step_item.get("subtask_key", ""),
+                        "page_hint": step_item.get("page_hint", ""),
+                        "page_fingerprint_id": step_item.get("page_fingerprint_id", ""),
+                        "match_threshold": step_item.get("match_threshold", ""),
+                        "goal_state": step_item.get("goal_state", ""),
+                        "task_level": step_item.get("task_level", "L3"),
                         "channel": probe_result.channel,
                         "route_reason": probe_result.route_reason,
                         **({"session_id": runtime_session_id} if runtime_session_id else {}),
@@ -1020,6 +1149,7 @@ def run_single_task_with_runtime(
                 model_settings=v2_model_settings,
                 screenshot_log_dir=screenshot_log_dir,
                 capture_action_screenshot=bool(v2_capture_action_screenshots),
+                page_hint=None,
             )
 
     should_delegate_legacy = not (runtime_mode == "guiagent_v2" and bool(v2_skip_legacy))
@@ -1027,12 +1157,29 @@ def run_single_task_with_runtime(
         # Delegate to legacy runner while v2 runtime is incubated.
         from orchestrator import run_single_task as legacy_run_single_task
 
+        legacy_task_id = f"{task_id}__legacy"
+        legacy_log_dir = _build_log_dir(log_root, run_name, legacy_task_id)
+        _emit_and_track(
+            bus,
+            {
+                "run_id": run_id,
+                "task_id": task_id,
+                "step_id": 999998,
+                "event_type": "legacy_delegate",
+                "status": "RUNNING",
+                "intent_key": "global:LEGACY:DELEGATE",
+                "legacy_task_id": legacy_task_id,
+                "legacy_log_dir": legacy_log_dir,
+                **({"session_id": runtime_session_id} if runtime_session_id else {}),
+            },
+            watchdog_manager=watchdog_manager,
+        )
         legacy_run_single_task(
             instruction=instruction,
             future_tasks=future_tasks,
             run_name=run_name,
             log_root=log_root,
-            task_id=task_id,
+            task_id=legacy_task_id,
             heuristics_path=heuristics_path,
             skills_path=skills_path,
             persistent_heuristics_path=persistent_heuristics_path,
@@ -1054,7 +1201,7 @@ def run_single_task_with_runtime(
             run_id=run_id,
             task_id=task_id,
             chain_mode=chain_mode,
-            log_dir=log_dir,
+            log_dir=legacy_log_dir,
             session_id=runtime_session_id,
             watchdog_manager=watchdog_manager,
             blueprint_repo=blueprint_repo,
