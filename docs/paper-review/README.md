@@ -39,3 +39,15 @@
 
 12. [thesis-mechanism-figure-prompts-v2.md](./thesis-mechanism-figure-prompts-v2.md)
    面向论文机制图的专业生图提示词包，重点覆盖图5-Y、图5-Z、图5-X、图1-Y、图6-X 等非结构化解释图。
+
+13. [thesis-global-review-and-expert-response-v1.md](./thesis-global-review-and-expert-response-v1.md)
+   面向当前论文整体状态的再审视文档，逐条回应专家关于绪论、算法工作量与实验说服力的三项核心意见。
+
+14. [thesis-revision-roadmap-after-expert-review-v1.md](./thesis-revision-roadmap-after-expert-review-v1.md)
+   将专家意见转化为可执行修改顺序的路线图，明确“先改什么、为什么、改到什么算完成”。
+
+15. [thesis-engineering-diagrams-plantuml-v1.md](./thesis-engineering-diagrams-plantuml-v1.md)
+   面向工程类论文补图的专项文档，按 E-R 图、UML 类图、UML 用例图三类输出可直接生成的 PlantUML 代码，并说明插入章节、图名建议与正文配套修改方式。
+
+16. [thesis-fulltext-logic-audit-v1.md](./thesis-fulltext-logic-audit-v1.md)
+   面向当前论文正文的逐章逻辑审计文档，重点检查章节承接、术语一致性、图表口径与第 6 章实验设置问题。
