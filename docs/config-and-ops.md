@@ -72,11 +72,11 @@ python3 scripts/blueprint_stable_entry.py \
 - 原有执行主链。
 
 `--runtime_mode guiagent_v2_shadow`：
-- 启用 GUIAgent v2 运行时骨架（shadow），同时委托 legacy 执行。
+- 启用 GUIAgent v2 运行时，以影子模式运行（同时保留 legacy 执行链路作为对照基线）。
 - 会额外输出 `events.jsonl` 结构化事件。
 
 `--runtime_mode guiagent_v2`：
-- 与 `guiagent_v2_shadow` 共用当前骨架，预留后续真实 v2 执行逻辑接管。
+- 完整启用 v2 层次化决策架构，由意图契约驱动执行链路。
 - 可选开启 `--v2_use_live_perception`，将 `Perceptor` 的实时 pre/post 感知注入 v2 step pipeline。
 - 默认开启移动动作截图留痕（落盘到任务目录 `screenshots/`）：
   - `--v2_disable_action_screenshots`：关闭动作截图

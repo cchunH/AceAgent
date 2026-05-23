@@ -50,6 +50,10 @@ PaperWorkSpace/
 docs/paper-review/
 docs/frontend-design/
 docs/guiagent-plan/
+docs/risks-and-improvements.md
+docs/system-tradeoff-analysis.md
+docs/module-locator-index.md
+docs/deep-system-audit-report.md
 
 # Test/build artifacts
 *.egg-info/
