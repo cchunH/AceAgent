@@ -15,29 +15,42 @@ Uni-Mind 是一个基于大语言模型的智能移动设备操作代理系统�
 ## 项目架构
 
 ```
-Mobile-Agent-E/
+Uni-Mind/
 ├── run.py                 # 主程序入口
 ├── orchestrator.py        # 核心协调器，管理整个执行流程
 ├── config.py             # 配置管理，包含路径、API、模型等设置
 ├── requirements.txt      # 项目依赖
-├── UniMind/             # 核心模块目录
+├── UniMind/             # 核心模块目录（感知-决策-执行基础层）
 │   ├── agents/          # 智能体实现
 │   │   ├── base.py      # 基础智能体类和数据结构
-│   │   ├── expert_track_agents.py  # 专家级智能体
+│   │   ├── expert_track_agents.py  # 专家级智能体（Planner/Executor/Verifier）
 │   │   ├── evolution_agents.py     # 进化学习智能体
+│   │   └── utils/       # LLM调用、JSON解析、提示词工具
 │   ├── perception/      # 感知模块
-│   │   ├── perceptor.py # 主感知器
+│   │   ├── perceptor.py # 主感知器（OCR + 图标检测 + VLM）
 │   │   ├── text_localization.py    # 文字定位
 │   │   ├── icon_localization.py    # 图标定位
 │   │   └── crop.py      # 图像裁剪处理
 │   ├── device/          # 设备控制模块
-│   │   ├── controller.py # 设备控制器
+│   │   ├── controller.py # ADB设备控制器
 │   │   └── action_executor.py      # 动作执行器
 │   └── utils/           # 工具函数
-├── guiagent_v2/         # GUIAgent v2 运行时骨架（契约、事件、状态API）
-├── logs/                # 日志输出目录
-├── screenshot/          # 截图存储目录
-└── temp/               # 临时文件目录
+├── guiagent_v2/         # 层次化决策架构 v2 运行时
+│   ├── intent_contract/ # 意图契约（标准化指令集）
+│   ├── state_engine/    # 状态引擎（拓扑锚点提取）
+│   ├── action_engine/   # 动作引擎（仿射变换、断言校验）
+│   ├── brain_adapter/   # 脑适配器（规划/执行桥接）
+│   ├── blueprint_hub/   # 蓝图中心（经验固化与热修复）
+│   ├── retrieval/       # 向量检索（蓝图快速匹配）
+│   └── runtime/         # 运行时核心（编排、事件、会话管理）
+├── GUIAgent/            # 架构设计文档
+├── docs/                # 项目文档
+├── demo/                # 演示脚本
+├── test/                # 测试套件
+├── scripts/             # 运行与部署脚本
+├── logs/                # 日志输出目录（gitignored）
+├── screenshot/          # 截图存储目录（gitignored）
+└── temp/               # 临时文件目录（gitignored）
 ```
 
 ## 核心模块详解
@@ -196,87 +209,20 @@ while True:
 - 复合技能：预定义操作序列
 - 智能修复：JSON格式错误自动修复
 
-### 5. GUIAgent v2 运行时（进行中）
+### 5. 层次化决策架构 v2 (guiagent_v2)
 
-**目录**: `guiagent_v2/runtime/`
+**目录**: `guiagent_v2/`
 
-当前已落地能力：
-- `orchestrator_v2.py`: `runtime_mode=legacy|guiagent_v2_shadow|guiagent_v2` 统一入口与事件翻译。
-- `event_bus.py` + `status_api.py`: `events.jsonl` 结构化事件与任务状态查询（支持 `session_id` 聚合与过滤）。
-- `event_schema.py`: Typed Event Schema（`v1`）与运行时事件字段校验。
-- `web_skill_router.py`: `mobile_native/web_skill` 路由决策（移动端系统动作优先走原生链路）。
-- `agent_browser_skill.py`: `agent-browser` 外部进程适配器与 `AgentBrowserSkill` 封装。
-- `action_registry.py`: 动作注册、参数校验、分发统一入口。
-- `guard_policy.py`: 执行前 allow/deny/confirm 门禁决策。
-- `policy_loader.py`: GuardPolicy 文件化配置加载与缓存重载。
-- `v2_executor.py`: `guiagent_v2(_shadow)` 执行链，支持 Web 多步执行 v1（`web_plan/web_step_*`）与失败回退到 `mobile_native`。
-- `mobile_device_executor.py`: 移动端真实执行桥接（`auto|shadow|device`，ADB 不可用可自动回退）。
-- `loop_detector.py` + `context_compaction.py`: 循环检测与上下文压缩治理能力。
-- `task_service.py` + `session_runtime.py`: 任务提交、状态查询、会话级隔离调度（进程内 v0）。
-- `session_runtime_server.py`: SessionRuntime 本地 HTTP IPC 控制面（session/task/status/timeline/audit），支持 lockfile 多实例治理、写操作审计日志，以及任务级审计事件并入 `status_api` 时间线（含 cursor + 时间窗口查询）。
-- `session_runtime.py`: 支持会话/任务索引持久化恢复（重启后恢复 session/task 查询能力）。
-- `watchdogs/*`: `crash_watchdog/security_watchdog` 插件骨架与 `watchdog_alert` 派生事件。
-- `watchdog_policy.py`: Watchdog 策略加载与热更新（启停、最小严重级、去重节流、升级规则、跨任务聚合）。
+基于论文提出的三层架构（战略推理层、反应执行层、知识沉淀层）的工程实现：
 
-当前路由可观测字段：
-- `channel`
-- `route_reason`
-- `skill_name`
-- `session_id`
-- `fast_match_hint.match_source` (`skeleton|vector|fused`)
+- **意图契约模块** (`intent_contract/`): 标准化意图指令集封装，实现"应用域:动作原语:操作对象"三段式契约
+- **状态引擎** (`state_engine/`): 稀疏特征拓扑锚点识别与界面指纹生成
+- **动作引擎** (`action_engine/`): 跨设备仿射变换映射与前置/后置断言校验闭环
+- **蓝图中心** (`blueprint_hub/`): 认知回灌算法实现，任务蓝图的持久化与热修复
+- **向量检索** (`retrieval/`): 基于向量相似度的蓝图快速匹配
+- **运行时** (`runtime/`): 编排器、事件总线、会话管理、循环检测、看门狗等
 
-当前新增事件：
-- `skill_route`
-- `skill_fallback`
-- `guard_decision`
-- `adapter_call`
-- `loop_warning`
-- `context_compaction`
-- `watchdog_alert`
-- `control_plane_audit`
-- `web_plan`
-- `web_step_start`
-- `web_step_end`
-- `blueprint_sync`
-
-可选运行参数（v2）：
-- `--v2_skip_legacy`
-- `--guard_policy_path`
-- `--guard_policy_reload_interval`
-- `--mobile_execution_mode`
-- `--mobile_wait_ms`
-- `--v2_max_steps`
-- `--v2_use_live_perception`
-- `--blueprint_vector_backend`
-- `--blueprint_vector_plugin`
-- `--blueprint_embedding_dim`
-- `--watchdog_policy_path`
-- `--watchdog_policy_reload_interval`
-- `--session_id`
-- `--start_session_runtime_server`
-- `--session_runtime_server_host`
-- `--session_runtime_server_port`
-- `--session_runtime_state_path`
-- `--session_runtime_api_token`
-- `--session_runtime_auth_read`
-- `--session_runtime_lockfile_path`
-- `--session_runtime_allow_port_fallback`
-- `--session_runtime_audit_log_path`
-
-向量后端环境变量（用于蓝图快速匹配）：
-- `GUIAGENT_BLUEPRINT_VECTOR_BACKEND`（默认 `memory`）
-- `GUIAGENT_BLUEPRINT_VECTOR_PLUGIN`（当 backend=`custom` 时使用，格式 `<module>:<factory>`）
-- `GUIAGENT_BLUEPRINT_EMBEDDING_DIM`（默认 `32`）
-
-v2 Readiness Gate（进入实测前建议先跑）：
-- `source scripts/use_guiagent_v2_env.sh`
-- `python3 scripts/guiagent_v2_readiness_gate.py --skip_setup --tests_scope targeted`
-- 可选模型链路校验：`python3 scripts/guiagent_v2_readiness_gate.py --skip_setup --skip_tests --smoke_use_models --smoke_timeout_sec 300`
-
-结构化模型节点稳定性环境变量（`scripts/use_guiagent_v2_env.sh` 已默认导出）：
-- `GUIAGENT_V2_FORCE_DISABLE_THINKING_FOR_STRUCTURED=1`
-- `GUIAGENT_V2_FORCE_JSON_RESPONSE_FOR_STRUCTURED=1`
-- `GUIAGENT_V2_MODEL_NODE_TIMEOUT_SEC=35`
+支持运行模式：`legacy` | `guiagent_v2_shadow` | `guiagent_v2`
 
 ## 工作流程详解
 
@@ -364,31 +310,23 @@ export VERIFIER_MODEL="Qwen/Qwen2.5-VL-32B-Instruct"
 export ADB_PATH="/path/to/adb"
 ```
 
-### GUIAgent v2 独立模型配置（不复用 legacy 角色名）
+### GUIAgent v2 模型配置
 
-`guiagent_v2` 已支持独立模型与独立 API 通道，覆盖节点：`指令解析`、`web replan`、`复杂断言修复`。
+`guiagent_v2` 支持独立模型与独立 API 通道：
 
 ```bash
-# v2 独立 API 通道（可与 legacy 完全隔离）
-export GUIAGENT_V2_API_TYPE="DashScope"  # OpenAI / DashScope / SiliconFlow
+# v2 独立 API 通道
+export GUIAGENT_V2_API_TYPE="DashScope"
 export GUIAGENT_V2_API_URL="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 export GUIAGENT_V2_API_KEY="your_dashscope_key"
 
-# 可选：透传到 OpenAI 兼容请求体（示例：百炼思考模式）
-export GUIAGENT_V2_EXTRA_BODY_JSON='{"enable_thinking": true}'
-
-# v2 节点模型（独立命名）
+# v2 节点模型
 export GUIAGENT_V2_INTENT_PARSER_MODEL="qwen3.5-plus"
 export GUIAGENT_V2_WEB_REPLAN_MODEL="qwen3.5-plus"
 export GUIAGENT_V2_ASSERTION_REPAIR_MODEL="qwen3.5-plus"
-
-# 开关
-export GUIAGENT_V2_ENABLE_INTENT_PARSER=1
-export GUIAGENT_V2_ENABLE_WEB_REPLAN=1
-export GUIAGENT_V2_ENABLE_ASSERTION_REPAIR=1
 ```
 
-运行示例（v2 全链 + 跳过 legacy）：
+运行示例（v2 全链路）：
 
 ```bash
 python run.py \
@@ -398,20 +336,6 @@ python run.py \
   --v2_enable_model_intent_parser \
   --v2_enable_model_web_replan \
   --v2_enable_model_assertion_repair
-```
-
-### agent-browser 本地化集成（项目内）
-
-`guiagent_v2` 的 Web skill 现在会优先尝试项目内 `demo/agent-browser`，不可用时再回退全局 `agent-browser`。
-
-```bash
-# 一次性安装本地依赖并自检
-./scripts/setup_agent_browser_local.sh
-
-# 可选：显式指定项目内路径
-export AGENT_BROWSER_PROJECT_DIR="$(pwd)/demo/agent-browser"
-export AGENT_BROWSER_PREFER_LOCAL=1
-export AGENT_BROWSER_FORCE_NATIVE=1
 ```
 
 ### 配置文件结构

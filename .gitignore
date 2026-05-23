@@ -1,21 +1,64 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+*.py[cod]
+*$py.class
+*.pyo
 
-# custom
-**/screenshot/*
-**/temp/*
+# Virtual environments
+venv/
+.venv/
+env/
 
-*openai_key*
-*qwen_key*
-*api_key*
-logs/*
-README_submission.md
-screenshot/*
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.claude/
+.codex
+
+# OS files
 .DS_Store
-testing.sh
+Thumbs.db
 
-# local env/secrets
+# Secrets and API keys
 .env
 .env.local
 .env.*.local
-.env.guiagent_v2.local
+*openai_key*
+*qwen_key*
+*api_key*
+
+# Runtime outputs
+logs/
+screenshot/
+temp/
+*.log
+
+# Node.js (demo projects)
+node_modules/
+demo/agent-browser/
+demo/browser-use/
+
+# Frontend (built separately)
+frontend/
+
+# Paper workspace (separate submission)
+PaperWorkSpace/
+
+# Internal review/planning docs
+docs/paper-review/
+docs/frontend-design/
+docs/guiagent-plan/
+
+# Test/build artifacts
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Misc
+testing.sh
+README_submission.md
